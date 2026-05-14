@@ -1,0 +1,327 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const state = vi.hoisted(() => ({
+  members: [] as any[],
+  sent: [] as Array<{ chatId: string | number; text: string; keyboard?: any }>,
+  updates: [] as Array<{ pageId: string; patch: any }>,
+  kicked: [] as Array<string | number>,
+  unbanned: [] as Array<string | number>,
+  invites: [] as any[],
+}));
+
+vi.mock("@/lib/config", () => ({
+  getRuntimeConfig: () => ({
+    telegramBotToken: "token",
+    telegramWebhookSecret: "secret",
+    telegramGroupId: "-100",
+    notionApiKey: "notion",
+    notionDataSourceId: "source",
+    adminPassword: "pw",
+    appBaseUrl: "https://app.test",
+    exchangeName: "X-Plan",
+    teacherTelegramUid: "1222518302",
+    trialDays: 30,
+    paymentGraceDays: 3,
+    jobSecret: "job",
+  }),
+}));
+
+vi.mock("@/lib/notion", () => ({
+  findMemberByTelegramId: vi.fn(async (telegramUserId: string) => {
+    return state.members.find((member) => member.telegramUserId === telegramUserId) || null;
+  }),
+  findMemberByTelegramUsername: vi.fn(async () => null),
+  findMemberByExchangeUid: vi.fn(async (exchangeName: string, exchangeUid: string) => {
+    return (
+      state.members.find(
+        (member) =>
+          member.exchangeName.toLowerCase() === exchangeName.toLowerCase() &&
+          member.exchangeUid.trim().toLowerCase() === exchangeUid.trim().toLowerCase(),
+      ) || null
+    );
+  }),
+  listMembers: vi.fn(async () => state.members),
+  normalizeExchangeUid: (value: string) => value.trim().toLowerCase(),
+  updateMember: vi.fn(async (pageId: string, patch: any) => {
+    state.updates.push({ pageId, patch });
+    const member = state.members.find((item) => item.pageId === pageId);
+    if (member) Object.assign(member, patch);
+  }),
+}));
+
+vi.mock("@/lib/telegram", () => ({
+  answerCallbackQuery: vi.fn(async () => undefined),
+  approveChatJoinRequest: vi.fn(async () => undefined),
+  createChatInviteLink: vi.fn(async () => {
+    state.invites.push(true);
+    return { invite_link: "https://t.me/+invite" };
+  }),
+  declineChatJoinRequest: vi.fn(async () => undefined),
+  kickChatMember: vi.fn(async (userId: string | number) => {
+    state.kicked.push(userId);
+  }),
+  revokeChatInviteLink: vi.fn(async () => undefined),
+  sendMessage: vi.fn(async (chatId: string | number, text: string, keyboard?: any) => {
+    state.sent.push({ chatId, text, keyboard });
+  }),
+  unbanChatMember: vi.fn(async (userId: string | number) => {
+    state.unbanned.push(userId);
+  }),
+}));
+
+import { exchanges, handleTelegramUpdate, runDailyMembershipJob } from "@/lib/bot";
+
+function member(overrides: Record<string, any> = {}) {
+  return {
+    pageId: "page-1",
+    telegramUserId: "1001",
+    telegramUsername: "@user",
+    status: "trial_active",
+    tags: [],
+    exchangeRegistered: true,
+    exchangeName: "MEXC",
+    exchangeUid: "UID-1",
+    uidSubmittedAt: null,
+    inviteLink: null,
+    inviteExpiresAt: null,
+    groupJoinedAt: null,
+    reviewDueAt: "2026-05-08T00:00:00.000Z",
+    paymentDeadlineAt: null,
+    paidAt: null,
+    finalPnl: "",
+    renewalStep: "",
+    renewalReminderSentAt: null,
+    lastBotCheckAt: null,
+    lastBotMessage: "",
+    kickReason: "",
+    ...overrides,
+  };
+}
+
+describe("renewal bot flow", () => {
+  beforeEach(() => {
+    state.members = [];
+    state.sent = [];
+    state.updates = [];
+    state.kicked = [];
+    state.unbanned = [];
+    state.invites = [];
+  });
+
+  it("uses the updated BitMart registration link", () => {
+    expect(exchanges.BitMart.url).toBe("https://www.bitmart.com/zh-TW/invite/cMPDb9");
+  });
+
+  it("sends a seven day renewal reminder only once", async () => {
+    state.members = [member()];
+    const now = new Date("2026-05-01T00:00:00.000Z");
+
+    await runDailyMembershipJob(now);
+    await runDailyMembershipJob(now);
+
+    expect(state.sent).toHaveLength(1);
+    expect(state.sent[0].text).toContain("3個月100U，一個月50U");
+    expect(state.sent[0].text).toContain("MEXC - UID：77242747");
+    expect(state.sent[0].text).toContain("BITMART - UID：15157885");
+    expect(state.members[0].renewalReminderSentAt).toBe(now.toISOString());
+  });
+
+  it("collects trial result, final P/L, and sends manual payment instructions", async () => {
+    state.members = [
+      member({
+        reviewDueAt: "2026-05-01T00:00:00.000Z",
+      }),
+    ];
+    const now = new Date("2026-05-01T00:00:00.000Z");
+
+    await runDailyMembershipJob(now);
+    expect(state.members[0]).toMatchObject({
+      status: "renewal_due",
+      renewalStep: "awaiting_trial_result",
+    });
+    expect(state.sent.at(-1)?.text).toContain("翻倉成功");
+
+    await handleTelegramUpdate(
+      {
+        update_id: 1,
+        callback_query: {
+          id: "cb-1",
+          from: { id: 1001 },
+          data: "trial_result:success",
+        },
+      },
+      now,
+    );
+    expect(state.members[0].tags).toContain("翻倉成功");
+    expect(state.members[0].renewalStep).toBe("awaiting_pnl");
+    expect(state.sent.at(-1)?.text).toContain("請直接回覆目前的合約收益概略即可");
+
+    await handleTelegramUpdate(
+      {
+        update_id: 2,
+        message: {
+          message_id: 1,
+          from: { id: 1001, username: "user" },
+          chat: { id: 1001, type: "private" },
+          text: "+25%",
+        },
+      },
+      now,
+    );
+    expect(state.members[0]).toMatchObject({
+      finalPnl: "+25%",
+      renewalStep: "renewal_offer_sent",
+    });
+    expect(state.sent.at(-1)?.keyboard?.[0]?.[0]?.callback_data).toBe("renewal:stay");
+
+    await handleTelegramUpdate(
+      {
+        update_id: 3,
+        callback_query: {
+          id: "cb-2",
+          from: { id: 1001 },
+          data: "renewal:stay",
+        },
+      },
+      now,
+    );
+    expect(state.members[0].status).toBe("payment_pending");
+    expect(state.members[0].paymentDeadlineAt).toBe("2026-05-04T00:00:00.000Z");
+    expect(state.sent.at(-1)?.text).toContain("目前暫不串接付款金流，收款由人工審核");
+    expect(state.sent.at(-1)?.text).toContain("3個月100U，一個月50U");
+    expect(state.sent.at(-1)?.text).not.toContain("pseudocode");
+  });
+
+  it("sends paid members directly to renewal without trial result questions", async () => {
+    state.members = [
+      member({
+        status: "active_paid",
+        reviewDueAt: "2026-05-01T00:00:00.000Z",
+      }),
+    ];
+
+    await runDailyMembershipJob(new Date("2026-05-01T00:00:00.000Z"));
+
+    expect(state.members[0]).toMatchObject({
+      status: "renewal_due",
+      renewalStep: "renewal_offer_sent",
+    });
+    expect(state.sent[0].text).toContain("付費會籍已到期");
+    expect(state.sent[0].text).not.toContain("翻倉成功");
+  });
+
+  it("sends an invite on start without asking for exchange registration or UID", async () => {
+    state.members = [
+      member({
+        pageId: "page-1",
+        telegramUserId: "1001",
+        status: "eligible",
+        exchangeUid: "",
+      }),
+    ];
+
+    await handleTelegramUpdate({
+      update_id: 4,
+      message: {
+        message_id: 1,
+        from: { id: 1001, username: "user" },
+        chat: { id: 1001, type: "private" },
+        text: "/start",
+      },
+    });
+
+    expect(state.invites).toHaveLength(1);
+    expect(state.unbanned).toEqual(["1001"]);
+    expect(state.members[0]).toMatchObject({
+      status: "join_pending",
+      telegramUsername: "@user",
+    });
+    expect(state.sent[0].text).toContain("專屬短效入群連結");
+    expect(state.sent[0].text).not.toContain("交易所");
+    expect(state.sent[0].text).not.toContain("UID");
+  });
+
+  it("reuses an unexpired pending invite on start", async () => {
+    state.members = [
+      member({
+        pageId: "page-1",
+        telegramUserId: "1001",
+        status: "join_pending",
+        inviteLink: "https://t.me/+old",
+        inviteExpiresAt: "2026-05-02T00:00:00.000Z",
+      }),
+    ];
+
+    await handleTelegramUpdate(
+      {
+        update_id: 5,
+        message: {
+          message_id: 1,
+          from: { id: 1001, username: "user" },
+          chat: { id: 1001, type: "private" },
+          text: "/start",
+        },
+      },
+      new Date("2026-05-01T00:00:00.000Z"),
+    );
+
+    expect(state.invites).toHaveLength(0);
+    expect(state.unbanned).toHaveLength(0);
+    expect(state.sent[0].text).toContain("https://t.me/+old");
+  });
+
+  it("keeps exempt members non-expiring when they join through bot approval", async () => {
+    state.members = [
+      member({
+        pageId: "page-1",
+        telegramUserId: "1001",
+        status: "exempt",
+        groupJoinedAt: null,
+        reviewDueAt: null,
+      }),
+    ];
+    const now = new Date("2026-05-01T00:00:00.000Z");
+
+    await handleTelegramUpdate(
+      {
+        update_id: 6,
+        message: {
+          message_id: 1,
+          from: { id: 1001, username: "user" },
+          chat: { id: 1001, type: "private" },
+          text: "/start",
+        },
+      },
+      now,
+    );
+
+    expect(state.invites).toHaveLength(1);
+    expect(state.members[0]).toMatchObject({
+      status: "exempt",
+      inviteLink: "https://t.me/+invite",
+    });
+
+    await handleTelegramUpdate(
+      {
+        update_id: 7,
+        chat_join_request: {
+          chat: { id: -100 },
+          from: { id: 1001, username: "user" },
+          user_chat_id: 1001,
+          date: Math.floor(now.getTime() / 1000),
+          invite_link: { invite_link: "https://t.me/+invite" },
+        },
+      },
+      now,
+    );
+
+    expect(state.members[0]).toMatchObject({
+      status: "exempt",
+      groupJoinedAt: "2026-05-01T00:00:00.000Z",
+      reviewDueAt: null,
+      inviteLink: null,
+      inviteExpiresAt: null,
+    });
+    expect(state.sent.at(-1)?.text).toContain("免續費限制");
+  });
+});

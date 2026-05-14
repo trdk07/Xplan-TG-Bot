@@ -1,0 +1,102 @@
+import { describe, expect, it } from "vitest";
+import {
+  buildNotionProperties,
+  mapNotionPageToMember,
+  normalizeExchangeUid,
+  normalizeTelegramUsername,
+  notionProperties,
+} from "@/lib/notion";
+
+describe("Notion member mapping", () => {
+  it("maps Notion page properties into a member model", () => {
+    const member = mapNotionPageToMember({
+      id: "page-1",
+      properties: {
+        [notionProperties.telegramUserId]: {
+          rich_text: [{ plain_text: "12345" }],
+        },
+        [notionProperties.telegramUsername]: {
+          rich_text: [{ plain_text: "@aceon" }],
+        },
+        [notionProperties.status]: { select: { name: "trial_active" } },
+        [notionProperties.tags]: {
+          multi_select: [{ name: "翻倉成功" }],
+        },
+        [notionProperties.exchangeRegistered]: { checkbox: true },
+        [notionProperties.exchangeName]: { rich_text: [{ plain_text: "MEXC" }] },
+        [notionProperties.exchangeUid]: { rich_text: [{ plain_text: "UID-1" }] },
+        [notionProperties.finalPnl]: { rich_text: [{ plain_text: "+20%" }] },
+        [notionProperties.renewalStep]: {
+          select: { name: "awaiting_pnl" },
+        },
+        [notionProperties.renewalReminderSentAt]: {
+          date: { start: "2026-04-20T00:00:00.000Z" },
+        },
+        [notionProperties.groupJoinedAt]: {
+          date: { start: "2026-04-27T00:00:00.000Z" },
+        },
+      },
+    });
+
+    expect(member).toMatchObject({
+      pageId: "page-1",
+      telegramUserId: "12345",
+      telegramUsername: "@aceon",
+      status: "trial_active",
+      tags: ["翻倉成功"],
+      exchangeRegistered: true,
+      exchangeName: "MEXC",
+      exchangeUid: "UID-1",
+      finalPnl: "+20%",
+      renewalStep: "awaiting_pnl",
+      renewalReminderSentAt: "2026-04-20T00:00:00.000Z",
+      groupJoinedAt: "2026-04-27T00:00:00.000Z",
+    });
+  });
+
+  it("builds sparse Notion update properties", () => {
+    const props = buildNotionProperties({
+      status: "payment_pending",
+      tags: ["翻倉成功"],
+      inviteLink: null,
+      renewalStep: "",
+      renewalReminderSentAt: null,
+      paymentDeadlineAt: "2026-05-01T00:00:00.000Z",
+    });
+
+    expect(props[notionProperties.status]).toEqual({
+      select: { name: "payment_pending" },
+    });
+    expect(props[notionProperties.tags]).toEqual({
+      multi_select: [{ name: "翻倉成功" }],
+    });
+    expect(props[notionProperties.inviteLink]).toEqual({ url: null });
+    expect(props[notionProperties.renewalStep]).toEqual({ select: null });
+    expect(props[notionProperties.renewalReminderSentAt]).toEqual({
+      date: null,
+    });
+    expect(props[notionProperties.paymentDeadlineAt]).toEqual({
+      date: { start: "2026-05-01T00:00:00.000Z" },
+    });
+  });
+
+  it("writes telegram username as a title property for this Notion form", () => {
+    const props = buildNotionProperties({
+      telegramUsername: "@aceon",
+    });
+
+    expect(props[notionProperties.telegramUsername]).toEqual({
+      title: [{ type: "text", text: { content: "@aceon" } }],
+    });
+  });
+
+  it("normalizes telegram usernames from common input formats", () => {
+    expect(normalizeTelegramUsername("@Aceon")).toBe("aceon");
+    expect(normalizeTelegramUsername("https://t.me/Aceon?start=1")).toBe("aceon");
+    expect(normalizeTelegramUsername(" t.me/Aceon ")).toBe("aceon");
+  });
+
+  it("normalizes exchange UID for uniqueness checks", () => {
+    expect(normalizeExchangeUid(" UID-ABC ")).toBe("uid-abc");
+  });
+});
