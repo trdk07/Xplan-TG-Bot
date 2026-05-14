@@ -69,7 +69,7 @@ function teacherContactKeyboard() {
   return [
     [
       {
-        text: "聯絡夏老師",
+        text: "聯絡小夏",
         url: `tg://user?id=${config.teacherTelegramUid}`,
       },
     ],
@@ -166,7 +166,7 @@ async function refuseAccess(chatId: number, reason: string) {
     chatId,
     [
       `目前無法提供入群連結：${reason}`,
-      "請點擊下方按鈕聯絡夏老師協助確認名單資料。",
+      "請點擊下方按鈕聯絡小夏協助確認名單資料。",
     ].join("\n\n"),
     teacherContactKeyboard(),
   );
