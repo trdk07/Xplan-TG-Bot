@@ -25,6 +25,13 @@ describe("Notion member mapping", () => {
         [notionProperties.exchangeRegistered]: { checkbox: true },
         [notionProperties.exchangeName]: { rich_text: [{ plain_text: "MEXC" }] },
         [notionProperties.exchangeUid]: { rich_text: [{ plain_text: "UID-1" }] },
+        [notionProperties.paymentUidLast4]: { rich_text: [{ plain_text: "1234" }] },
+        [notionProperties.paymentProofFileId]: {
+          rich_text: [{ plain_text: "photo-file-id" }],
+        },
+        [notionProperties.paymentProofSubmittedAt]: {
+          date: { start: "2026-05-01T00:00:00.000Z" },
+        },
         [notionProperties.finalPnl]: { rich_text: [{ plain_text: "+20%" }] },
         [notionProperties.renewalStep]: {
           select: { name: "awaiting_pnl" },
@@ -47,6 +54,9 @@ describe("Notion member mapping", () => {
       exchangeRegistered: true,
       exchangeName: "MEXC",
       exchangeUid: "UID-1",
+      paymentUidLast4: "1234",
+      paymentProofFileId: "photo-file-id",
+      paymentProofSubmittedAt: "2026-05-01T00:00:00.000Z",
       finalPnl: "+20%",
       renewalStep: "awaiting_pnl",
       renewalReminderSentAt: "2026-04-20T00:00:00.000Z",
@@ -62,6 +72,9 @@ describe("Notion member mapping", () => {
       renewalStep: "",
       renewalReminderSentAt: null,
       paymentDeadlineAt: "2026-05-01T00:00:00.000Z",
+      paymentUidLast4: "1234",
+      paymentProofFileId: "photo-file-id",
+      paymentProofSubmittedAt: "2026-05-01T00:00:00.000Z",
     });
 
     expect(props[notionProperties.status]).toEqual({
@@ -76,6 +89,15 @@ describe("Notion member mapping", () => {
       date: null,
     });
     expect(props[notionProperties.paymentDeadlineAt]).toEqual({
+      date: { start: "2026-05-01T00:00:00.000Z" },
+    });
+    expect(props[notionProperties.paymentUidLast4]).toEqual({
+      rich_text: [{ type: "text", text: { content: "1234" } }],
+    });
+    expect(props[notionProperties.paymentProofFileId]).toEqual({
+      rich_text: [{ type: "text", text: { content: "photo-file-id" } }],
+    });
+    expect(props[notionProperties.paymentProofSubmittedAt]).toEqual({
       date: { start: "2026-05-01T00:00:00.000Z" },
     });
   });
