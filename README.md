@@ -125,3 +125,12 @@ Runtime application secrets such as `TELEGRAM_BOT_TOKEN`, `NOTION_API_KEY`, and 
 ## Payment Boundary
 
 Payments are manually reviewed in v1. Members receive exchange internal-transfer instructions, then send a transfer screenshot and UID last four digits to the Bot. The Bot stores the proof metadata on the member record and the admin detail page proxies the Telegram file through an authenticated payment-proof endpoint for screenshot preview. An admin then confirms receipt and uses the dashboard's manual "mark paid" action. A future provider webhook should verify the provider signature, resolve the Notion page from payment metadata, enforce idempotency, then update the member to `active_paid`.
+
+The admin member list includes a `Payment Review` column for quick triage:
+
+- `待付款資料`: member is in `payment_pending` but has not submitted a screenshot or UID last four digits yet.
+- `待補件`: only one of the screenshot or UID last four digits has been submitted.
+- `待審核`: both screenshot and UID last four digits are present and ready for manual review.
+- `已標記付款`: the member has been marked paid or has a `Paid At` timestamp.
+
+When a screenshot exists, the list and detail pages link to `/api/admin/payment-proof?fileId=...`, which requires admin auth before proxying the Telegram file.
