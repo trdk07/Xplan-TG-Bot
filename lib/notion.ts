@@ -6,11 +6,13 @@ export type Member = {
   pageId: string;
   telegramUserId: string;
   telegramUsername: string;
+  email: string;
   status: MemberStatus;
   tags: string[];
   exchangeRegistered: boolean;
   exchangeName: string;
   exchangeUid: string;
+  invitationEmailSent: boolean;
   uidSubmittedAt: string | null;
   inviteLink: string | null;
   inviteExpiresAt: string | null;
@@ -38,11 +40,13 @@ export type MemberPatch = Partial<
 export const notionProperties = {
   telegramUserId: "Telegram User ID",
   telegramUsername: "Telegram Username",
+  email: "email",
   status: "Status",
   tags: "Tags",
   exchangeRegistered: "Exchange Registered",
   exchangeName: "Exchange Name",
   exchangeUid: "Exchange UID",
+  invitationEmailSent: "已送出邀請",
   uidSubmittedAt: "UID Submitted At",
   inviteLink: "Invite Link",
   inviteExpiresAt: "Invite Expires At",
@@ -98,6 +102,7 @@ function dateValue(value: string | null | undefined) {
 function textProp(page: NotionPage, name: string): string {
   const prop = page.properties[name];
   if (!prop) return "";
+  if (typeof prop.email === "string") return prop.email;
   if (Array.isArray(prop.rich_text)) {
     return prop.rich_text.map((item: any) => item.plain_text || "").join("");
   }
@@ -143,11 +148,13 @@ export function mapNotionPageToMember(page: NotionPage): Member {
     telegramUsername:
       textProp(page, notionProperties.telegramUsername) ||
       textProp(page, legacyProperties.telegramUsername),
+    email: textProp(page, notionProperties.email),
     status: statusProp(page),
     tags: multiSelectProp(page, notionProperties.tags),
     exchangeRegistered: checkboxProp(page, notionProperties.exchangeRegistered),
     exchangeName: textProp(page, notionProperties.exchangeName),
     exchangeUid: textProp(page, notionProperties.exchangeUid),
+    invitationEmailSent: checkboxProp(page, notionProperties.invitationEmailSent),
     uidSubmittedAt: dateProp(page, notionProperties.uidSubmittedAt),
     inviteLink: urlProp(page, notionProperties.inviteLink),
     inviteExpiresAt: dateProp(page, notionProperties.inviteExpiresAt),
@@ -191,6 +198,9 @@ export function buildNotionProperties(patch: MemberPatch): Record<string, any> {
   if (patch.telegramUsername !== undefined) {
     props[notionProperties.telegramUsername] = titleText(patch.telegramUsername);
   }
+  if (patch.email !== undefined) {
+    props[notionProperties.email] = { email: patch.email || null };
+  }
   if (patch.status !== undefined) {
     props[notionProperties.status] = { select: { name: patch.status } };
   }
@@ -209,6 +219,11 @@ export function buildNotionProperties(patch: MemberPatch): Record<string, any> {
   }
   if (patch.exchangeUid !== undefined) {
     props[notionProperties.exchangeUid] = richText(patch.exchangeUid);
+  }
+  if (patch.invitationEmailSent !== undefined) {
+    props[notionProperties.invitationEmailSent] = {
+      checkbox: patch.invitationEmailSent,
+    };
   }
   if (patch.uidSubmittedAt !== undefined) {
     props[notionProperties.uidSubmittedAt] = dateValue(patch.uidSubmittedAt);
@@ -369,6 +384,7 @@ export async function listMembers(options?: {
         [
           member.telegramUserId,
           member.telegramUsername,
+          member.email,
           member.exchangeName,
           member.exchangeUid,
           member.tags.join(" "),

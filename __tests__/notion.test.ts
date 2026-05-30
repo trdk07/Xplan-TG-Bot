@@ -18,6 +18,7 @@ describe("Notion member mapping", () => {
         [notionProperties.telegramUsername]: {
           rich_text: [{ plain_text: "@aceon" }],
         },
+        [notionProperties.email]: { email: "student@example.com" },
         [notionProperties.status]: { select: { name: "trial_active" } },
         [notionProperties.tags]: {
           multi_select: [{ name: "翻倉成功" }],
@@ -25,6 +26,7 @@ describe("Notion member mapping", () => {
         [notionProperties.exchangeRegistered]: { checkbox: true },
         [notionProperties.exchangeName]: { rich_text: [{ plain_text: "MEXC" }] },
         [notionProperties.exchangeUid]: { rich_text: [{ plain_text: "UID-1" }] },
+        [notionProperties.invitationEmailSent]: { checkbox: true },
         [notionProperties.paymentUidLast4]: { rich_text: [{ plain_text: "1234" }] },
         [notionProperties.paymentProofFileId]: {
           rich_text: [{ plain_text: "photo-file-id" }],
@@ -49,11 +51,13 @@ describe("Notion member mapping", () => {
       pageId: "page-1",
       telegramUserId: "12345",
       telegramUsername: "@aceon",
+      email: "student@example.com",
       status: "trial_active",
       tags: ["翻倉成功"],
       exchangeRegistered: true,
       exchangeName: "MEXC",
       exchangeUid: "UID-1",
+      invitationEmailSent: true,
       paymentUidLast4: "1234",
       paymentProofFileId: "photo-file-id",
       paymentProofSubmittedAt: "2026-05-01T00:00:00.000Z",
@@ -69,6 +73,8 @@ describe("Notion member mapping", () => {
       status: "payment_pending",
       tags: ["翻倉成功"],
       inviteLink: null,
+      email: "student@example.com",
+      invitationEmailSent: true,
       renewalStep: "",
       renewalReminderSentAt: null,
       paymentDeadlineAt: "2026-05-01T00:00:00.000Z",
@@ -84,6 +90,12 @@ describe("Notion member mapping", () => {
       multi_select: [{ name: "翻倉成功" }],
     });
     expect(props[notionProperties.inviteLink]).toEqual({ url: null });
+    expect(props[notionProperties.email]).toEqual({
+      email: "student@example.com",
+    });
+    expect(props[notionProperties.invitationEmailSent]).toEqual({
+      checkbox: true,
+    });
     expect(props[notionProperties.renewalStep]).toEqual({ select: null });
     expect(props[notionProperties.renewalReminderSentAt]).toEqual({
       date: null,

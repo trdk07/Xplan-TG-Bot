@@ -353,6 +353,31 @@ th {
   line-height: 1.35;
 }
 
+.email-copy-box {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  min-height: 120px;
+  resize: vertical;
+  white-space: pre;
+}
+
+.legacy-note {
+  color: var(--warn);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.legacy-warning {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+  color: #92400e;
+  font-size: 13px;
+  line-height: 1.45;
+  margin-top: 8px;
+  padding: 8px 10px;
+}
+
 .proof-link {
   align-items: center;
   color: var(--accent-strong);

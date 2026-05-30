@@ -37,6 +37,8 @@ Required properties:
 
 - `Telegram User ID` rich text
 - `Telegram Username` rich text
+- `email` email
+- `已送出邀請` checkbox
 - `Status` select
 - `Tags` multi-select
 - `Exchange Registered` checkbox

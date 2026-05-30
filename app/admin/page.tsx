@@ -37,6 +37,29 @@ function scalar(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] || "" : value || "";
 }
 
+function isLegacyBitMartMember(member: Member) {
+  return member.exchangeName.trim().toLowerCase().includes("bitmart");
+}
+
+function legacyBitMartReviewNote(member: Member) {
+  return isLegacyBitMartMember(member)
+    ? "舊 BitMart 會員，續費請用 MEXC 收款紀錄核對"
+    : "";
+}
+
+function ExchangeSummary({ member }: { member: Member }) {
+  const isLegacyBitMart = isLegacyBitMartMember(member);
+
+  return (
+    <div className="payment-review">
+      <span>{member.exchangeName || "-"}</span>
+      {isLegacyBitMart ? (
+        <span className="mini-badge warning">舊會員｜續費改 MEXC</span>
+      ) : null}
+    </div>
+  );
+}
+
 function paymentReviewState(member: Member) {
   const hasProof = Boolean(member.paymentProofFileId);
   const hasUid = Boolean(member.paymentUidLast4);
@@ -94,6 +117,9 @@ function PaymentReviewSummary({ member }: { member: Member }) {
         {state.label}
       </span>
       <span className="subtle small-text">{state.detail}</span>
+      {legacyBitMartReviewNote(member) ? (
+        <span className="legacy-note">{legacyBitMartReviewNote(member)}</span>
+      ) : null}
       {member.paymentProofFileId ? (
         <a
           className="proof-link"
@@ -287,6 +313,15 @@ export default async function AdminPage({
       days <= 7
     );
   }).length;
+  const invitationEmailTargets = members.filter(
+    (member) =>
+      member.status === "eligible" &&
+      member.email &&
+      !member.invitationEmailSent,
+  );
+  const invitationEmailList = invitationEmailTargets
+    .map((member) => member.email)
+    .join("\n");
 
   return (
     <main className="shell">
@@ -330,6 +365,10 @@ export default async function AdminPage({
           <span className="subtle">Ending Soon</span>
           <strong>{endingSoon}</strong>
         </div>
+        <div className="stat stat-emphasis">
+          <span className="subtle">待寄邀請 Email</span>
+          <strong>{invitationEmailTargets.length}</strong>
+        </div>
       </section>
 
       {resentCount ? (
@@ -360,6 +399,25 @@ export default async function AdminPage({
               重新發送即將到期續約通知
             </button>
           </form>
+        </div>
+      </section>
+
+      <section className="panel action-panel">
+        <div className="panel-head">
+          <h2>邀請 Email 名單</h2>
+          <span className="subtle">待寄：{invitationEmailTargets.length} 位</span>
+        </div>
+        <div className="panel-body">
+          <p className="subtle">
+            來源為 Notion 的 email 欄位；只列出 status = eligible 且尚未勾選「已送出邀請」的會員。
+            可直接複製下方名單到人工寄信工具。
+          </p>
+          <textarea
+            className="input email-copy-box"
+            readOnly
+            value={invitationEmailList}
+            aria-label="待寄邀請 Email 名單"
+          />
         </div>
       </section>
 
@@ -404,7 +462,7 @@ export default async function AdminPage({
               id="q"
               name="q"
               defaultValue={q}
-              placeholder="Telegram ID, username, UID..."
+              placeholder="Telegram ID, username, email, UID..."
             />
           </div>
           <div className="field">
@@ -434,6 +492,8 @@ export default async function AdminPage({
             <thead>
               <tr>
                 <th>Member</th>
+                <th>Email</th>
+                <th>邀請 Email</th>
                 <th>Status</th>
                 <th>續約狀態</th>
                 <th>Exchange</th>
@@ -456,13 +516,23 @@ export default async function AdminPage({
                       {member.telegramUsername || "-"}
                     </div>
                   </td>
+                  <td>{member.email || "-"}</td>
+                  <td>
+                    {member.invitationEmailSent ? (
+                      <span className="mini-badge success">已送出</span>
+                    ) : (
+                      <span className="mini-badge muted">未送出</span>
+                    )}
+                  </td>
                   <td>
                     <StatusBadge status={member.status} />
                   </td>
                   <td>
                     <RenewalReviewSummary member={member} />
                   </td>
-                  <td>{member.exchangeName || "-"}</td>
+                  <td>
+                    <ExchangeSummary member={member} />
+                  </td>
                   <td>{member.exchangeUid || "-"}</td>
                   <td>{member.tags.length ? member.tags.join(", ") : "-"}</td>
                   <td>{formatDateTime(member.groupJoinedAt)}</td>
@@ -485,7 +555,7 @@ export default async function AdminPage({
               ))}
               {!members.length ? (
                 <tr>
-                  <td colSpan={12} className="subtle">
+                  <td colSpan={14} className="subtle">
                     沒有符合條件的會員。
                   </td>
                 </tr>

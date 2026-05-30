@@ -116,6 +116,17 @@ export async function resendRenewalRemindersAction() {
   redirect(`/admin?resent=${sentCount}`);
 }
 
+export async function markInvitationEmailSentAction(pageId: string) {
+  await assertAdminAction();
+  await updateMember(pageId, {
+    invitationEmailSent: true,
+    lastBotCheckAt: isoDateTime(new Date()),
+    lastBotMessage: "Invitation email marked sent by admin",
+  });
+  revalidatePath("/admin");
+  revalidatePath(`/admin/member/${pageId}`);
+}
+
 export async function kickMemberAction(pageId: string) {
   await assertAdminAction();
   const member = await getMemberByPageId(pageId);

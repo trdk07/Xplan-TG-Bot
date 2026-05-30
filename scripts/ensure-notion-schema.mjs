@@ -33,6 +33,8 @@ ensureSelect("Status", [
   { name: "denied", color: "red" },
 ]);
 ensureMultiSelect("Tags", [{ name: "翻倉成功", color: "green" }]);
+ensureEmail("email");
+ensureCheckbox("已送出邀請");
 ensureRichText("Final P/L");
 ensureSelect("Renewal Step", [
   { name: "awaiting_trial_result", color: "yellow" },
@@ -65,6 +67,18 @@ function ensureRichText(name) {
 function ensureDate(name) {
   if (!existing[name]) {
     patch[name] = { date: {} };
+  }
+}
+
+function ensureEmail(name) {
+  if (!existing[name]) {
+    patch[name] = { email: {} };
+  }
+}
+
+function ensureCheckbox(name) {
+  if (!existing[name]) {
+    patch[name] = { checkbox: {} };
   }
 }
 
