@@ -417,3 +417,55 @@ th {
     grid-template-columns: 1fr;
   }
 }
+
+.wide-shell {
+  max-width: 1360px;
+}
+
+.csv-input {
+  min-height: 180px;
+  resize: vertical;
+}
+
+.compact-stats {
+  margin-bottom: 0;
+}
+
+.nested-panel {
+  background: #fff;
+}
+
+.loose-stack {
+  gap: 18px;
+  padding: 0;
+}
+
+.wrap-row {
+  flex-wrap: wrap;
+}
+
+.two-col-grid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.review-card {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+}
+
+.uid-chip {
+  background: #f8fafc;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  display: inline-block;
+  padding: 5px 7px;
+}
+
+.notice.warning {
+  background: #fffbeb;
+  border-color: #fcd34d;
+  color: #92400e;
+}

@@ -116,6 +116,68 @@ export async function resendRenewalRemindersAction() {
   redirect(`/admin?resent=${sentCount}`);
 }
 
+export async function batchMarkEligibleAction(formData: FormData) {
+  await assertAdminAction();
+  const raw = String(formData.get("pageIds") || "[]");
+  const parsed = z.array(z.string().min(1)).safeParse(JSON.parse(raw));
+  if (!parsed.success) throw new Error("Invalid member selection");
+
+  const pageIds = [...new Set(parsed.data)].slice(0, 500);
+  const now = isoDateTime(new Date());
+  for (const pageId of pageIds) {
+    await updateMember(pageId, {
+      status: "eligible",
+      lastBotCheckAt: now,
+      lastBotMessage: "Marked eligible from MEXC CSV comparison",
+      kickReason: "",
+    });
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/applications");
+  redirect(`/admin/applications?approved=${pageIds.length}`);
+}
+
+export async function markInvitationEmailSentAction(pageId: string) {
+  await assertAdminAction();
+  await updateMember(pageId, {
+    invitationEmailSent: true,
+    lastBotCheckAt: isoDateTime(new Date()),
+    lastBotMessage: "Invitation email marked sent by admin",
+  });
+  revalidatePath("/admin");
+  revalidatePath(`/admin/member/${pageId}`);
+}
+
+export async function resendRenewalRemindersAction() {
+  await assertAdminAction();
+  const now = new Date();
+  const members = await listMembers({ limit: 500 });
+
+  let sentCount = 0;
+  for (const member of members) {
+    const days = daysUntil(member.reviewDueAt, now);
+    const shouldResend =
+      Boolean(member.telegramUserId) &&
+      (member.status === "trial_active" || member.status === "active_paid") &&
+      days !== null &&
+      days >= 0 &&
+      days <= 7;
+
+    if (shouldResend) {
+      await sendRenewalReminder(
+        member,
+        now,
+        "Renewal reminder resent manually by admin",
+      );
+      sentCount += 1;
+    }
+  }
+
+  revalidatePath("/admin");
+  redirect(`/admin?resent=${sentCount}`);
+}
+
 export async function markInvitationEmailSentAction(pageId: string) {
   await assertAdminAction();
   await updateMember(pageId, {

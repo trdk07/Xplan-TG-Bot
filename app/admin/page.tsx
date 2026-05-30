@@ -404,6 +404,20 @@ export default async function AdminPage({
 
       <section className="panel action-panel">
         <div className="panel-head">
+          <h2>入群申請工具</h2>
+          <Link className="button secondary" href="/admin/applications">
+            MEXC CSV 雙向比對
+          </Link>
+        </div>
+        <div className="panel-body">
+          <p className="subtle">
+            截止申請後可貼上 MEXC 後台下載的 CSV，和 Notion/Tally 名單快速比對，並批次標記可入群。
+          </p>
+        </div>
+      </section>
+
+      <section className="panel action-panel">
+        <div className="panel-head">
           <h2>邀請 Email 名單</h2>
           <span className="subtle">待寄：{invitationEmailTargets.length} 位</span>
         </div>

@@ -145,3 +145,5 @@ The admin member list also includes a `付款審核` (`Payment Review`) column f
 - `已標記付款`: the member has been marked paid or has a `Paid At` timestamp.
 
 When a screenshot exists, the list and detail pages link to `/api/admin/payment-proof?fileId=...`, which requires admin auth before proxying the Telegram file.
+
+The admin dashboard also links to `/admin/applications` for manual MEXC CSV comparison. Paste the MEXC export into that page to compare CSV UIDs against Notion/Tally `Exchange UID` values, review Notion-only and MEXC-only mismatches, and batch-mark matched applicants as `eligible` for the Bot invite flow.
