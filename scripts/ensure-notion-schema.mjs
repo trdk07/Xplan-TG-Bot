@@ -41,6 +41,9 @@ ensureSelect("Renewal Step", [
   { name: "payment_pending", color: "purple" },
   { name: "completed", color: "green" },
 ]);
+ensureRichText("Payment UID Last 4");
+ensureRichText("Payment Proof File ID");
+ensureDate("Payment Proof Submitted At");
 ensureDate("Renewal Reminder Sent At");
 
 if (Object.keys(patch).length) {

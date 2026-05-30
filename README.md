@@ -48,6 +48,9 @@ Required properties:
 - `Group Joined At` date
 - `Review Due At` date
 - `Payment Deadline At` date
+- `Payment UID Last 4` rich text
+- `Payment Proof File ID` rich text
+- `Payment Proof Submitted At` date
 - `Paid At` date
 - `Final P/L` rich text
 - `Renewal Step` select
@@ -121,4 +124,4 @@ Runtime application secrets such as `TELEGRAM_BOT_TOKEN`, `NOTION_API_KEY`, and 
 
 ## Payment Boundary
 
-Payments are manually reviewed in v1. Members receive exchange internal-transfer instructions, then an admin confirms receipt and uses the dashboard's manual "mark paid" action. A future provider webhook should verify the provider signature, resolve the Notion page from payment metadata, enforce idempotency, then update the member to `active_paid`.
+Payments are manually reviewed in v1. Members receive exchange internal-transfer instructions, then send a transfer screenshot and UID last four digits to the Bot. The Bot stores the proof metadata on the member record and the admin detail page proxies the Telegram file through an authenticated payment-proof endpoint for screenshot preview. An admin then confirms receipt and uses the dashboard's manual "mark paid" action. A future provider webhook should verify the provider signature, resolve the Notion page from payment metadata, enforce idempotency, then update the member to `active_paid`.

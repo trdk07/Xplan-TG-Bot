@@ -87,6 +87,9 @@ function member(overrides: Record<string, any> = {}) {
     groupJoinedAt: null,
     reviewDueAt: "2026-05-08T00:00:00.000Z",
     paymentDeadlineAt: null,
+    paymentUidLast4: "",
+    paymentProofFileId: "",
+    paymentProofSubmittedAt: null,
     paidAt: null,
     finalPnl: "",
     renewalStep: "",
@@ -120,10 +123,33 @@ describe("renewal bot flow", () => {
     await runDailyMembershipJob(now);
 
     expect(state.sent).toHaveLength(1);
+    expect(state.sent[0].text).toContain("你的體驗期將在 7 天內到期");
     expect(state.sent[0].text).toContain("3個月100U，一個月50U");
-    expect(state.sent[0].text).toContain("MEXC - UID：77242747");
-    expect(state.sent[0].text).toContain("BITMART - UID：15157885");
+    expect(state.sent[0].text).not.toContain("MEXC - UID");
+    expect(state.sent[0].text).not.toContain("BITMART");
+    expect(state.sent[0].keyboard?.[0]?.[0]).toMatchObject({
+      text: "提前開始續費",
+      callback_data: "renewal:stay",
+    });
     expect(state.members[0].renewalReminderSentAt).toBe(now.toISOString());
+  });
+
+  it("sends paid members a subscription reminder with early renewal action", async () => {
+    state.members = [
+      member({
+        status: "active_paid",
+      }),
+    ];
+    const now = new Date("2026-05-01T00:00:00.000Z");
+
+    await runDailyMembershipJob(now);
+
+    expect(state.sent).toHaveLength(1);
+    expect(state.sent[0].text).toContain("你的訂閱期將在 7 天內到期");
+    expect(state.sent[0].text).toContain("若你已決定續費，也可點擊下方按鈕提前開始續費申請");
+    expect(state.sent[0].text).not.toContain("MEXC - UID");
+    expect(state.sent[0].text).not.toContain("BITMART");
+    expect(state.sent[0].keyboard?.[0]?.[0]?.callback_data).toBe("renewal:stay");
   });
 
   it("collects trial result, final P/L, and sends manual payment instructions", async () => {
@@ -187,9 +213,150 @@ describe("renewal bot flow", () => {
     );
     expect(state.members[0].status).toBe("payment_pending");
     expect(state.members[0].paymentDeadlineAt).toBe("2026-05-04T00:00:00.000Z");
-    expect(state.sent.at(-1)?.text).toContain("目前暫不串接付款金流，收款由人工審核");
+    expect(state.sent.at(-1)?.text).toContain("已收到你的續費申請");
     expect(state.sent.at(-1)?.text).toContain("3個月100U，一個月50U");
-    expect(state.sent.at(-1)?.text).not.toContain("pseudocode");
+    expect(state.sent.at(-1)?.text).toContain("MEXC - UID：77242747");
+    expect(state.sent.at(-1)?.text).not.toContain("BITMART");
+
+    await handleTelegramUpdate(
+      {
+        update_id: 4,
+        message: {
+          message_id: 2,
+          from: { id: 1001, username: "user" },
+          chat: { id: 1001, type: "private" },
+          caption: "UID 末四碼 1234",
+          photo: [
+            { file_id: "small-photo", width: 90, height: 90 },
+            { file_id: "large-photo", width: 1280, height: 720 },
+          ],
+        },
+      },
+      now,
+    );
+    expect(state.members[0]).toMatchObject({
+      paymentUidLast4: "1234",
+      paymentProofFileId: "large-photo",
+      paymentProofSubmittedAt: now.toISOString(),
+    });
+    expect(state.sent.at(-1)?.text).toContain("已收到你的轉帳截圖與 UID 末四碼");
+  });
+
+
+  it("keeps delayed renewal buttons valid during grace but expires them after grace", async () => {
+    state.members = [
+      member({
+        status: "renewal_due",
+        renewalStep: "renewal_offer_sent",
+        reviewDueAt: "2026-05-01T00:00:00.000Z",
+      }),
+    ];
+
+    await handleTelegramUpdate(
+      {
+        update_id: 20,
+        callback_query: {
+          id: "cb-grace",
+          from: { id: 1001 },
+          data: "renewal:stay",
+        },
+      },
+      new Date("2026-05-03T00:00:00.000Z"),
+    );
+
+    expect(state.members[0].status).toBe("payment_pending");
+    expect(state.sent.at(-1)?.text).toContain("已收到你的續費申請");
+
+    state.members = [
+      member({
+        status: "renewal_due",
+        renewalStep: "renewal_offer_sent",
+        reviewDueAt: "2026-05-01T00:00:00.000Z",
+      }),
+    ];
+    state.sent = [];
+    state.kicked = [];
+
+    await handleTelegramUpdate(
+      {
+        update_id: 21,
+        callback_query: {
+          id: "cb-expired",
+          from: { id: 1001 },
+          data: "renewal:stay",
+        },
+      },
+      new Date("2026-05-04T00:00:00.000Z"),
+    );
+
+    expect(state.members[0]).toMatchObject({
+      status: "expired",
+      kickReason: "renewal_not_confirmed",
+    });
+    expect(state.kicked).toEqual(["1001"]);
+    expect(state.sent.at(-1)?.text).toContain("這次續費回覆期限已過");
+  });
+
+  it("does not accept stale trial result buttons after the member has moved on", async () => {
+    state.members = [
+      member({
+        status: "payment_pending",
+        renewalStep: "payment_pending",
+        reviewDueAt: "2026-05-01T00:00:00.000Z",
+      }),
+    ];
+
+    await handleTelegramUpdate(
+      {
+        update_id: 22,
+        callback_query: {
+          id: "cb-stale",
+          from: { id: 1001 },
+          data: "trial_result:success",
+        },
+      },
+      new Date("2026-05-02T00:00:00.000Z"),
+    );
+
+    expect(state.members[0]).toMatchObject({
+      status: "payment_pending",
+      renewalStep: "payment_pending",
+    });
+    expect(state.members[0].tags).not.toContain("翻倉成功");
+    expect(state.sent.at(-1)?.text).toContain("這個按鈕已不是目前可操作的步驟");
+  });
+
+  it("expires payment proof submissions after the payment deadline", async () => {
+    state.members = [
+      member({
+        status: "payment_pending",
+        renewalStep: "payment_pending",
+        paymentDeadlineAt: "2026-05-04T00:00:00.000Z",
+      }),
+    ];
+
+    await handleTelegramUpdate(
+      {
+        update_id: 23,
+        message: {
+          message_id: 1,
+          from: { id: 1001, username: "user" },
+          chat: { id: 1001, type: "private" },
+          caption: "UID 末四碼 1234",
+          photo: [{ file_id: "proof-photo", width: 1280, height: 720 }],
+        },
+      },
+      new Date("2026-05-04T00:00:00.000Z"),
+    );
+
+    expect(state.members[0]).toMatchObject({
+      status: "expired",
+      kickReason: "payment_deadline_missed",
+      paymentUidLast4: "",
+      paymentProofFileId: "",
+    });
+    expect(state.kicked).toEqual(["1001"]);
+    expect(state.sent.at(-1)?.text).toContain("付款回覆期限已過");
   });
 
   it("sends paid members directly to renewal without trial result questions", async () => {
