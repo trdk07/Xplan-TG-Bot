@@ -1,20 +1,32 @@
 import Link from "next/link";
 import {
+  BadgeCheck,
   BellRing,
+  CalendarClock,
   CircleDollarSign,
+  Clock3,
+  FileWarning,
   Filter,
+  ImageIcon,
   LogOut,
   Search,
   Settings,
   ShieldCheck,
   Users,
 } from "lucide-react";
-import { logoutAction, resendRenewalRemindersAction } from "@/app/admin/actions";
+import {
+  logoutAction,
+  resendRenewalRemindersAction,
+} from "@/app/admin/actions";
 import { StatusBadge } from "@/app/components/StatusBadge";
 import { getDisplayConfig, getMissingConfig } from "@/lib/config";
 import { daysUntil, formatDateTime } from "@/lib/dates";
 import { listMembers, type Member } from "@/lib/notion";
-import { memberStatusLabel, memberStatuses, type MemberStatus } from "@/lib/status";
+import {
+  memberStatusLabel,
+  memberStatuses,
+  type MemberStatus,
+} from "@/lib/status";
 import { requireAdmin } from "@/lib/auth";
 
 function statCount(members: Member[], statuses: MemberStatus[]) {
@@ -23,6 +35,208 @@ function statCount(members: Member[], statuses: MemberStatus[]) {
 
 function scalar(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] || "" : value || "";
+}
+
+function paymentReviewState(member: Member) {
+  const hasProof = Boolean(member.paymentProofFileId);
+  const hasUid = Boolean(member.paymentUidLast4);
+
+  if (member.status === "active_paid" || member.paidAt) {
+    return {
+      tone: "success",
+      label: "已標記付款",
+      detail: member.paidAt
+        ? `付款時間：${formatDateTime(member.paidAt)}`
+        : "會籍有效",
+      icon: BadgeCheck,
+    } as const;
+  }
+
+  if (member.status !== "payment_pending") {
+    return null;
+  }
+
+  if (hasProof && hasUid) {
+    return {
+      tone: "warning",
+      label: "待審核",
+      detail: `UID 末四碼：${member.paymentUidLast4}`,
+      icon: Clock3,
+    } as const;
+  }
+
+  if (hasProof || hasUid) {
+    return {
+      tone: "warning",
+      label: "待補件",
+      detail: hasProof ? "缺 UID 末四碼" : "缺轉帳截圖",
+      icon: FileWarning,
+    } as const;
+  }
+
+  return {
+    tone: "muted",
+    label: "待付款資料",
+    detail: "尚未收到截圖與 UID 末四碼",
+    icon: Clock3,
+  } as const;
+}
+
+function PaymentReviewSummary({ member }: { member: Member }) {
+  const state = paymentReviewState(member);
+  if (!state) return <span className="subtle">-</span>;
+
+  const Icon = state.icon;
+  return (
+    <div className="payment-review">
+      <span className={`mini-badge ${state.tone}`}>
+        <Icon width={14} height={14} aria-hidden="true" />
+        {state.label}
+      </span>
+      <span className="subtle small-text">{state.detail}</span>
+      {member.paymentProofFileId ? (
+        <a
+          className="proof-link"
+          href={`/api/admin/payment-proof?fileId=${encodeURIComponent(
+            member.paymentProofFileId,
+          )}`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <ImageIcon width={14} height={14} aria-hidden="true" />
+          看截圖
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
+function renewalReviewState(member: Member) {
+  const days = daysUntil(member.reviewDueAt);
+  const dueText =
+    days === null
+      ? "-"
+      : days < 0
+        ? `已逾期 ${Math.abs(days)} 天`
+        : `剩 ${days} 天`;
+
+  if (member.status === "renewal_due") {
+    if (member.renewalStep === "awaiting_trial_result") {
+      return {
+        tone: "warning",
+        label: "待選翻倉",
+        detail: "等學員按翻倉成功 / 尚未成功",
+        icon: Clock3,
+      } as const;
+    }
+
+    if (member.renewalStep === "awaiting_pnl") {
+      return {
+        tone: "warning",
+        label: "待回覆收益",
+        detail: "等學員回覆合約收益狀況",
+        icon: Clock3,
+      } as const;
+    }
+
+    return {
+      tone: "warning",
+      label: "待選續留",
+      detail: member.finalPnl
+        ? "已回覆收益，等續留選擇"
+        : "等學員選擇續費 / 不續留",
+      icon: Clock3,
+    } as const;
+  }
+
+  if (member.status === "payment_pending") {
+    return {
+      tone: "warning",
+      label: "已申請續費",
+      detail: "等付款資料或助理審核",
+      icon: CircleDollarSign,
+    } as const;
+  }
+
+  if (member.status === "active_paid") {
+    return {
+      tone: "success",
+      label: "已續約有效",
+      detail: member.reviewDueAt
+        ? `有效期限：${formatDateTime(member.reviewDueAt)}`
+        : "會籍有效",
+      icon: BadgeCheck,
+    } as const;
+  }
+
+  if (member.status === "trial_active") {
+    if (days !== null && days >= 0 && days <= 7) {
+      return {
+        tone: "warning",
+        label: member.renewalReminderSentAt ? "已提醒續約" : "即將到期",
+        detail: dueText,
+        icon: CalendarClock,
+      } as const;
+    }
+
+    return {
+      tone: "muted",
+      label: "體驗進行中",
+      detail: member.reviewDueAt
+        ? `到期：${formatDateTime(member.reviewDueAt)}`
+        : "尚無到期日",
+      icon: CalendarClock,
+    } as const;
+  }
+
+  if (member.kickReason === "user_declined_renewal") {
+    return {
+      tone: "danger",
+      label: "不續留",
+      detail: "學員已選擇暫時不續留",
+      icon: FileWarning,
+    } as const;
+  }
+
+  if (member.status === "expired") {
+    return {
+      tone: "danger",
+      label: "逾期未完成",
+      detail: member.kickReason || "續約或付款期限已過",
+      icon: FileWarning,
+    } as const;
+  }
+
+  if (
+    member.status === "partner" ||
+    member.status === "exempt" ||
+    member.status === "VIP"
+  ) {
+    return {
+      tone: "success",
+      label: "免續約",
+      detail: "不進入續約到期流程",
+      icon: BadgeCheck,
+    } as const;
+  }
+
+  return null;
+}
+
+function RenewalReviewSummary({ member }: { member: Member }) {
+  const state = renewalReviewState(member);
+  if (!state) return <span className="subtle">-</span>;
+
+  const Icon = state.icon;
+  return (
+    <div className="payment-review">
+      <span className={`mini-badge ${state.tone}`}>
+        <Icon width={14} height={14} aria-hidden="true" />
+        {state.label}
+      </span>
+      <span className="subtle small-text">{state.detail}</span>
+    </div>
+  );
 }
 
 export default async function AdminPage({
@@ -50,8 +264,19 @@ export default async function AdminPage({
   try {
     members = await listMembers({ status, query: q, limit: 500 });
   } catch (error) {
-    loadError = error instanceof Error ? error.message : "Unable to load members";
+    loadError =
+      error instanceof Error ? error.message : "Unable to load members";
   }
+
+  const paymentProofReady = members.filter(
+    (member) =>
+      member.status === "payment_pending" &&
+      member.paymentProofFileId &&
+      member.paymentUidLast4,
+  ).length;
+  const renewalWaiting = members.filter(
+    (member) => member.status === "renewal_due",
+  ).length;
 
   const endingSoon = members.filter((member) => {
     const days = daysUntil(member.reviewDueAt);
@@ -68,7 +293,9 @@ export default async function AdminPage({
       <header className="topbar">
         <div>
           <h1>Telegram 會員入群 Bot</h1>
-          <p className="subtle">Notion-only membership gate and renewal dashboard.</p>
+          <p className="subtle">
+            Notion-only membership gate and renewal dashboard.
+          </p>
         </div>
         <form action={logoutAction}>
           <button className="button secondary" type="submit">
@@ -90,6 +317,14 @@ export default async function AdminPage({
         <div className="stat">
           <span className="subtle">Payment Pending</span>
           <strong>{statCount(members, ["payment_pending"])}</strong>
+        </div>
+        <div className="stat stat-emphasis">
+          <span className="subtle">待續留回覆</span>
+          <strong>{renewalWaiting}</strong>
+        </div>
+        <div className="stat stat-emphasis">
+          <span className="subtle">待審核付款</span>
+          <strong>{paymentProofReady}</strong>
         </div>
         <div className="stat">
           <span className="subtle">Ending Soon</span>
@@ -114,8 +349,9 @@ export default async function AdminPage({
           <div>
             <strong>重新發送最新版即將到期續約通知</strong>
             <p className="subtle">
-              會發給狀態為 trial_active / active_paid、Review Due At 距離現在 0～7 天內、且有
-              Telegram User ID 的會員；即使之前已收到舊提醒，也會重新發送。
+              會發給狀態為 trial_active / active_paid、Review Due At 距離現在
+              0～7 天內、且有 Telegram User ID
+              的會員；即使之前已收到舊提醒，也會重新發送。
             </p>
           </div>
           <form action={resendRenewalRemindersAction}>
@@ -133,7 +369,9 @@ export default async function AdminPage({
             <Settings width={16} height={16} aria-hidden="true" /> Settings
           </h2>
           <span className="subtle">
-            {missingConfig.length ? `Missing: ${missingConfig.join(", ")}` : "Config OK"}
+            {missingConfig.length
+              ? `Missing: ${missingConfig.join(", ")}`
+              : "Config OK"}
           </span>
         </div>
         <div className="kv">
@@ -171,7 +409,12 @@ export default async function AdminPage({
           </div>
           <div className="field">
             <label htmlFor="status">Status</label>
-            <select className="input" id="status" name="status" defaultValue={status}>
+            <select
+              className="input"
+              id="status"
+              name="status"
+              defaultValue={status}
+            >
               <option value="all">all</option>
               {memberStatuses.map((item) => (
                 <option key={item} value={item}>
@@ -192,13 +435,15 @@ export default async function AdminPage({
               <tr>
                 <th>Member</th>
                 <th>Status</th>
+                <th>續約狀態</th>
                 <th>Exchange</th>
                 <th>Exchange UID</th>
                 <th>Tags</th>
                 <th>Joined</th>
                 <th>Review Due</th>
-                <th>Payment Deadline</th>
-                <th>Last Check</th>
+                <th>付款審核</th>
+                <th>付款期限</th>
+                <th>最後檢查</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -207,20 +452,31 @@ export default async function AdminPage({
                 <tr key={member.pageId}>
                   <td>
                     <strong>{member.telegramUserId || "-"}</strong>
-                    <div className="subtle">{member.telegramUsername || "-"}</div>
+                    <div className="subtle">
+                      {member.telegramUsername || "-"}
+                    </div>
                   </td>
                   <td>
                     <StatusBadge status={member.status} />
+                  </td>
+                  <td>
+                    <RenewalReviewSummary member={member} />
                   </td>
                   <td>{member.exchangeName || "-"}</td>
                   <td>{member.exchangeUid || "-"}</td>
                   <td>{member.tags.length ? member.tags.join(", ") : "-"}</td>
                   <td>{formatDateTime(member.groupJoinedAt)}</td>
                   <td>{formatDateTime(member.reviewDueAt)}</td>
+                  <td>
+                    <PaymentReviewSummary member={member} />
+                  </td>
                   <td>{formatDateTime(member.paymentDeadlineAt)}</td>
                   <td>{formatDateTime(member.lastBotCheckAt)}</td>
                   <td>
-                    <Link className="button secondary" href={`/admin/member/${member.pageId}`}>
+                    <Link
+                      className="button secondary"
+                      href={`/admin/member/${member.pageId}`}
+                    >
                       <Filter width={16} height={16} aria-hidden="true" />
                       管理
                     </Link>
@@ -229,7 +485,7 @@ export default async function AdminPage({
               ))}
               {!members.length ? (
                 <tr>
-                  <td colSpan={10} className="subtle">
+                  <td colSpan={12} className="subtle">
                     沒有符合條件的會員。
                   </td>
                 </tr>

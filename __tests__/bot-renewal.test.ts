@@ -3,6 +3,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   members: [] as any[],
   sent: [] as Array<{ chatId: string | number; text: string; keyboard?: any }>,
+  edited: [] as Array<{
+    chatId: string | number;
+    messageId: number;
+    text: string;
+    keyboard?: any;
+  }>,
+  callbackAnswers: [] as Array<{
+    id: string;
+    text?: string;
+    showAlert?: boolean;
+  }>,
   updates: [] as Array<{ pageId: string; patch: any }>,
   kicked: [] as Array<string | number>,
   unbanned: [] as Array<string | number>,
@@ -28,18 +39,25 @@ vi.mock("@/lib/config", () => ({
 
 vi.mock("@/lib/notion", () => ({
   findMemberByTelegramId: vi.fn(async (telegramUserId: string) => {
-    return state.members.find((member) => member.telegramUserId === telegramUserId) || null;
-  }),
-  findMemberByTelegramUsername: vi.fn(async () => null),
-  findMemberByExchangeUid: vi.fn(async (exchangeName: string, exchangeUid: string) => {
     return (
       state.members.find(
-        (member) =>
-          member.exchangeName.toLowerCase() === exchangeName.toLowerCase() &&
-          member.exchangeUid.trim().toLowerCase() === exchangeUid.trim().toLowerCase(),
+        (member) => member.telegramUserId === telegramUserId,
       ) || null
     );
   }),
+  findMemberByTelegramUsername: vi.fn(async () => null),
+  findMemberByExchangeUid: vi.fn(
+    async (exchangeName: string, exchangeUid: string) => {
+      return (
+        state.members.find(
+          (member) =>
+            member.exchangeName.toLowerCase() === exchangeName.toLowerCase() &&
+            member.exchangeUid.trim().toLowerCase() ===
+              exchangeUid.trim().toLowerCase(),
+        ) || null
+      );
+    },
+  ),
   listMembers: vi.fn(async () => state.members),
   normalizeExchangeUid: (value: string) => value.trim().toLowerCase(),
   updateMember: vi.fn(async (pageId: string, patch: any) => {
@@ -50,8 +68,22 @@ vi.mock("@/lib/notion", () => ({
 }));
 
 vi.mock("@/lib/telegram", () => ({
-  answerCallbackQuery: vi.fn(async () => undefined),
+  answerCallbackQuery: vi.fn(
+    async (id: string, text?: string, showAlert?: boolean) => {
+      state.callbackAnswers.push({ id, text, showAlert });
+    },
+  ),
   approveChatJoinRequest: vi.fn(async () => undefined),
+  editMessageText: vi.fn(
+    async (
+      chatId: string | number,
+      messageId: number,
+      text: string,
+      keyboard?: any,
+    ) => {
+      state.edited.push({ chatId, messageId, text, keyboard });
+    },
+  ),
   createChatInviteLink: vi.fn(async () => {
     state.invites.push(true);
     return { invite_link: "https://t.me/+invite" };
@@ -61,15 +93,21 @@ vi.mock("@/lib/telegram", () => ({
     state.kicked.push(userId);
   }),
   revokeChatInviteLink: vi.fn(async () => undefined),
-  sendMessage: vi.fn(async (chatId: string | number, text: string, keyboard?: any) => {
-    state.sent.push({ chatId, text, keyboard });
-  }),
+  sendMessage: vi.fn(
+    async (chatId: string | number, text: string, keyboard?: any) => {
+      state.sent.push({ chatId, text, keyboard });
+    },
+  ),
   unbanChatMember: vi.fn(async (userId: string | number) => {
     state.unbanned.push(userId);
   }),
 }));
 
-import { exchanges, handleTelegramUpdate, runDailyMembershipJob } from "@/lib/bot";
+import {
+  exchanges,
+  handleTelegramUpdate,
+  runDailyMembershipJob,
+} from "@/lib/bot";
 
 function member(overrides: Record<string, any> = {}) {
   return {
@@ -105,6 +143,8 @@ describe("renewal bot flow", () => {
   beforeEach(() => {
     state.members = [];
     state.sent = [];
+    state.edited = [];
+    state.callbackAnswers = [];
     state.updates = [];
     state.kicked = [];
     state.unbanned = [];
@@ -112,7 +152,9 @@ describe("renewal bot flow", () => {
   });
 
   it("uses the updated BitMart registration link", () => {
-    expect(exchanges.BitMart.url).toBe("https://www.bitmart.com/zh-TW/invite/cMPDb9");
+    expect(exchanges.BitMart.url).toBe(
+      "https://www.bitmart.com/zh-TW/invite/cMPDb9",
+    );
   });
 
   it("sends a seven day renewal reminder only once", async () => {
@@ -146,10 +188,14 @@ describe("renewal bot flow", () => {
 
     expect(state.sent).toHaveLength(1);
     expect(state.sent[0].text).toContain("你的訂閱期將在 7 天內到期");
-    expect(state.sent[0].text).toContain("若你已決定續費，也可點擊下方按鈕提前開始續費申請");
+    expect(state.sent[0].text).toContain(
+      "若你已決定續費，也可點擊下方按鈕提前開始續費申請",
+    );
     expect(state.sent[0].text).not.toContain("MEXC - UID");
     expect(state.sent[0].text).not.toContain("BITMART");
-    expect(state.sent[0].keyboard?.[0]?.[0]?.callback_data).toBe("renewal:stay");
+    expect(state.sent[0].keyboard?.[0]?.[0]?.callback_data).toBe(
+      "renewal:stay",
+    );
   });
 
   it("collects trial result, final P/L, and sends manual payment instructions", async () => {
@@ -180,7 +226,9 @@ describe("renewal bot flow", () => {
     );
     expect(state.members[0].tags).toContain("翻倉成功");
     expect(state.members[0].renewalStep).toBe("awaiting_pnl");
-    expect(state.sent.at(-1)?.text).toContain("請直接回覆目前的合約收益概略即可");
+    expect(state.sent.at(-1)?.text).toContain(
+      "請直接回覆目前的合約收益概略即可",
+    );
 
     await handleTelegramUpdate(
       {
@@ -198,7 +246,9 @@ describe("renewal bot flow", () => {
       finalPnl: "+25%",
       renewalStep: "renewal_offer_sent",
     });
-    expect(state.sent.at(-1)?.keyboard?.[0]?.[0]?.callback_data).toBe("renewal:stay");
+    expect(state.sent.at(-1)?.keyboard?.[0]?.[0]?.callback_data).toBe(
+      "renewal:stay",
+    );
 
     await handleTelegramUpdate(
       {
@@ -239,9 +289,48 @@ describe("renewal bot flow", () => {
       paymentProofFileId: "large-photo",
       paymentProofSubmittedAt: now.toISOString(),
     });
-    expect(state.sent.at(-1)?.text).toContain("已收到你的轉帳截圖與 UID 末四碼");
+    expect(state.sent.at(-1)?.text).toContain(
+      "已收到你的轉帳截圖與 UID 末四碼",
+    );
   });
 
+  it("visually marks clicked inline buttons as selected", async () => {
+    state.members = [
+      member({
+        status: "renewal_due",
+        renewalStep: "renewal_offer_sent",
+        reviewDueAt: "2026-05-01T00:00:00.000Z",
+      }),
+    ];
+
+    await handleTelegramUpdate(
+      {
+        update_id: 30,
+        callback_query: {
+          id: "cb-ui",
+          from: { id: 1001 },
+          data: "renewal:stay",
+          message: {
+            message_id: 99,
+            chat: { id: 1001, type: "private" },
+            text: "請確認是否要轉成續費的收費會員方案。",
+          },
+        },
+      },
+      new Date("2026-05-02T00:00:00.000Z"),
+    );
+
+    expect(state.callbackAnswers.at(-1)).toMatchObject({
+      id: "cb-ui",
+      text: "已收到：繼續留下來",
+    });
+    expect(state.edited.at(-1)).toMatchObject({
+      chatId: 1001,
+      messageId: 99,
+    });
+    expect(state.edited.at(-1)?.text).toContain("✅ 你已選擇：繼續留下來");
+    expect(state.edited.at(-1)?.keyboard).toBeUndefined();
+  });
 
   it("keeps delayed renewal buttons valid during grace but expires them after grace", async () => {
     state.members = [
