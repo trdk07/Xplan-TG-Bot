@@ -149,46 +149,6 @@ export async function markInvitationEmailSentAction(pageId: string) {
   revalidatePath(`/admin/member/${pageId}`);
 }
 
-export async function resendRenewalRemindersAction() {
-  await assertAdminAction();
-  const now = new Date();
-  const members = await listMembers({ limit: 500 });
-
-  let sentCount = 0;
-  for (const member of members) {
-    const days = daysUntil(member.reviewDueAt, now);
-    const shouldResend =
-      Boolean(member.telegramUserId) &&
-      (member.status === "trial_active" || member.status === "active_paid") &&
-      days !== null &&
-      days >= 0 &&
-      days <= 7;
-
-    if (shouldResend) {
-      await sendRenewalReminder(
-        member,
-        now,
-        "Renewal reminder resent manually by admin",
-      );
-      sentCount += 1;
-    }
-  }
-
-  revalidatePath("/admin");
-  redirect(`/admin?resent=${sentCount}`);
-}
-
-export async function markInvitationEmailSentAction(pageId: string) {
-  await assertAdminAction();
-  await updateMember(pageId, {
-    invitationEmailSent: true,
-    lastBotCheckAt: isoDateTime(new Date()),
-    lastBotMessage: "Invitation email marked sent by admin",
-  });
-  revalidatePath("/admin");
-  revalidatePath(`/admin/member/${pageId}`);
-}
-
 export async function kickMemberAction(pageId: string) {
   await assertAdminAction();
   const member = await getMemberByPageId(pageId);

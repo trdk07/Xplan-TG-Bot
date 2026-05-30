@@ -105,6 +105,15 @@ function paymentReviewState(member: Member) {
   } as const;
 }
 
+function DateStack({ label, value }: { label: string; value: string | null }) {
+  return (
+    <div className="date-stack">
+      <span className="mobile-label">{label}</span>
+      <span>{formatDateTime(value)}</span>
+    </div>
+  );
+}
+
 function PaymentReviewSummary({ member }: { member: Member }) {
   const state = paymentReviewState(member);
   if (!state) return <span className="subtle">-</span>;
@@ -501,81 +510,68 @@ export default async function AdminPage({
           </button>
         </form>
 
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Member</th>
-                <th>Email</th>
-                <th>邀請 Email</th>
-                <th>Status</th>
-                <th>續約狀態</th>
-                <th>Exchange</th>
-                <th>Exchange UID</th>
-                <th>Tags</th>
-                <th>Joined</th>
-                <th>Review Due</th>
-                <th>付款審核</th>
-                <th>付款期限</th>
-                <th>最後檢查</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {members.map((member) => (
-                <tr key={member.pageId}>
-                  <td>
-                    <strong>{member.telegramUserId || "-"}</strong>
-                    <div className="subtle">
-                      {member.telegramUsername || "-"}
-                    </div>
-                  </td>
-                  <td>{member.email || "-"}</td>
-                  <td>
-                    {member.invitationEmailSent ? (
-                      <span className="mini-badge success">已送出</span>
-                    ) : (
-                      <span className="mini-badge muted">未送出</span>
-                    )}
-                  </td>
-                  <td>
-                    <StatusBadge status={member.status} />
-                  </td>
-                  <td>
-                    <RenewalReviewSummary member={member} />
-                  </td>
-                  <td>
-                    <ExchangeSummary member={member} />
-                  </td>
-                  <td>{member.exchangeUid || "-"}</td>
-                  <td>{member.tags.length ? member.tags.join(", ") : "-"}</td>
-                  <td>{formatDateTime(member.groupJoinedAt)}</td>
-                  <td>{formatDateTime(member.reviewDueAt)}</td>
-                  <td>
-                    <PaymentReviewSummary member={member} />
-                  </td>
-                  <td>{formatDateTime(member.paymentDeadlineAt)}</td>
-                  <td>{formatDateTime(member.lastBotCheckAt)}</td>
-                  <td>
-                    <Link
-                      className="button secondary"
-                      href={`/admin/member/${member.pageId}`}
-                    >
-                      <Filter width={16} height={16} aria-hidden="true" />
-                      管理
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-              {!members.length ? (
-                <tr>
-                  <td colSpan={14} className="subtle">
-                    沒有符合條件的會員。
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
+        <div className="members-list">
+          {members.map((member) => (
+            <article className="member-card" key={member.pageId}>
+              <div className="member-main">
+                <div className="member-identity">
+                  <strong>{member.telegramUserId || "-"}</strong>
+                  <span className="subtle">{member.telegramUsername || "-"}</span>
+                  <span className="email-text">{member.email || "No email"}</span>
+                </div>
+                <div className="member-status-row">
+                  <StatusBadge status={member.status} />
+                  {member.invitationEmailSent ? (
+                    <span className="mini-badge success">邀請已送出</span>
+                  ) : (
+                    <span className="mini-badge muted">邀請未送出</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="member-review-grid">
+                <div className="review-block important-block">
+                  <span className="mobile-label">續約狀態</span>
+                  <RenewalReviewSummary member={member} />
+                </div>
+                <div className="review-block important-block">
+                  <span className="mobile-label">付款審核</span>
+                  <PaymentReviewSummary member={member} />
+                </div>
+                <div className="review-block">
+                  <span className="mobile-label">交易所</span>
+                  <ExchangeSummary member={member} />
+                </div>
+                <div className="review-block compact-text">
+                  <span className="mobile-label">Exchange UID</span>
+                  <span>{member.exchangeUid || "-"}</span>
+                </div>
+                <div className="review-block compact-text">
+                  <span className="mobile-label">Tags</span>
+                  <span>{member.tags.length ? member.tags.join(", ") : "-"}</span>
+                </div>
+                <div className="member-date-grid">
+                  <DateStack label="Joined" value={member.groupJoinedAt} />
+                  <DateStack label="Review Due" value={member.reviewDueAt} />
+                  <DateStack label="付款期限" value={member.paymentDeadlineAt} />
+                  <DateStack label="最後檢查" value={member.lastBotCheckAt} />
+                </div>
+              </div>
+
+              <div className="member-actions">
+                <Link
+                  className="button secondary"
+                  href={`/admin/member/${member.pageId}`}
+                >
+                  <Filter width={16} height={16} aria-hidden="true" />
+                  管理
+                </Link>
+              </div>
+            </article>
+          ))}
+          {!members.length ? (
+            <div className="empty-state subtle">沒有符合條件的會員。</div>
+          ) : null}
         </div>
       </section>
 
