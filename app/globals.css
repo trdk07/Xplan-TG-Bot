@@ -84,6 +84,38 @@ select {
   overflow: hidden;
 }
 
+.panel-body {
+  padding: 14px 16px;
+}
+
+.action-panel {
+  margin-bottom: 20px;
+}
+
+.action-row {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.action-row p {
+  margin: 6px 0 0;
+}
+
+.notice {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 20px;
+  padding: 12px 14px;
+}
+
+.notice.success {
+  background: #eef8f0;
+  border-color: #b7dfc0;
+  color: var(--ok);
+}
+
 .panel-head {
   align-items: center;
   border-bottom: 1px solid var(--line);
@@ -287,6 +319,11 @@ th {
   .toolbar,
   .detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .action-row {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .kv {

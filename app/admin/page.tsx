@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  BellRing,
   CircleDollarSign,
   Filter,
   LogOut,
@@ -8,7 +9,7 @@ import {
   ShieldCheck,
   Users,
 } from "lucide-react";
-import { logoutAction } from "@/app/admin/actions";
+import { logoutAction, resendRenewalRemindersAction } from "@/app/admin/actions";
 import { StatusBadge } from "@/app/components/StatusBadge";
 import { getDisplayConfig, getMissingConfig } from "@/lib/config";
 import { daysUntil, formatDateTime } from "@/lib/dates";
@@ -27,12 +28,17 @@ function scalar(value: string | string[] | undefined): string {
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string | string[]; status?: string | string[] }>;
+  searchParams: Promise<{
+    q?: string | string[];
+    status?: string | string[];
+    resent?: string | string[];
+  }>;
 }) {
   await requireAdmin();
   const params = await searchParams;
   const q = scalar(params.q);
   const rawStatus = scalar(params.status);
+  const resentCount = scalar(params.resent);
   const status = memberStatuses.includes(rawStatus as MemberStatus)
     ? (rawStatus as MemberStatus)
     : "all";
@@ -47,9 +53,14 @@ export default async function AdminPage({
     loadError = error instanceof Error ? error.message : "Unable to load members";
   }
 
-  const trialEndingSoon = members.filter((member) => {
+  const endingSoon = members.filter((member) => {
     const days = daysUntil(member.reviewDueAt);
-    return member.status === "trial_active" && days !== null && days <= 7;
+    return (
+      (member.status === "trial_active" || member.status === "active_paid") &&
+      days !== null &&
+      days >= 0 &&
+      days <= 7
+    );
   }).length;
 
   return (
@@ -81,8 +92,38 @@ export default async function AdminPage({
           <strong>{statCount(members, ["payment_pending"])}</strong>
         </div>
         <div className="stat">
-          <span className="subtle">Trial Ending Soon</span>
-          <strong>{trialEndingSoon}</strong>
+          <span className="subtle">Ending Soon</span>
+          <strong>{endingSoon}</strong>
+        </div>
+      </section>
+
+      {resentCount ? (
+        <div className="notice success" role="status">
+          已重新發送最新版續約通知給 {resentCount} 位 0～7 天內到期的會員。
+        </div>
+      ) : null}
+
+      <section className="panel action-panel">
+        <div className="panel-head">
+          <h2>
+            <BellRing width={16} height={16} aria-hidden="true" /> 續約通知重發
+          </h2>
+          <span className="subtle">目前 0～7 天內到期：{endingSoon} 位</span>
+        </div>
+        <div className="panel-body action-row">
+          <div>
+            <strong>重新發送最新版即將到期續約通知</strong>
+            <p className="subtle">
+              會發給狀態為 trial_active / active_paid、Review Due At 距離現在 0～7 天內、且有
+              Telegram User ID 的會員；即使之前已收到舊提醒，也會重新發送。
+            </p>
+          </div>
+          <form action={resendRenewalRemindersAction}>
+            <button className="button" type="submit">
+              <BellRing width={16} height={16} aria-hidden="true" />
+              重新發送即將到期續約通知
+            </button>
+          </form>
         </div>
       </section>
 

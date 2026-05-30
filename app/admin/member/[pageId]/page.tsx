@@ -44,7 +44,8 @@ export default async function MemberDetailPage({
   }
 
   const updateStatus = updateStatusAction.bind(null, pageId);
-  const markPaid = markPaidAction.bind(null, pageId);
+  const markPaidOneMonth = markPaidAction.bind(null, pageId, 1);
+  const markPaidThreeMonths = markPaidAction.bind(null, pageId, 3);
   const kick = kickMemberAction.bind(null, pageId);
   const resendInvite = resendInviteAction.bind(null, pageId);
   const revokeInvite = revokeInviteAction.bind(null, pageId);
@@ -96,6 +97,34 @@ export default async function MemberDetailPage({
             <div>{formatDateTime(member.reviewDueAt)}</div>
             <div>Payment Deadline At</div>
             <div>{formatDateTime(member.paymentDeadlineAt)}</div>
+            <div>Payment UID Last 4</div>
+            <div>{member.paymentUidLast4 || "-"}</div>
+            <div>Payment Proof</div>
+            <div>
+              {member.paymentProofFileId ? (
+                <a
+                  href={`/api/admin/payment-proof?fileId=${encodeURIComponent(
+                    member.paymentProofFileId,
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <img
+                    src={`/api/admin/payment-proof?fileId=${encodeURIComponent(
+                      member.paymentProofFileId,
+                    )}`}
+                    alt="Payment proof screenshot"
+                    style={{ maxWidth: "240px", borderRadius: "8px" }}
+                  />
+                </a>
+              ) : (
+                "-"
+              )}
+            </div>
+            <div>Payment Proof File ID</div>
+            <div>{member.paymentProofFileId || "-"}</div>
+            <div>Payment Proof Submitted At</div>
+            <div>{formatDateTime(member.paymentProofSubmittedAt)}</div>
             <div>Paid At</div>
             <div>{formatDateTime(member.paidAt)}</div>
             <div>Final P/L</div>
@@ -130,8 +159,12 @@ export default async function MemberDetailPage({
               <ActionButton icon={Save}>更新狀態</ActionButton>
             </form>
 
-            <form action={markPaid}>
-              <ActionButton icon={BadgeCheck}>標記已付款</ActionButton>
+            <form action={markPaidOneMonth}>
+              <ActionButton icon={BadgeCheck}>標記已付款（1 個月）</ActionButton>
+            </form>
+
+            <form action={markPaidThreeMonths}>
+              <ActionButton icon={BadgeCheck}>標記已付款（3 個月）</ActionButton>
             </form>
 
             <form action={resendInvite}>
