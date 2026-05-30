@@ -17,6 +17,9 @@ export type Member = {
   groupJoinedAt: string | null;
   reviewDueAt: string | null;
   paymentDeadlineAt: string | null;
+  paymentUidLast4: string;
+  paymentProofFileId: string;
+  paymentProofSubmittedAt: string | null;
   paidAt: string | null;
   finalPnl: string;
   renewalStep: string;
@@ -46,6 +49,9 @@ export const notionProperties = {
   groupJoinedAt: "Group Joined At",
   reviewDueAt: "Review Due At",
   paymentDeadlineAt: "Payment Deadline At",
+  paymentUidLast4: "Payment UID Last 4",
+  paymentProofFileId: "Payment Proof File ID",
+  paymentProofSubmittedAt: "Payment Proof Submitted At",
   paidAt: "Paid At",
   finalPnl: "Final P/L",
   renewalStep: "Renewal Step",
@@ -148,6 +154,9 @@ export function mapNotionPageToMember(page: NotionPage): Member {
     groupJoinedAt: dateProp(page, notionProperties.groupJoinedAt),
     reviewDueAt: dateProp(page, notionProperties.reviewDueAt),
     paymentDeadlineAt: dateProp(page, notionProperties.paymentDeadlineAt),
+    paymentUidLast4: textProp(page, notionProperties.paymentUidLast4),
+    paymentProofFileId: textProp(page, notionProperties.paymentProofFileId),
+    paymentProofSubmittedAt: dateProp(page, notionProperties.paymentProofSubmittedAt),
     paidAt: dateProp(page, notionProperties.paidAt),
     finalPnl: textProp(page, notionProperties.finalPnl),
     renewalStep: selectProp(page, notionProperties.renewalStep),
@@ -219,6 +228,19 @@ export function buildNotionProperties(patch: MemberPatch): Record<string, any> {
   if (patch.paymentDeadlineAt !== undefined) {
     props[notionProperties.paymentDeadlineAt] = dateValue(
       patch.paymentDeadlineAt,
+    );
+  }
+  if (patch.paymentUidLast4 !== undefined) {
+    props[notionProperties.paymentUidLast4] = richText(patch.paymentUidLast4);
+  }
+  if (patch.paymentProofFileId !== undefined) {
+    props[notionProperties.paymentProofFileId] = richText(
+      patch.paymentProofFileId,
+    );
+  }
+  if (patch.paymentProofSubmittedAt !== undefined) {
+    props[notionProperties.paymentProofSubmittedAt] = dateValue(
+      patch.paymentProofSubmittedAt,
     );
   }
   if (patch.paidAt !== undefined) {

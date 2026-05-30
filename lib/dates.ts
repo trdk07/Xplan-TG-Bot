@@ -4,6 +4,32 @@ export function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * DAY_MS);
 }
 
+export function addMonths(date: Date, months: number): Date {
+  const result = new Date(date.getTime());
+  const originalDay = result.getUTCDate();
+
+  result.setUTCDate(1);
+  result.setUTCMonth(result.getUTCMonth() + months);
+
+  const lastDayOfTargetMonth = new Date(
+    Date.UTC(result.getUTCFullYear(), result.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  result.setUTCDate(Math.min(originalDay, lastDayOfTargetMonth));
+
+  return result;
+}
+
+export function renewalBaseDate(
+  currentDueAt: string | null | undefined,
+  now = new Date(),
+): Date {
+  if (!currentDueAt) return new Date(now.getTime());
+  const currentDueDate = new Date(currentDueAt);
+  return currentDueDate.getTime() > now.getTime()
+    ? currentDueDate
+    : new Date(now.getTime());
+}
+
 export function isPast(date: string | null | undefined, now = new Date()): boolean {
   if (!date) return false;
   return new Date(date).getTime() <= now.getTime();

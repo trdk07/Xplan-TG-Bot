@@ -1,19 +1,31 @@
 import Link from "next/link";
 import {
+  BadgeCheck,
+  BellRing,
   CircleDollarSign,
+  Clock3,
+  FileWarning,
   Filter,
+  ImageIcon,
   LogOut,
   Search,
   Settings,
   ShieldCheck,
   Users,
 } from "lucide-react";
-import { logoutAction } from "@/app/admin/actions";
+import {
+  logoutAction,
+  resendRenewalRemindersAction,
+} from "@/app/admin/actions";
 import { StatusBadge } from "@/app/components/StatusBadge";
 import { getDisplayConfig, getMissingConfig } from "@/lib/config";
 import { daysUntil, formatDateTime } from "@/lib/dates";
 import { listMembers, type Member } from "@/lib/notion";
-import { memberStatusLabel, memberStatuses, type MemberStatus } from "@/lib/status";
+import {
+  memberStatusLabel,
+  memberStatuses,
+  type MemberStatus,
+} from "@/lib/status";
 import { requireAdmin } from "@/lib/auth";
 
 function statCount(members: Member[], statuses: MemberStatus[]) {
@@ -24,15 +36,94 @@ function scalar(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] || "" : value || "";
 }
 
+function paymentReviewState(member: Member) {
+  const hasProof = Boolean(member.paymentProofFileId);
+  const hasUid = Boolean(member.paymentUidLast4);
+
+  if (member.status === "active_paid" || member.paidAt) {
+    return {
+      tone: "success",
+      label: "已標記付款",
+      detail: member.paidAt
+        ? `付款時間：${formatDateTime(member.paidAt)}`
+        : "會籍有效",
+      icon: BadgeCheck,
+    } as const;
+  }
+
+  if (member.status !== "payment_pending") {
+    return null;
+  }
+
+  if (hasProof && hasUid) {
+    return {
+      tone: "warning",
+      label: "待審核",
+      detail: `UID 末四碼：${member.paymentUidLast4}`,
+      icon: Clock3,
+    } as const;
+  }
+
+  if (hasProof || hasUid) {
+    return {
+      tone: "warning",
+      label: "待補件",
+      detail: hasProof ? "缺 UID 末四碼" : "缺轉帳截圖",
+      icon: FileWarning,
+    } as const;
+  }
+
+  return {
+    tone: "muted",
+    label: "待付款資料",
+    detail: "尚未收到截圖與 UID 末四碼",
+    icon: Clock3,
+  } as const;
+}
+
+function PaymentReviewSummary({ member }: { member: Member }) {
+  const state = paymentReviewState(member);
+  if (!state) return <span className="subtle">-</span>;
+
+  const Icon = state.icon;
+  return (
+    <div className="payment-review">
+      <span className={`mini-badge ${state.tone}`}>
+        <Icon width={14} height={14} aria-hidden="true" />
+        {state.label}
+      </span>
+      <span className="subtle small-text">{state.detail}</span>
+      {member.paymentProofFileId ? (
+        <a
+          className="proof-link"
+          href={`/api/admin/payment-proof?fileId=${encodeURIComponent(
+            member.paymentProofFileId,
+          )}`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <ImageIcon width={14} height={14} aria-hidden="true" />
+          看截圖
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string | string[]; status?: string | string[] }>;
+  searchParams: Promise<{
+    q?: string | string[];
+    status?: string | string[];
+    resent?: string | string[];
+  }>;
 }) {
   await requireAdmin();
   const params = await searchParams;
   const q = scalar(params.q);
   const rawStatus = scalar(params.status);
+  const resentCount = scalar(params.resent);
   const status = memberStatuses.includes(rawStatus as MemberStatus)
     ? (rawStatus as MemberStatus)
     : "all";
@@ -44,12 +135,25 @@ export default async function AdminPage({
   try {
     members = await listMembers({ status, query: q, limit: 500 });
   } catch (error) {
-    loadError = error instanceof Error ? error.message : "Unable to load members";
+    loadError =
+      error instanceof Error ? error.message : "Unable to load members";
   }
 
-  const trialEndingSoon = members.filter((member) => {
+  const paymentProofReady = members.filter(
+    (member) =>
+      member.status === "payment_pending" &&
+      member.paymentProofFileId &&
+      member.paymentUidLast4,
+  ).length;
+
+  const endingSoon = members.filter((member) => {
     const days = daysUntil(member.reviewDueAt);
-    return member.status === "trial_active" && days !== null && days <= 7;
+    return (
+      (member.status === "trial_active" || member.status === "active_paid") &&
+      days !== null &&
+      days >= 0 &&
+      days <= 7
+    );
   }).length;
 
   return (
@@ -57,7 +161,9 @@ export default async function AdminPage({
       <header className="topbar">
         <div>
           <h1>Telegram 會員入群 Bot</h1>
-          <p className="subtle">Notion-only membership gate and renewal dashboard.</p>
+          <p className="subtle">
+            Notion-only membership gate and renewal dashboard.
+          </p>
         </div>
         <form action={logoutAction}>
           <button className="button secondary" type="submit">
@@ -80,9 +186,44 @@ export default async function AdminPage({
           <span className="subtle">Payment Pending</span>
           <strong>{statCount(members, ["payment_pending"])}</strong>
         </div>
+        <div className="stat stat-emphasis">
+          <span className="subtle">待審核付款</span>
+          <strong>{paymentProofReady}</strong>
+        </div>
         <div className="stat">
-          <span className="subtle">Trial Ending Soon</span>
-          <strong>{trialEndingSoon}</strong>
+          <span className="subtle">Ending Soon</span>
+          <strong>{endingSoon}</strong>
+        </div>
+      </section>
+
+      {resentCount ? (
+        <div className="notice success" role="status">
+          已重新發送最新版續約通知給 {resentCount} 位 0～7 天內到期的會員。
+        </div>
+      ) : null}
+
+      <section className="panel action-panel">
+        <div className="panel-head">
+          <h2>
+            <BellRing width={16} height={16} aria-hidden="true" /> 續約通知重發
+          </h2>
+          <span className="subtle">目前 0～7 天內到期：{endingSoon} 位</span>
+        </div>
+        <div className="panel-body action-row">
+          <div>
+            <strong>重新發送最新版即將到期續約通知</strong>
+            <p className="subtle">
+              會發給狀態為 trial_active / active_paid、Review Due At 距離現在
+              0～7 天內、且有 Telegram User ID
+              的會員；即使之前已收到舊提醒，也會重新發送。
+            </p>
+          </div>
+          <form action={resendRenewalRemindersAction}>
+            <button className="button" type="submit">
+              <BellRing width={16} height={16} aria-hidden="true" />
+              重新發送即將到期續約通知
+            </button>
+          </form>
         </div>
       </section>
 
@@ -92,7 +233,9 @@ export default async function AdminPage({
             <Settings width={16} height={16} aria-hidden="true" /> Settings
           </h2>
           <span className="subtle">
-            {missingConfig.length ? `Missing: ${missingConfig.join(", ")}` : "Config OK"}
+            {missingConfig.length
+              ? `Missing: ${missingConfig.join(", ")}`
+              : "Config OK"}
           </span>
         </div>
         <div className="kv">
@@ -130,7 +273,12 @@ export default async function AdminPage({
           </div>
           <div className="field">
             <label htmlFor="status">Status</label>
-            <select className="input" id="status" name="status" defaultValue={status}>
+            <select
+              className="input"
+              id="status"
+              name="status"
+              defaultValue={status}
+            >
               <option value="all">all</option>
               {memberStatuses.map((item) => (
                 <option key={item} value={item}>
@@ -156,6 +304,7 @@ export default async function AdminPage({
                 <th>Tags</th>
                 <th>Joined</th>
                 <th>Review Due</th>
+                <th>Payment Review</th>
                 <th>Payment Deadline</th>
                 <th>Last Check</th>
                 <th>Actions</th>
@@ -166,7 +315,9 @@ export default async function AdminPage({
                 <tr key={member.pageId}>
                   <td>
                     <strong>{member.telegramUserId || "-"}</strong>
-                    <div className="subtle">{member.telegramUsername || "-"}</div>
+                    <div className="subtle">
+                      {member.telegramUsername || "-"}
+                    </div>
                   </td>
                   <td>
                     <StatusBadge status={member.status} />
@@ -176,10 +327,16 @@ export default async function AdminPage({
                   <td>{member.tags.length ? member.tags.join(", ") : "-"}</td>
                   <td>{formatDateTime(member.groupJoinedAt)}</td>
                   <td>{formatDateTime(member.reviewDueAt)}</td>
+                  <td>
+                    <PaymentReviewSummary member={member} />
+                  </td>
                   <td>{formatDateTime(member.paymentDeadlineAt)}</td>
                   <td>{formatDateTime(member.lastBotCheckAt)}</td>
                   <td>
-                    <Link className="button secondary" href={`/admin/member/${member.pageId}`}>
+                    <Link
+                      className="button secondary"
+                      href={`/admin/member/${member.pageId}`}
+                    >
                       <Filter width={16} height={16} aria-hidden="true" />
                       管理
                     </Link>
@@ -188,7 +345,7 @@ export default async function AdminPage({
               ))}
               {!members.length ? (
                 <tr>
-                  <td colSpan={10} className="subtle">
+                  <td colSpan={11} className="subtle">
                     沒有符合條件的會員。
                   </td>
                 </tr>
