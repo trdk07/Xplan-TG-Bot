@@ -7,6 +7,7 @@ import {
   Clock3,
   FileWarning,
   Filter,
+  Upload,
   ImageIcon,
   LogOut,
   Search,
@@ -16,6 +17,7 @@ import {
 } from "lucide-react";
 import {
   logoutAction,
+  requestPaymentProofAction,
   resendRenewalRemindersAction,
 } from "@/app/admin/actions";
 import { StatusBadge } from "@/app/components/StatusBadge";
@@ -559,6 +561,16 @@ export default async function AdminPage({
               </div>
 
               <div className="member-actions">
+                <form action={requestPaymentProofAction.bind(null, member.pageId)}>
+                  <button
+                    className="button secondary"
+                    disabled={!member.telegramUserId}
+                    type="submit"
+                  >
+                    <Upload width={16} height={16} aria-hidden="true" />
+                    請補付款資料
+                  </button>
+                </form>
                 <Link
                   className="button secondary"
                   href={`/admin/member/${member.pageId}`}

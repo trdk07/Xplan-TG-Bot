@@ -72,7 +72,7 @@ function parseMexcCsv(text: string): ParsedCsv {
 
   const header = rows[0].map((cell) => normalizeUid(cell));
   const uidColumn = header.findIndex(
-    (cell) => cell.includes("uid") || cell.includes("user id") || cell.includes("用戶"),
+    (cell) => cell.includes("uid") || cell.includes("user id") || cell.includes("用戶") || cell.includes("用户"),
   );
   const dataRows = uidColumn >= 0 ? rows.slice(1) : rows;
   const counts = new Map<string, number>();
@@ -98,6 +98,17 @@ function isReviewCandidate(member: ReviewMember) {
   );
 }
 
+function MemberSummaryCard({ member }: { member: ReviewMember }) {
+  return (
+    <div className="review-card">
+      <strong>{member.email || member.telegramUsername || member.pageId}</strong>
+      <span className="subtle">UID：{member.exchangeUid || "缺 UID"}</span>
+      <span className="subtle">Telegram：{member.telegramUserId || member.telegramUsername || "-"}</span>
+      <span className="subtle">Status：{member.status}</span>
+    </div>
+  );
+}
+
 export function MexcCsvMatcher({ members }: { members: ReviewMember[] }) {
   const [csvText, setCsvText] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
@@ -117,11 +128,14 @@ export function MexcCsvMatcher({ members }: { members: ReviewMember[] }) {
     uidSet.has(normalizeUid(member.exchangeUid)),
   );
   const approvableMatches = matchedMembers.filter(isReviewCandidate);
-  const missingFromMexc = members.filter(
+  const unmatchedNotionMembers = members.filter(
     (member) =>
       isReviewCandidate(member) &&
       member.exchangeUid &&
       !uidSet.has(normalizeUid(member.exchangeUid)),
+  );
+  const missingUidMembers = members.filter(
+    (member) => isReviewCandidate(member) && !member.exchangeUid,
   );
   const mexcOnlyUids = parsed.uids.filter((uid) => !membersByUid.has(uid));
 
@@ -156,16 +170,20 @@ export function MexcCsvMatcher({ members }: { members: ReviewMember[] }) {
           <strong>{parsed.uids.length}</strong>
         </div>
         <div className="stat stat-emphasis">
-          <span className="subtle">已匹配</span>
+          <span className="subtle">UID 已匹配</span>
           <strong>{matchedMembers.length}</strong>
         </div>
-        <div className="stat">
-          <span className="subtle">可批次核准</span>
-          <strong>{approvableMatches.length}</strong>
+        <div className="stat stat-emphasis">
+          <span className="subtle">UID 未匹配</span>
+          <strong>{unmatchedNotionMembers.length}</strong>
         </div>
         <div className="stat">
-          <span className="subtle">MEXC 找不到</span>
-          <strong>{missingFromMexc.length}</strong>
+          <span className="subtle">Notion 缺 UID</span>
+          <strong>{missingUidMembers.length}</strong>
+        </div>
+        <div className="stat">
+          <span className="subtle">MEXC 找不到 Notion</span>
+          <strong>{mexcOnlyUids.length}</strong>
         </div>
       </section>
 
@@ -183,7 +201,7 @@ export function MexcCsvMatcher({ members }: { members: ReviewMember[] }) {
 
       <section className="panel nested-panel">
         <div className="panel-head">
-          <h3>已匹配 Notion / MEXC</h3>
+          <h3>UID 已匹配 Notion / MEXC</h3>
           <span className="subtle">勾選後可批次改為可入群</span>
         </div>
         <div className="table-wrap">
@@ -224,7 +242,7 @@ export function MexcCsvMatcher({ members }: { members: ReviewMember[] }) {
               {!matchedMembers.length ? (
                 <tr>
                   <td className="subtle" colSpan={7}>
-                    尚未找到匹配資料。
+                    尚未找到 UID 直接匹配資料。
                   </td>
                 </tr>
               ) : null}
@@ -236,31 +254,41 @@ export function MexcCsvMatcher({ members }: { members: ReviewMember[] }) {
       <section className="grid two-col-grid">
         <div className="panel nested-panel">
           <div className="panel-head">
-            <h3>Notion 有、MEXC CSV 找不到</h3>
-            <span className="subtle">建議人工確認</span>
+            <h3>Notion 有 UID，但 MEXC CSV 找不到</h3>
+            <span className="subtle">這些會員填了 UID，但 CSV 沒出現，建議人工確認是否填錯或未完成註冊</span>
           </div>
           <div className="stack">
-            {missingFromMexc.slice(0, 80).map((member) => (
-              <div className="review-card" key={member.pageId}>
-                <strong>{member.email || member.telegramUsername || member.pageId}</strong>
-                <span className="subtle">UID：{member.exchangeUid || "-"}</span>
-              </div>
+            {unmatchedNotionMembers.slice(0, 120).map((member) => (
+              <MemberSummaryCard key={member.pageId} member={member} />
             ))}
-            {!missingFromMexc.length ? <span className="subtle">無</span> : null}
+            {!unmatchedNotionMembers.length ? <span className="subtle">無</span> : null}
           </div>
         </div>
 
         <div className="panel nested-panel">
           <div className="panel-head">
-            <h3>MEXC CSV 有、Notion 找不到</h3>
-            <span className="subtle">可能是未填表或 UID 欄位不同</span>
+            <h3>Notion 缺 UID，無法用 UID 比對</h3>
+            <span className="subtle">這些會員需要先補 Exchange UID，才可進行 UID 審核</span>
           </div>
           <div className="stack">
-            {mexcOnlyUids.slice(0, 80).map((uid) => (
-              <code className="uid-chip" key={uid}>{uid}</code>
+            {missingUidMembers.slice(0, 120).map((member) => (
+              <MemberSummaryCard key={member.pageId} member={member} />
             ))}
-            {!mexcOnlyUids.length ? <span className="subtle">無</span> : null}
+            {!missingUidMembers.length ? <span className="subtle">無</span> : null}
           </div>
+        </div>
+      </section>
+
+      <section className="panel nested-panel">
+        <div className="panel-head">
+          <h3>MEXC CSV 有 UID，但 Notion 找不到</h3>
+          <span className="subtle">可能未填 Tally、Notion 尚未同步，或填表資料與 MEXC UID 不一致</span>
+        </div>
+        <div className="stack">
+          {mexcOnlyUids.slice(0, 120).map((uid) => (
+            <code className="uid-chip" key={uid}>{uid}</code>
+          ))}
+          {!mexcOnlyUids.length ? <span className="subtle">無</span> : null}
         </div>
       </section>
 

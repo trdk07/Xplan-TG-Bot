@@ -7,12 +7,14 @@ import {
   RefreshCw,
   Save,
   Send,
+  Upload,
 } from "lucide-react";
 import {
   clearInviteAction,
   kickMemberAction,
   markPaidAction,
   markInvitationEmailSentAction,
+  requestPaymentProofAction,
   resendInviteAction,
   revokeInviteAction,
   updateStatusAction,
@@ -47,6 +49,7 @@ export default async function MemberDetailPage({
   const updateStatus = updateStatusAction.bind(null, pageId);
   const markPaidOneMonth = markPaidAction.bind(null, pageId, 1);
   const markPaidThreeMonths = markPaidAction.bind(null, pageId, 3);
+  const requestPaymentProof = requestPaymentProofAction.bind(null, pageId);
   const markInvitationEmailSent = markInvitationEmailSentAction.bind(null, pageId);
   const kick = kickMemberAction.bind(null, pageId);
   const resendInvite = resendInviteAction.bind(null, pageId);
@@ -180,6 +183,12 @@ export default async function MemberDetailPage({
             <form action={markInvitationEmailSent}>
               <ActionButton icon={Send} secondary disabled={member.invitationEmailSent}>
                 標記已送出邀請 Email
+              </ActionButton>
+            </form>
+
+            <form action={requestPaymentProof}>
+              <ActionButton icon={Upload} secondary disabled={!member.telegramUserId}>
+                開啟補傳付款證明
               </ActionButton>
             </form>
 

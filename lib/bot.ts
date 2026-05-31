@@ -37,7 +37,7 @@ const RENEWAL_OFFER = [
   "MEXC - UID：77242747",
 ].join("\n");
 const PAYMENT_PROOF_INSTRUCTIONS =
-  "請上傳轉帳截圖，並在同一則訊息或下一則訊息輸入 UID 末四碼（4 位數字）。";
+  "下一步：請上傳轉帳截圖，並輸入 UID 末四碼（4 位數字）。如果尚未轉帳，請先依照上方付款資訊完成轉帳；可以把 UID 末四碼寫在圖片說明，或下一則訊息傳 4 位數字。";
 const STALE_STEP_MESSAGE =
   "這個按鈕已不是目前可操作的步驟。若需要協助，請聯絡助理確認。";
 const RENEWAL_EXPIRED_MESSAGE =
@@ -223,14 +223,19 @@ export async function sendRenewalReminder(
 async function markCallbackSelection(
   query: TelegramCallbackQuery,
   selectedLabel: string,
+  nextStepText = "",
 ) {
   const message = query.message;
   if (!message?.text) return;
 
   const selectedLine = `✅ 你已選擇：${selectedLabel}`;
+  const nextStepLine = nextStepText ? `下一步：${nextStepText}` : "";
+  const selectionBlock = nextStepLine
+    ? [selectedLine, nextStepLine].join("\n")
+    : selectedLine;
   const text = message.text.includes("✅ 你已選擇：")
     ? message.text
-    : [message.text, "", selectedLine].join("\n");
+    : [message.text, "", selectionBlock].join("\n");
 
   await editMessageText(message.chat.id, message.message_id, text).catch(
     () => undefined,
@@ -561,7 +566,7 @@ async function handleCallback(query: TelegramCallbackQuery, now: Date) {
     if (member.status === "payment_pending") {
       await answerCallbackQuery(
         query.id,
-        "你已在付款流程中，請上傳付款截圖與 UID 末四碼",
+        "你已在付款流程中。完成轉帳後，請直接上傳轉帳截圖與 UID 末四碼。",
       );
       await sendMessage(query.from.id, PAYMENT_PROOF_INSTRUCTIONS);
       return;
@@ -577,10 +582,14 @@ async function handleCallback(query: TelegramCallbackQuery, now: Date) {
     ) {
       await answerCallbackQuery(
         query.id,
-        "已收到：繼續留下來。請查看 Bot 傳送的付款與上傳截圖說明。",
+        "已收到：繼續留下來。完成轉帳後，請在 Bot 對話上傳轉帳截圖與 UID 末四碼。",
         true,
       );
-      await markCallbackSelection(query, "繼續留下來");
+      await markCallbackSelection(
+        query,
+        "繼續留下來",
+        "請查看下方付款資訊；完成轉帳後，上傳轉帳截圖與 UID 末四碼。",
+      );
       await sendPaymentRequest(member, query.from.id, now);
       await sendMessage(query.from.id, PAYMENT_PROOF_INSTRUCTIONS);
       return;

@@ -326,7 +326,7 @@ describe("renewal bot flow", () => {
 
     expect(state.callbackAnswers.at(-1)).toMatchObject({
       id: "cb-ui",
-      text: "已收到：繼續留下來。請查看 Bot 傳送的付款與上傳截圖說明。",
+      text: "已收到：繼續留下來。完成轉帳後，請在 Bot 對話上傳轉帳截圖與 UID 末四碼。",
       showAlert: true,
     });
     expect(state.edited.at(-1)).toMatchObject({
@@ -334,6 +334,7 @@ describe("renewal bot flow", () => {
       messageId: 99,
     });
     expect(state.edited.at(-1)?.text).toContain("✅ 你已選擇：繼續留下來");
+    expect(state.edited.at(-1)?.text).toContain("上傳轉帳截圖與 UID 末四碼");
     expect(state.edited.at(-1)?.keyboard).toBeUndefined();
   });
 

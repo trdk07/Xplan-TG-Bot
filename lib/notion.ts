@@ -67,7 +67,7 @@ export const notionProperties = {
 
 const legacyProperties = {
   telegramUsername: "TG 帳號",
-  email: ["Email", "E-mail", "電子郵件", "信箱", "Respondent Email"],
+  email: ["Email", "email", "E-mail", "電子郵件", "信箱", "Respondent Email"],
 } as const;
 
 type NotionPage = {
@@ -105,6 +105,7 @@ function valueFromTextLikeProp(prop: any): string {
   if (typeof prop.email === "string") return prop.email;
   if (typeof prop.phone_number === "string") return prop.phone_number;
   if (typeof prop.url === "string") return prop.url;
+  if (prop.type === "email" && typeof prop.email === "string") return prop.email;
   if (Array.isArray(prop.rich_text)) {
     return prop.rich_text.map((item: any) => item.plain_text || "").join("");
   }

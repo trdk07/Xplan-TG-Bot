@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { assertAdminAction, clearAdminCookie, setAdminCookie } from "@/lib/auth";
 import { sendRenewalReminder } from "@/lib/bot";
-import { getAdminPassword } from "@/lib/config";
+import { getAdminPassword, getRuntimeConfig } from "@/lib/config";
 import {
   addDays,
   addMonths,
@@ -83,6 +83,51 @@ export async function markPaidAction(pageId: string, durationMonths: 1 | 3 = 1) 
       )}。`,
     );
   }
+  revalidatePath("/admin");
+  revalidatePath(`/admin/member/${pageId}`);
+}
+
+export async function requestPaymentProofAction(pageId: string) {
+  await assertAdminAction();
+  const now = new Date();
+  const member = await getMemberByPageId(pageId);
+  if (!member) throw new Error("Member not found");
+  if (!member.telegramUserId) throw new Error("Member has no Telegram User ID");
+
+  const config = getRuntimeConfig();
+  const deadline = addDays(now, config.paymentGraceDays);
+  await updateMember(pageId, {
+    status: "payment_pending",
+    renewalStep: "payment_pending",
+    paymentDeadlineAt: isoDateTime(deadline),
+    paymentUidLast4: "",
+    paymentProofFileId: "",
+    paymentProofSubmittedAt: null,
+    paidAt: null,
+    lastBotCheckAt: isoDateTime(now),
+    lastBotMessage: "Manual payment proof request sent by admin",
+  });
+
+  await sendMessage(
+    member.telegramUserId,
+    [
+      "助理已開啟付款資料補傳流程。",
+      "",
+      "如果你已完成轉帳，請直接在這個 Bot 對話上傳轉帳截圖，並輸入 UID 末四碼（4 位數字）。",
+      "",
+      "若你尚未轉帳，請依照以下方式完成付款：",
+      "",
+      "續費方案：",
+      "收費方式：",
+      "3個月100U，一個月50U。（目前沒有年訂閱方案）",
+      "",
+      "可以使用交易所內部轉帳給小夏：",
+      "MEXC - UID：77242747",
+      "",
+      "完成轉帳後，請上傳轉帳截圖，並在同一則訊息的文字說明或下一則訊息輸入 UID 末四碼。",
+    ].join("\n"),
+  );
+
   revalidatePath("/admin");
   revalidatePath(`/admin/member/${pageId}`);
 }
