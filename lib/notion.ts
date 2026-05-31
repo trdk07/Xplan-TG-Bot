@@ -173,7 +173,7 @@ export function mapNotionPageToMember(page: NotionPage): Member {
     status: statusProp(page),
     tags: multiSelectProp(page, notionProperties.tags),
     exchangeRegistered: checkboxProp(page, notionProperties.exchangeRegistered),
-    exchangeName: textProp(page, notionProperties.exchangeName),
+    exchangeName: selectProp(page, notionProperties.exchangeName),
     exchangeUid: textProp(page, notionProperties.exchangeUid),
     invitationEmailSent: checkboxProp(page, notionProperties.invitationEmailSent),
     uidSubmittedAt: dateProp(page, notionProperties.uidSubmittedAt),
@@ -238,7 +238,7 @@ export function buildNotionProperties(patch: MemberPatch): Record<string, any> {
     };
   }
   if (patch.exchangeName !== undefined) {
-    props[notionProperties.exchangeName] = richText(patch.exchangeName);
+    props[notionProperties.exchangeName] = { select: patch.exchangeName ? { name: patch.exchangeName } : null };
   }
   if (patch.exchangeUid !== undefined) {
     props[notionProperties.exchangeUid] = richText(patch.exchangeUid);
