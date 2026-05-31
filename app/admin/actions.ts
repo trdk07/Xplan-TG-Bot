@@ -18,7 +18,12 @@ import {
   isoDateTime,
   renewalBaseDate,
 } from "@/lib/dates";
-import { getMemberByPageId, listMembers, updateMember } from "@/lib/notion";
+import {
+  getMemberByPageId,
+  listMembers,
+  updateMember,
+  updateMemberExistingProperties,
+} from "@/lib/notion";
 import { isMemberStatus } from "@/lib/status";
 import {
   createChatInviteLink,
@@ -94,51 +99,71 @@ export async function markPaidAction(pageId: string, durationMonths: 1 | 3 = 1) 
 export async function requestPaymentProofAction(pageId: string) {
   await assertAdminAction();
   const now = new Date();
-  const member = await getMemberByPageId(pageId);
-  if (!member) throw new Error("Member not found");
-
-  if (!member.telegramUserId) {
-    await updateMember(pageId, {
-      lastBotCheckAt: isoDateTime(now),
-      lastBotMessage:
-        "Manual payment proof request skipped: member has no Telegram User ID",
-    });
-    revalidatePath("/admin");
-    revalidatePath(`/admin/member/${pageId}`);
-    return;
-  }
-
-  const config = getRuntimeConfig();
-  const deadline = addDays(now, config.paymentGraceDays);
-  await updateMember(pageId, {
-    status: "payment_pending",
-    renewalStep: "payment_pending",
-    paymentDeadlineAt: isoDateTime(deadline),
-    paymentUidLast4: "",
-    paymentProofFileId: "",
-    paymentProofSubmittedAt: null,
-    paidAt: null,
-    lastBotCheckAt: isoDateTime(now),
-    lastBotMessage: "Manual payment proof option sent by admin",
-  });
 
   try {
-    await sendMessage(
-      member.telegramUserId,
-      manualPaymentProofRequestMessage(),
-      paymentProofRequestKeyboard(),
-    );
-  } catch (error) {
-    await updateMember(pageId, {
+    const member = await getMemberByPageId(pageId);
+    if (!member) return;
+
+    if (!member.telegramUserId) {
+      await updateMemberExistingProperties(pageId, {
+        lastBotCheckAt: isoDateTime(now),
+        lastBotMessage:
+          "Manual payment proof request skipped: member has no Telegram User ID",
+      }).catch(() => []);
+      revalidatePath("/admin");
+      revalidatePath(`/admin/member/${pageId}`);
+      return;
+    }
+
+    const config = getRuntimeConfig();
+    const deadline = addDays(now, config.paymentGraceDays);
+    const updatedProperties = await updateMemberExistingProperties(pageId, {
+      status: "payment_pending",
+      renewalStep: "payment_pending",
+      paymentDeadlineAt: isoDateTime(deadline),
+      paymentUidLast4: "",
+      paymentProofFileId: "",
+      paymentProofSubmittedAt: null,
+      paidAt: null,
       lastBotCheckAt: isoDateTime(now),
-      lastBotMessage: `Manual payment proof option failed: ${
+      lastBotMessage: "Manual payment proof option sent by admin",
+    });
+
+    if (!updatedProperties.includes("Status")) {
+      await updateMemberExistingProperties(pageId, {
+        lastBotCheckAt: isoDateTime(now),
+        lastBotMessage:
+          "Manual payment proof option skipped: Notion Status property was not found",
+      }).catch(() => []);
+      return;
+    }
+
+    try {
+      await sendMessage(
+        member.telegramUserId,
+        manualPaymentProofRequestMessage(),
+        paymentProofRequestKeyboard(),
+      );
+    } catch (error) {
+      await updateMemberExistingProperties(pageId, {
+        lastBotCheckAt: isoDateTime(now),
+        lastBotMessage: `Manual payment proof option failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      }).catch(() => []);
+    }
+  } catch (error) {
+    console.error("requestPaymentProofAction failed", error);
+    await updateMemberExistingProperties(pageId, {
+      lastBotCheckAt: isoDateTime(now),
+      lastBotMessage: `Manual payment proof action failed: ${
         error instanceof Error ? error.message : String(error)
       }`,
-    });
+    }).catch(() => []);
+  } finally {
+    revalidatePath("/admin");
+    revalidatePath(`/admin/member/${pageId}`);
   }
-
-  revalidatePath("/admin");
-  revalidatePath(`/admin/member/${pageId}`);
 }
 
 export async function resendRenewalRemindersAction() {

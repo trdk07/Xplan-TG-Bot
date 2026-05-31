@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { Client } from "@notionhq/client";
 
-const env = readEnv(".env.local");
+const env = { ...process.env, ...readEnv(".env.local") };
 const notionApiKey = env.NOTION_API_KEY;
 const dataSourceId = env.NOTION_DATA_SOURCE_ID;
 
@@ -138,6 +138,7 @@ function ensureMultiSelect(name, options) {
 
 function readEnv(path) {
   const result = {};
+  if (!fs.existsSync(path)) return result;
   const raw = fs.readFileSync(path, "utf8");
   for (const line of raw.split(/\r?\n/)) {
     const trimmed = line.trim();

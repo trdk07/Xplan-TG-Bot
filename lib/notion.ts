@@ -304,11 +304,52 @@ export function buildNotionProperties(patch: MemberPatch): Record<string, any> {
   return props;
 }
 
+async function existingNotionProperties(
+  pageId: string,
+  patch: MemberPatch,
+): Promise<Record<string, any>> {
+  const page = (await notion().pages.retrieve({ page_id: pageId })) as NotionPage;
+  const existingProperties = page.properties || {};
+  return Object.fromEntries(
+    Object.entries(buildNotionProperties(patch)).filter(([name]) =>
+      Object.prototype.hasOwnProperty.call(existingProperties, name),
+    ),
+  );
+}
+
 export async function updateMember(pageId: string, patch: MemberPatch) {
+  const properties = buildNotionProperties(patch);
+  try {
+    await notion().pages.update({
+      page_id: pageId,
+      properties,
+    });
+  } catch (error) {
+    const fallbackProperties = await existingNotionProperties(pageId, patch);
+    if (Object.keys(fallbackProperties).length === Object.keys(properties).length) {
+      throw error;
+    }
+    if (!Object.keys(fallbackProperties).length) return;
+    await notion().pages.update({
+      page_id: pageId,
+      properties: fallbackProperties,
+    });
+  }
+}
+
+export async function updateMemberExistingProperties(
+  pageId: string,
+  patch: MemberPatch,
+): Promise<string[]> {
+  const properties = await existingNotionProperties(pageId, patch);
+
+  if (!Object.keys(properties).length) return [];
+
   await notion().pages.update({
     page_id: pageId,
-    properties: buildNotionProperties(patch),
+    properties,
   });
+  return Object.keys(properties);
 }
 
 export async function getMemberByPageId(pageId: string): Promise<Member | null> {
