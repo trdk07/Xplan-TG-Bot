@@ -202,6 +202,19 @@ select {
   opacity: 0.55;
 }
 
+.confirm-btn-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.confirm-btn-preview {
+  font-size: 0.72em;
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
 .table-wrap {
   overflow-x: auto;
 }

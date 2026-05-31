@@ -1,6 +1,5 @@
 import Link from "next/link";
 import {
-  BadgeCheck,
   Ban,
   Eraser,
   Link2Off,
@@ -20,9 +19,10 @@ import {
   updateStatusAction,
 } from "@/app/admin/actions";
 import { ActionButton } from "@/app/components/ActionButton";
+import { ConfirmMarkPaidButton } from "@/app/components/ConfirmMarkPaidButton";
 import { StatusBadge } from "@/app/components/StatusBadge";
 import { requireAdmin } from "@/lib/auth";
-import { formatDateTime } from "@/lib/dates";
+import { addMonths, formatDateTime, renewalBaseDate } from "@/lib/dates";
 import { getMemberByPageId } from "@/lib/notion";
 import { memberStatusLabel, memberStatuses } from "@/lib/status";
 
@@ -59,6 +59,11 @@ export default async function MemberDetailPage({
     .trim()
     .toLowerCase()
     .includes("bitmart");
+
+  const now = new Date();
+  const base = renewalBaseDate(member.reviewDueAt, now);
+  const newDue1 = formatDateTime(addMonths(base, 1).toISOString());
+  const newDue3 = formatDateTime(addMonths(base, 3).toISOString());
 
   return (
     <main className="shell">
@@ -193,11 +198,19 @@ export default async function MemberDetailPage({
             </form>
 
             <form action={markPaidOneMonth}>
-              <ActionButton icon={BadgeCheck}>標記已付款（1 個月）</ActionButton>
+              <ConfirmMarkPaidButton
+                label="標記已付款（1 個月）"
+                previewDate={newDue1}
+                confirmMessage={`確定要標記 ${member.telegramUsername || member.telegramUserId} 已付款 1 個月嗎？\n\n新的到期日將會是：${newDue1}`}
+              />
             </form>
 
             <form action={markPaidThreeMonths}>
-              <ActionButton icon={BadgeCheck}>標記已付款（3 個月）</ActionButton>
+              <ConfirmMarkPaidButton
+                label="標記已付款（3 個月）"
+                previewDate={newDue3}
+                confirmMessage={`確定要標記 ${member.telegramUsername || member.telegramUserId} 已付款 3 個月嗎？\n\n新的到期日將會是：${newDue3}`}
+              />
             </form>
 
             <form action={resendInvite}>
