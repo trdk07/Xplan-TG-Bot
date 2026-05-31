@@ -7,11 +7,14 @@ import {
   RefreshCw,
   Save,
   Send,
+  Upload,
 } from "lucide-react";
 import {
   clearInviteAction,
   kickMemberAction,
   markPaidAction,
+  markInvitationEmailSentAction,
+  requestPaymentProofAction,
   resendInviteAction,
   revokeInviteAction,
   updateStatusAction,
@@ -44,11 +47,18 @@ export default async function MemberDetailPage({
   }
 
   const updateStatus = updateStatusAction.bind(null, pageId);
-  const markPaid = markPaidAction.bind(null, pageId);
+  const markPaidOneMonth = markPaidAction.bind(null, pageId, 1);
+  const markPaidThreeMonths = markPaidAction.bind(null, pageId, 3);
+  const requestPaymentProof = requestPaymentProofAction.bind(null, pageId);
+  const markInvitationEmailSent = markInvitationEmailSentAction.bind(null, pageId);
   const kick = kickMemberAction.bind(null, pageId);
   const resendInvite = resendInviteAction.bind(null, pageId);
   const revokeInvite = revokeInviteAction.bind(null, pageId);
   const clearInvite = clearInviteAction.bind(null, pageId);
+  const isLegacyBitMartMember = member.exchangeName
+    .trim()
+    .toLowerCase()
+    .includes("bitmart");
 
   return (
     <main className="shell">
@@ -74,6 +84,10 @@ export default async function MemberDetailPage({
             <div>{member.telegramUserId || "-"}</div>
             <div>Telegram Username</div>
             <div>{member.telegramUsername || "-"}</div>
+            <div>Email</div>
+            <div>{member.email || "-"}</div>
+            <div>已送出邀請</div>
+            <div>{member.invitationEmailSent ? "yes" : "no"}</div>
             <div>Status</div>
             <div>{memberStatusLabel(member.status)}</div>
             <div>Tags</div>
@@ -81,7 +95,15 @@ export default async function MemberDetailPage({
             <div>Exchange Registered</div>
             <div>{member.exchangeRegistered ? "yes" : "no"}</div>
             <div>Exchange Name</div>
-            <div>{member.exchangeName || "-"}</div>
+            <div>
+              <div>{member.exchangeName || "-"}</div>
+              {isLegacyBitMartMember ? (
+                <div className="legacy-warning">
+                  舊 BitMart 會員：續費付款已改由 MEXC 收款，審核 UID
+                  末四碼時請以付款截圖 / MEXC 收款紀錄為準。
+                </div>
+              ) : null}
+            </div>
             <div>Exchange UID</div>
             <div>{member.exchangeUid || "-"}</div>
             <div>UID Submitted At</div>
@@ -96,6 +118,34 @@ export default async function MemberDetailPage({
             <div>{formatDateTime(member.reviewDueAt)}</div>
             <div>Payment Deadline At</div>
             <div>{formatDateTime(member.paymentDeadlineAt)}</div>
+            <div>Payment UID Last 4</div>
+            <div>{member.paymentUidLast4 || "-"}</div>
+            <div>Payment Proof</div>
+            <div>
+              {member.paymentProofFileId ? (
+                <a
+                  href={`/api/admin/payment-proof?fileId=${encodeURIComponent(
+                    member.paymentProofFileId,
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <img
+                    src={`/api/admin/payment-proof?fileId=${encodeURIComponent(
+                      member.paymentProofFileId,
+                    )}`}
+                    alt="Payment proof screenshot"
+                    style={{ maxWidth: "240px", borderRadius: "8px" }}
+                  />
+                </a>
+              ) : (
+                "-"
+              )}
+            </div>
+            <div>Payment Proof File ID</div>
+            <div>{member.paymentProofFileId || "-"}</div>
+            <div>Payment Proof Submitted At</div>
+            <div>{formatDateTime(member.paymentProofSubmittedAt)}</div>
             <div>Paid At</div>
             <div>{formatDateTime(member.paidAt)}</div>
             <div>Final P/L</div>
@@ -130,8 +180,24 @@ export default async function MemberDetailPage({
               <ActionButton icon={Save}>更新狀態</ActionButton>
             </form>
 
-            <form action={markPaid}>
-              <ActionButton icon={BadgeCheck}>標記已付款</ActionButton>
+            <form action={markInvitationEmailSent}>
+              <ActionButton icon={Send} secondary disabled={member.invitationEmailSent}>
+                標記已送出邀請 Email
+              </ActionButton>
+            </form>
+
+            <form action={requestPaymentProof}>
+              <ActionButton icon={Upload} secondary disabled={!member.telegramUserId}>
+                請 Bot 發送補傳付款資料選項
+              </ActionButton>
+            </form>
+
+            <form action={markPaidOneMonth}>
+              <ActionButton icon={BadgeCheck}>標記已付款（1 個月）</ActionButton>
+            </form>
+
+            <form action={markPaidThreeMonths}>
+              <ActionButton icon={BadgeCheck}>標記已付款（3 個月）</ActionButton>
             </form>
 
             <form action={resendInvite}>

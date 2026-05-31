@@ -8,6 +8,14 @@ export type TelegramUser = {
   username?: string;
 };
 
+export type TelegramPhotoSize = {
+  file_id: string;
+  file_unique_id?: string;
+  width: number;
+  height: number;
+  file_size?: number;
+};
+
 export type TelegramMessage = {
   message_id: number;
   from?: TelegramUser;
@@ -16,6 +24,8 @@ export type TelegramMessage = {
     type: "private" | "group" | "supergroup" | "channel";
   };
   text?: string;
+  caption?: string;
+  photo?: TelegramPhotoSize[];
 };
 
 export type TelegramCallbackQuery = {
@@ -66,7 +76,10 @@ type TelegramApiResponse<T> =
   | { ok: true; result: T }
   | { ok: false; description?: string; error_code?: number };
 
-async function telegramApi<T>(method: string, body: Record<string, unknown>): Promise<T> {
+async function telegramApi<T>(
+  method: string,
+  body: Record<string, unknown>,
+): Promise<T> {
   const config = getRuntimeConfig();
   const response = await fetch(
     `https://api.telegram.org/bot${config.telegramBotToken}/${method}`,
@@ -103,10 +116,44 @@ export async function sendMessage(
   });
 }
 
-export async function answerCallbackQuery(callbackQueryId: string, text?: string) {
+export async function editMessageText(
+  chatId: string | number,
+  messageId: number,
+  text: string,
+  keyboard?: InlineKeyboardButton[][],
+) {
+  return telegramApi("editMessageText", {
+    chat_id: chatId,
+    message_id: messageId,
+    text,
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+    reply_markup: keyboard ? { inline_keyboard: keyboard } : undefined,
+  });
+}
+
+export async function getFile(fileId: string) {
+  return telegramApi<{
+    file_id: string;
+    file_unique_id: string;
+    file_path?: string;
+  }>("getFile", { file_id: fileId });
+}
+
+export function telegramFileDownloadUrl(filePath: string): string {
+  const config = getRuntimeConfig();
+  return `https://api.telegram.org/file/bot${config.telegramBotToken}/${filePath}`;
+}
+
+export async function answerCallbackQuery(
+  callbackQueryId: string,
+  text?: string,
+  showAlert = false,
+) {
   return telegramApi("answerCallbackQuery", {
     callback_query_id: callbackQueryId,
     text,
+    show_alert: showAlert,
   });
 }
 

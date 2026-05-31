@@ -37,6 +37,8 @@ Required properties:
 
 - `Telegram User ID` rich text
 - `Telegram Username` rich text
+- `email` email
+- `已送出邀請` checkbox
 - `Status` select
 - `Tags` multi-select
 - `Exchange Registered` checkbox
@@ -48,6 +50,9 @@ Required properties:
 - `Group Joined At` date
 - `Review Due At` date
 - `Payment Deadline At` date
+- `Payment UID Last 4` rich text
+- `Payment Proof File ID` rich text
+- `Payment Proof Submitted At` date
 - `Paid At` date
 - `Final P/L` rich text
 - `Renewal Step` select
@@ -121,4 +126,24 @@ Runtime application secrets such as `TELEGRAM_BOT_TOKEN`, `NOTION_API_KEY`, and 
 
 ## Payment Boundary
 
-Payments are manually reviewed in v1. Members receive exchange internal-transfer instructions, then an admin confirms receipt and uses the dashboard's manual "mark paid" action. A future provider webhook should verify the provider signature, resolve the Notion page from payment metadata, enforce idempotency, then update the member to `active_paid`.
+Payments are manually reviewed in v1. Members receive exchange internal-transfer instructions, then send a transfer screenshot and UID last four digits to the Bot. The Bot stores the proof metadata on the member record and the admin detail page proxies the Telegram file through an authenticated payment-proof endpoint for screenshot preview. An admin then confirms receipt and uses the dashboard's manual "mark paid" action. A future provider webhook should verify the provider signature, resolve the Notion page from payment metadata, enforce idempotency, then update the member to `active_paid`.
+
+The admin member list includes a `續約狀態` (`Renewal Review`) column for quick triage of the renewal decision flow:
+
+- `即將到期` / `已提醒續約`: active trial members inside the 0–7 day reminder window.
+- `待選翻倉`: expired trial member still needs to choose whether the flip goal succeeded.
+- `待回覆收益`: member selected a trial result and still needs to reply with the final P/L summary.
+- `待選續留`: member needs to choose whether to continue or leave.
+- `已申請續費`: member chose to continue and is in the payment flow.
+- `不續留` / `逾期未完成`: member declined or missed the renewal/payment deadline.
+
+The admin member list also includes a `付款審核` (`Payment Review`) column for payment-proof triage:
+
+- `待付款資料`: member is in `payment_pending` but has not submitted a screenshot or UID last four digits yet.
+- `待補件`: only one of the screenshot or UID last four digits has been submitted.
+- `待審核`: both screenshot and UID last four digits are present and ready for manual review.
+- `已標記付款`: the member has been marked paid or has a `Paid At` timestamp.
+
+When a screenshot exists, the list and detail pages link to `/api/admin/payment-proof?fileId=...`, which requires admin auth before proxying the Telegram file.
+
+The admin dashboard also links to `/admin/applications` for manual MEXC CSV comparison. Paste the MEXC export into that page to compare CSV UIDs against Notion/Tally `Exchange UID` values, review Notion-only and MEXC-only mismatches, and batch-mark matched applicants as `eligible` for the Bot invite flow.

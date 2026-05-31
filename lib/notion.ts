@@ -6,17 +6,22 @@ export type Member = {
   pageId: string;
   telegramUserId: string;
   telegramUsername: string;
+  email: string;
   status: MemberStatus;
   tags: string[];
   exchangeRegistered: boolean;
   exchangeName: string;
   exchangeUid: string;
+  invitationEmailSent: boolean;
   uidSubmittedAt: string | null;
   inviteLink: string | null;
   inviteExpiresAt: string | null;
   groupJoinedAt: string | null;
   reviewDueAt: string | null;
   paymentDeadlineAt: string | null;
+  paymentUidLast4: string;
+  paymentProofFileId: string;
+  paymentProofSubmittedAt: string | null;
   paidAt: string | null;
   finalPnl: string;
   renewalStep: string;
@@ -35,17 +40,22 @@ export type MemberPatch = Partial<
 export const notionProperties = {
   telegramUserId: "Telegram User ID",
   telegramUsername: "Telegram Username",
+  email: "email",
   status: "Status",
   tags: "Tags",
   exchangeRegistered: "Exchange Registered",
   exchangeName: "Exchange Name",
   exchangeUid: "Exchange UID",
+  invitationEmailSent: "已送出邀請",
   uidSubmittedAt: "UID Submitted At",
   inviteLink: "Invite Link",
   inviteExpiresAt: "Invite Expires At",
   groupJoinedAt: "Group Joined At",
   reviewDueAt: "Review Due At",
   paymentDeadlineAt: "Payment Deadline At",
+  paymentUidLast4: "Payment UID Last 4",
+  paymentProofFileId: "Payment Proof File ID",
+  paymentProofSubmittedAt: "Payment Proof Submitted At",
   paidAt: "Paid At",
   finalPnl: "Final P/L",
   renewalStep: "Renewal Step",
@@ -57,6 +67,7 @@ export const notionProperties = {
 
 const legacyProperties = {
   telegramUsername: "TG 帳號",
+  email: ["Email", "email", "E-mail", "電子郵件", "信箱", "Respondent Email"],
 } as const;
 
 type NotionPage = {
@@ -89,14 +100,29 @@ function dateValue(value: string | null | undefined) {
   return { date: value ? { start: value } : null };
 }
 
-function textProp(page: NotionPage, name: string): string {
-  const prop = page.properties[name];
+function valueFromTextLikeProp(prop: any): string {
   if (!prop) return "";
+  if (typeof prop.email === "string") return prop.email;
+  if (typeof prop.phone_number === "string") return prop.phone_number;
+  if (typeof prop.url === "string") return prop.url;
+  if (prop.type === "email" && typeof prop.email === "string") return prop.email;
   if (Array.isArray(prop.rich_text)) {
     return prop.rich_text.map((item: any) => item.plain_text || "").join("");
   }
   if (Array.isArray(prop.title)) {
     return prop.title.map((item: any) => item.plain_text || "").join("");
+  }
+  return "";
+}
+
+function textProp(page: NotionPage, name: string): string {
+  return valueFromTextLikeProp(page.properties[name]);
+}
+
+function firstTextProp(page: NotionPage, names: readonly string[]): string {
+  for (const name of names) {
+    const value = textProp(page, name);
+    if (value) return value;
   }
   return "";
 }
@@ -137,17 +163,24 @@ export function mapNotionPageToMember(page: NotionPage): Member {
     telegramUsername:
       textProp(page, notionProperties.telegramUsername) ||
       textProp(page, legacyProperties.telegramUsername),
+    email:
+      textProp(page, notionProperties.email) ||
+      firstTextProp(page, legacyProperties.email),
     status: statusProp(page),
     tags: multiSelectProp(page, notionProperties.tags),
     exchangeRegistered: checkboxProp(page, notionProperties.exchangeRegistered),
     exchangeName: textProp(page, notionProperties.exchangeName),
     exchangeUid: textProp(page, notionProperties.exchangeUid),
+    invitationEmailSent: checkboxProp(page, notionProperties.invitationEmailSent),
     uidSubmittedAt: dateProp(page, notionProperties.uidSubmittedAt),
     inviteLink: urlProp(page, notionProperties.inviteLink),
     inviteExpiresAt: dateProp(page, notionProperties.inviteExpiresAt),
     groupJoinedAt: dateProp(page, notionProperties.groupJoinedAt),
     reviewDueAt: dateProp(page, notionProperties.reviewDueAt),
     paymentDeadlineAt: dateProp(page, notionProperties.paymentDeadlineAt),
+    paymentUidLast4: textProp(page, notionProperties.paymentUidLast4),
+    paymentProofFileId: textProp(page, notionProperties.paymentProofFileId),
+    paymentProofSubmittedAt: dateProp(page, notionProperties.paymentProofSubmittedAt),
     paidAt: dateProp(page, notionProperties.paidAt),
     finalPnl: textProp(page, notionProperties.finalPnl),
     renewalStep: selectProp(page, notionProperties.renewalStep),
@@ -182,6 +215,9 @@ export function buildNotionProperties(patch: MemberPatch): Record<string, any> {
   if (patch.telegramUsername !== undefined) {
     props[notionProperties.telegramUsername] = titleText(patch.telegramUsername);
   }
+  if (patch.email !== undefined) {
+    props[notionProperties.email] = { email: patch.email || null };
+  }
   if (patch.status !== undefined) {
     props[notionProperties.status] = { select: { name: patch.status } };
   }
@@ -201,6 +237,11 @@ export function buildNotionProperties(patch: MemberPatch): Record<string, any> {
   if (patch.exchangeUid !== undefined) {
     props[notionProperties.exchangeUid] = richText(patch.exchangeUid);
   }
+  if (patch.invitationEmailSent !== undefined) {
+    props[notionProperties.invitationEmailSent] = {
+      checkbox: patch.invitationEmailSent,
+    };
+  }
   if (patch.uidSubmittedAt !== undefined) {
     props[notionProperties.uidSubmittedAt] = dateValue(patch.uidSubmittedAt);
   }
@@ -219,6 +260,19 @@ export function buildNotionProperties(patch: MemberPatch): Record<string, any> {
   if (patch.paymentDeadlineAt !== undefined) {
     props[notionProperties.paymentDeadlineAt] = dateValue(
       patch.paymentDeadlineAt,
+    );
+  }
+  if (patch.paymentUidLast4 !== undefined) {
+    props[notionProperties.paymentUidLast4] = richText(patch.paymentUidLast4);
+  }
+  if (patch.paymentProofFileId !== undefined) {
+    props[notionProperties.paymentProofFileId] = richText(
+      patch.paymentProofFileId,
+    );
+  }
+  if (patch.paymentProofSubmittedAt !== undefined) {
+    props[notionProperties.paymentProofSubmittedAt] = dateValue(
+      patch.paymentProofSubmittedAt,
     );
   }
   if (patch.paidAt !== undefined) {
@@ -250,11 +304,52 @@ export function buildNotionProperties(patch: MemberPatch): Record<string, any> {
   return props;
 }
 
+async function existingNotionProperties(
+  pageId: string,
+  patch: MemberPatch,
+): Promise<Record<string, any>> {
+  const page = (await notion().pages.retrieve({ page_id: pageId })) as NotionPage;
+  const existingProperties = page.properties || {};
+  return Object.fromEntries(
+    Object.entries(buildNotionProperties(patch)).filter(([name]) =>
+      Object.prototype.hasOwnProperty.call(existingProperties, name),
+    ),
+  );
+}
+
 export async function updateMember(pageId: string, patch: MemberPatch) {
+  const properties = buildNotionProperties(patch);
+  try {
+    await notion().pages.update({
+      page_id: pageId,
+      properties,
+    });
+  } catch (error) {
+    const fallbackProperties = await existingNotionProperties(pageId, patch);
+    if (Object.keys(fallbackProperties).length === Object.keys(properties).length) {
+      throw error;
+    }
+    if (!Object.keys(fallbackProperties).length) return;
+    await notion().pages.update({
+      page_id: pageId,
+      properties: fallbackProperties,
+    });
+  }
+}
+
+export async function updateMemberExistingProperties(
+  pageId: string,
+  patch: MemberPatch,
+): Promise<string[]> {
+  const properties = await existingNotionProperties(pageId, patch);
+
+  if (!Object.keys(properties).length) return [];
+
   await notion().pages.update({
     page_id: pageId,
-    properties: buildNotionProperties(patch),
+    properties,
   });
+  return Object.keys(properties);
 }
 
 export async function getMemberByPageId(pageId: string): Promise<Member | null> {
@@ -347,6 +442,7 @@ export async function listMembers(options?: {
         [
           member.telegramUserId,
           member.telegramUsername,
+          member.email,
           member.exchangeName,
           member.exchangeUid,
           member.tags.join(" "),

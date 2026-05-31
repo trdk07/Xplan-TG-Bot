@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { Client } from "@notionhq/client";
 
-const env = readEnv(".env.local");
+const env = { ...process.env, ...readEnv(".env.local") };
 const notionApiKey = env.NOTION_API_KEY;
 const dataSourceId = env.NOTION_DATA_SOURCE_ID;
 
@@ -33,6 +33,8 @@ ensureSelect("Status", [
   { name: "denied", color: "red" },
 ]);
 ensureMultiSelect("Tags", [{ name: "翻倉成功", color: "green" }]);
+ensureEmail("email");
+ensureCheckbox("已送出邀請");
 ensureRichText("Final P/L");
 ensureSelect("Renewal Step", [
   { name: "awaiting_trial_result", color: "yellow" },
@@ -41,6 +43,9 @@ ensureSelect("Renewal Step", [
   { name: "payment_pending", color: "purple" },
   { name: "completed", color: "green" },
 ]);
+ensureRichText("Payment UID Last 4");
+ensureRichText("Payment Proof File ID");
+ensureDate("Payment Proof Submitted At");
 ensureDate("Renewal Reminder Sent At");
 
 if (Object.keys(patch).length) {
@@ -62,6 +67,18 @@ function ensureRichText(name) {
 function ensureDate(name) {
   if (!existing[name]) {
     patch[name] = { date: {} };
+  }
+}
+
+function ensureEmail(name) {
+  if (!existing[name]) {
+    patch[name] = { email: {} };
+  }
+}
+
+function ensureCheckbox(name) {
+  if (!existing[name]) {
+    patch[name] = { checkbox: {} };
   }
 }
 
@@ -121,6 +138,7 @@ function ensureMultiSelect(name, options) {
 
 function readEnv(path) {
   const result = {};
+  if (!fs.existsSync(path)) return result;
   const raw = fs.readFileSync(path, "utf8");
   for (const line of raw.split(/\r?\n/)) {
     const trimmed = line.trim();
