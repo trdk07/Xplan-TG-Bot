@@ -4,7 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { assertAdminAction, clearAdminCookie, setAdminCookie } from "@/lib/auth";
-import { sendRenewalReminder } from "@/lib/bot";
+import {
+  manualPaymentProofRequestMessage,
+  paymentProofRequestKeyboard,
+  sendRenewalReminder,
+} from "@/lib/bot";
 import { getAdminPassword, getRuntimeConfig } from "@/lib/config";
 import {
   addDays,
@@ -92,7 +96,17 @@ export async function requestPaymentProofAction(pageId: string) {
   const now = new Date();
   const member = await getMemberByPageId(pageId);
   if (!member) throw new Error("Member not found");
-  if (!member.telegramUserId) throw new Error("Member has no Telegram User ID");
+
+  if (!member.telegramUserId) {
+    await updateMember(pageId, {
+      lastBotCheckAt: isoDateTime(now),
+      lastBotMessage:
+        "Manual payment proof request skipped: member has no Telegram User ID",
+    });
+    revalidatePath("/admin");
+    revalidatePath(`/admin/member/${pageId}`);
+    return;
+  }
 
   const config = getRuntimeConfig();
   const deadline = addDays(now, config.paymentGraceDays);
@@ -105,28 +119,23 @@ export async function requestPaymentProofAction(pageId: string) {
     paymentProofSubmittedAt: null,
     paidAt: null,
     lastBotCheckAt: isoDateTime(now),
-    lastBotMessage: "Manual payment proof request sent by admin",
+    lastBotMessage: "Manual payment proof option sent by admin",
   });
 
-  await sendMessage(
-    member.telegramUserId,
-    [
-      "助理已開啟付款資料補傳流程。",
-      "",
-      "如果你已完成轉帳，請直接在這個 Bot 對話上傳轉帳截圖，並輸入 UID 末四碼（4 位數字）。",
-      "",
-      "若你尚未轉帳，請依照以下方式完成付款：",
-      "",
-      "續費方案：",
-      "收費方式：",
-      "3個月100U，一個月50U。（目前沒有年訂閱方案）",
-      "",
-      "可以使用交易所內部轉帳給小夏：",
-      "MEXC - UID：77242747",
-      "",
-      "完成轉帳後，請上傳轉帳截圖，並在同一則訊息的文字說明或下一則訊息輸入 UID 末四碼。",
-    ].join("\n"),
-  );
+  try {
+    await sendMessage(
+      member.telegramUserId,
+      manualPaymentProofRequestMessage(),
+      paymentProofRequestKeyboard(),
+    );
+  } catch (error) {
+    await updateMember(pageId, {
+      lastBotCheckAt: isoDateTime(now),
+      lastBotMessage: `Manual payment proof option failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    });
+  }
 
   revalidatePath("/admin");
   revalidatePath(`/admin/member/${pageId}`);

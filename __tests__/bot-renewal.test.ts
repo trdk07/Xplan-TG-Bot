@@ -338,6 +338,47 @@ describe("renewal bot flow", () => {
     expect(state.edited.at(-1)?.keyboard).toBeUndefined();
   });
 
+  it("prompts members to upload proof after tapping the admin payment-proof option", async () => {
+    state.members = [
+      member({
+        status: "payment_pending",
+        renewalStep: "payment_pending",
+        paymentDeadlineAt: "2026-05-04T00:00:00.000Z",
+      }),
+    ];
+
+    await handleTelegramUpdate(
+      {
+        update_id: 31,
+        callback_query: {
+          id: "cb-proof",
+          from: { id: 1001 },
+          data: "payment_proof:start",
+          message: {
+            message_id: 100,
+            chat: { id: 1001, type: "private" },
+            text: "助理已開啟付款資料補傳流程。",
+          },
+        },
+      },
+      new Date("2026-05-02T00:00:00.000Z"),
+    );
+
+    expect(state.callbackAnswers.at(-1)).toMatchObject({
+      id: "cb-proof",
+      text: "請上傳轉帳截圖，並輸入 UID 末四碼。",
+      showAlert: true,
+    });
+    expect(state.edited.at(-1)?.text).toContain(
+      "✅ 你已選擇：我已完成轉帳，補傳付款資料",
+    );
+    expect(state.edited.at(-1)?.text).toContain(
+      "請在這個 Bot 對話上傳轉帳截圖",
+    );
+    expect(state.sent.at(-1)?.text).toContain("上傳轉帳截圖");
+    expect(state.sent.at(-1)?.text).toContain("UID 末四碼");
+  });
+
   it("keeps delayed renewal buttons valid during grace but expires them after grace", async () => {
     state.members = [
       member({

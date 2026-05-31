@@ -568,7 +568,7 @@ export default async function AdminPage({
                     type="submit"
                   >
                     <Upload width={16} height={16} aria-hidden="true" />
-                    請補付款資料
+                    請 Bot 發補傳選項
                   </button>
                 </form>
                 <Link

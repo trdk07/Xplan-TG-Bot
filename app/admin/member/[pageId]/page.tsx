@@ -188,7 +188,7 @@ export default async function MemberDetailPage({
 
             <form action={requestPaymentProof}>
               <ActionButton icon={Upload} secondary disabled={!member.telegramUserId}>
-                開啟補傳付款證明
+                請 Bot 發送補傳付款資料選項
               </ActionButton>
             </form>
 

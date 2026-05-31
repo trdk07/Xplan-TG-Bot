@@ -37,7 +37,7 @@ const RENEWAL_OFFER = [
   "MEXC - UID：77242747",
 ].join("\n");
 const PAYMENT_PROOF_INSTRUCTIONS =
-  "下一步：請上傳轉帳截圖，並輸入 UID 末四碼（4 位數字）。如果尚未轉帳，請先依照上方付款資訊完成轉帳；可以把 UID 末四碼寫在圖片說明，或下一則訊息傳 4 位數字。";
+  "下一步：請上傳轉帳截圖，並在這個 Bot 對話輸入 UID 末四碼（4 位數字）。可以把 UID 末四碼寫在圖片說明，或下一則訊息傳 4 位數字。";
 const STALE_STEP_MESSAGE =
   "這個按鈕已不是目前可操作的步驟。若需要協助，請聯絡助理確認。";
 const RENEWAL_EXPIRED_MESSAGE =
@@ -102,6 +102,31 @@ function trialResultKeyboard() {
 
 function earlyRenewalKeyboard() {
   return [[{ text: "提前開始續費", callback_data: "renewal:stay" }]];
+}
+
+export function paymentProofRequestKeyboard() {
+  return [
+    [
+      {
+        text: "我已完成轉帳，補傳付款資料",
+        callback_data: "payment_proof:start",
+      },
+    ],
+  ];
+}
+
+export function manualPaymentProofRequestMessage() {
+  return [
+    "助理已開啟付款資料補傳流程。",
+    "",
+    "如果你已完成轉帳，請點下方「我已完成轉帳，補傳付款資料」，Bot 會提示你上傳轉帳截圖與 UID 末四碼。",
+    "",
+    "若你尚未轉帳，請依照以下方式完成付款：",
+    "",
+    RENEWAL_OFFER,
+    "",
+    "完成轉帳後，再點下方按鈕開始補傳。",
+  ].join("\n");
 }
 
 function renewalReminderMessage(member: Member) {
@@ -516,6 +541,32 @@ async function handleCallback(query: TelegramCallbackQuery, now: Date) {
       query.from.id,
       "你不在目前的 Notion 名單內，或表單上的 Telegram username 與目前帳號不一致。",
     );
+    return;
+  }
+
+  if (query.data === "payment_proof:start") {
+    if (member.status !== "payment_pending") {
+      await answerCallbackQuery(query.id, "這個按鈕已不是目前可操作的步驟", true);
+      await sendMessage(query.from.id, STALE_STEP_MESSAGE);
+      return;
+    }
+    if (isPast(member.paymentDeadlineAt, now)) {
+      await answerCallbackQuery(query.id, "付款回覆期限已過", true);
+      await expirePaymentPendingMember(member, query.from.id, now);
+      return;
+    }
+
+    await answerCallbackQuery(
+      query.id,
+      "請上傳轉帳截圖，並輸入 UID 末四碼。",
+      true,
+    );
+    await markCallbackSelection(
+      query,
+      "我已完成轉帳，補傳付款資料",
+      "請在這個 Bot 對話上傳轉帳截圖，並輸入 UID 末四碼。",
+    );
+    await sendMessage(query.from.id, PAYMENT_PROOF_INSTRUCTIONS);
     return;
   }
 
