@@ -33,6 +33,8 @@ ensureSelect("Status", [
   { name: "denied", color: "red" },
 ]);
 ensureMultiSelect("Tags", [{ name: "翻倉成功", color: "green" }]);
+ensureEmail("email");
+ensureCheckbox("已送出邀請");
 ensureRichText("Final P/L");
 ensureSelect("Renewal Step", [
   { name: "awaiting_trial_result", color: "yellow" },
@@ -41,6 +43,9 @@ ensureSelect("Renewal Step", [
   { name: "payment_pending", color: "purple" },
   { name: "completed", color: "green" },
 ]);
+ensureRichText("Payment UID Last 4");
+ensureRichText("Payment Proof File ID");
+ensureDate("Payment Proof Submitted At");
 ensureDate("Renewal Reminder Sent At");
 
 if (Object.keys(patch).length) {
@@ -62,6 +67,18 @@ function ensureRichText(name) {
 function ensureDate(name) {
   if (!existing[name]) {
     patch[name] = { date: {} };
+  }
+}
+
+function ensureEmail(name) {
+  if (!existing[name]) {
+    patch[name] = { email: {} };
+  }
+}
+
+function ensureCheckbox(name) {
+  if (!existing[name]) {
+    patch[name] = { checkbox: {} };
   }
 }
 
