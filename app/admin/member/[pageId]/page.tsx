@@ -24,7 +24,7 @@ import { StatusBadge } from "@/app/components/StatusBadge";
 import { requireAdmin } from "@/lib/auth";
 import { addMonths, formatDateTime, renewalBaseDate } from "@/lib/dates";
 import { getMemberByPageId } from "@/lib/notion";
-import { memberStatusLabel, memberStatuses } from "@/lib/status";
+import { manualOverrideStatuses, memberStatusLabel } from "@/lib/status";
 
 export default async function MemberDetailPage({
   params,
@@ -173,14 +173,20 @@ export default async function MemberDetailPage({
           <div className="stack">
             <form action={updateStatus} className="grid">
               <div className="field">
-                <label htmlFor="status">Status</label>
+                <label htmlFor="status">手動修正 Status</label>
                 <select className="input" id="status" name="status" defaultValue={member.status}>
-                  {memberStatuses.map((status) => (
+                  {member.status === "active_paid" && (
+                    <option value="active_paid" disabled>
+                      已付款有效（請用下方標記付款按鈕）
+                    </option>
+                  )}
+                  {manualOverrideStatuses.map((status) => (
                     <option key={status} value={status}>
                       {memberStatusLabel(status)}
                     </option>
                   ))}
                 </select>
+                <p className="field-hint">⚠️ 僅修正 Status 欄位，不會更新到期日或通知 Bot。若要標記付款，請用下方按鈕。</p>
               </div>
               <ActionButton icon={Save}>更新狀態</ActionButton>
             </form>
