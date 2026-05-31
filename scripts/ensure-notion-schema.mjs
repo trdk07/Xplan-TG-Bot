@@ -45,7 +45,7 @@ ensureSelect("Renewal Step", [
 ]);
 ensureRichText("Payment UID Last 4");
 ensureRichText("Payment Proof File ID");
-ensureDate("Payment Proof Submitted At");
+ensureRichText("Payment Proof Submitted ");
 ensureDate("Renewal Reminder Sent At");
 
 if (Object.keys(patch).length) {

@@ -32,7 +32,7 @@ describe("Notion member mapping", () => {
           rich_text: [{ plain_text: "photo-file-id" }],
         },
         [notionProperties.paymentProofSubmittedAt]: {
-          date: { start: "2026-05-01T00:00:00.000Z" },
+          rich_text: [{ plain_text: "2026-05-01T00:00:00.000Z" }],
         },
         [notionProperties.finalPnl]: { rich_text: [{ plain_text: "+20%" }] },
         [notionProperties.renewalStep]: {
@@ -128,7 +128,7 @@ describe("Notion member mapping", () => {
       rich_text: [{ type: "text", text: { content: "photo-file-id" } }],
     });
     expect(props[notionProperties.paymentProofSubmittedAt]).toEqual({
-      date: { start: "2026-05-01T00:00:00.000Z" },
+      rich_text: [{ type: "text", text: { content: "2026-05-01T00:00:00.000Z" } }],
     });
   });
 

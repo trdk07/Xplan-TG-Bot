@@ -55,7 +55,7 @@ export const notionProperties = {
   paymentDeadlineAt: "Payment Deadline At",
   paymentUidLast4: "Payment UID Last 4",
   paymentProofFileId: "Payment Proof File ID",
-  paymentProofSubmittedAt: "Payment Proof Submitted At",
+  paymentProofSubmittedAt: "Payment Proof Submitted ",
   paidAt: "Paid At",
   finalPnl: "Final P/L",
   renewalStep: "Renewal Step",
@@ -180,7 +180,7 @@ export function mapNotionPageToMember(page: NotionPage): Member {
     paymentDeadlineAt: dateProp(page, notionProperties.paymentDeadlineAt),
     paymentUidLast4: textProp(page, notionProperties.paymentUidLast4),
     paymentProofFileId: textProp(page, notionProperties.paymentProofFileId),
-    paymentProofSubmittedAt: dateProp(page, notionProperties.paymentProofSubmittedAt),
+    paymentProofSubmittedAt: textProp(page, notionProperties.paymentProofSubmittedAt) || null,
     paidAt: dateProp(page, notionProperties.paidAt),
     finalPnl: textProp(page, notionProperties.finalPnl),
     renewalStep: selectProp(page, notionProperties.renewalStep),
@@ -271,8 +271,8 @@ export function buildNotionProperties(patch: MemberPatch): Record<string, any> {
     );
   }
   if (patch.paymentProofSubmittedAt !== undefined) {
-    props[notionProperties.paymentProofSubmittedAt] = dateValue(
-      patch.paymentProofSubmittedAt,
+    props[notionProperties.paymentProofSubmittedAt] = richText(
+      patch.paymentProofSubmittedAt || "",
     );
   }
   if (patch.paidAt !== undefined) {
