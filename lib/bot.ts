@@ -307,8 +307,14 @@ async function sendPaymentRequest(
   );
 }
 
-function largestPhotoFileId(message: TelegramMessage): string {
-  return message.photo?.at(-1)?.file_id || "";
+function proofFileIdFromMessage(message: TelegramMessage): string {
+  if (message.photo?.length) {
+    return message.photo.at(-1)!.file_id;
+  }
+  if (message.document?.mime_type?.startsWith("image/")) {
+    return message.document.file_id;
+  }
+  return "";
 }
 
 function paymentUidLast4FromMessage(message: TelegramMessage): string {
@@ -327,15 +333,15 @@ async function handlePaymentProofMessage(
   }
 
   const nextProofFileId =
-    largestPhotoFileId(message) || member.paymentProofFileId;
+    proofFileIdFromMessage(message) || member.paymentProofFileId;
   const nextUidLast4 =
     paymentUidLast4FromMessage(message) || member.paymentUidLast4;
   const patch: Partial<Member> = {
     lastBotCheckAt: isoDateTime(now),
   };
 
-  if (largestPhotoFileId(message)) {
-    patch.paymentProofFileId = largestPhotoFileId(message);
+  if (proofFileIdFromMessage(message)) {
+    patch.paymentProofFileId = proofFileIdFromMessage(message);
     patch.paymentProofSubmittedAt = isoDateTime(now);
   }
   if (paymentUidLast4FromMessage(message)) {

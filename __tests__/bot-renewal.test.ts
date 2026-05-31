@@ -574,6 +574,141 @@ describe("renewal bot flow", () => {
     expect(state.sent[0].text).toContain("https://t.me/+old");
   });
 
+  it("accepts image document as payment proof when member is payment_pending", async () => {
+    state.members = [
+      member({
+        status: "payment_pending",
+        renewalStep: "payment_pending",
+        paymentDeadlineAt: "2026-05-04T00:00:00.000Z",
+      }),
+    ];
+    const now = new Date("2026-05-02T00:00:00.000Z");
+
+    await handleTelegramUpdate(
+      {
+        update_id: 40,
+        message: {
+          message_id: 10,
+          from: { id: 1001, username: "user" },
+          chat: { id: 1001, type: "private" },
+          caption: "UID 末四碼 5678",
+          document: {
+            file_id: "doc-file-id",
+            mime_type: "image/png",
+          },
+        },
+      },
+      now,
+    );
+
+    expect(state.members[0]).toMatchObject({
+      paymentUidLast4: "5678",
+      paymentProofFileId: "doc-file-id",
+      paymentProofSubmittedAt: now.toISOString(),
+    });
+    expect(state.sent.at(-1)?.text).toContain("已收到你的轉帳截圖與 UID 末四碼");
+  });
+
+  it("does not accept non-image document as payment proof", async () => {
+    state.members = [
+      member({
+        status: "payment_pending",
+        renewalStep: "payment_pending",
+        paymentDeadlineAt: "2026-05-04T00:00:00.000Z",
+      }),
+    ];
+    const now = new Date("2026-05-02T00:00:00.000Z");
+
+    await handleTelegramUpdate(
+      {
+        update_id: 41,
+        message: {
+          message_id: 11,
+          from: { id: 1001, username: "user" },
+          chat: { id: 1001, type: "private" },
+          caption: "UID 末四碼 5678",
+          document: {
+            file_id: "pdf-file-id",
+            mime_type: "application/pdf",
+          },
+        },
+      },
+      now,
+    );
+
+    expect(state.members[0].paymentProofFileId).toBe("");
+    expect(state.members[0].paymentUidLast4).toBe("5678");
+    expect(state.members[0]).toMatchObject({
+      lastBotMessage: "Payment UID last 4 captured; awaiting screenshot",
+    });
+    expect(state.sent.at(-1)?.text).toContain("請再上傳轉帳截圖");
+  });
+
+  it("handles only UID captured (no screenshot) correctly", async () => {
+    state.members = [
+      member({
+        status: "payment_pending",
+        renewalStep: "payment_pending",
+        paymentDeadlineAt: "2026-05-04T00:00:00.000Z",
+      }),
+    ];
+    const now = new Date("2026-05-02T00:00:00.000Z");
+
+    await handleTelegramUpdate(
+      {
+        update_id: 42,
+        message: {
+          message_id: 12,
+          from: { id: 1001, username: "user" },
+          chat: { id: 1001, type: "private" },
+          text: "1234",
+        },
+      },
+      now,
+    );
+
+    expect(state.members[0]).toMatchObject({
+      paymentUidLast4: "1234",
+      paymentProofFileId: "",
+      lastBotMessage: "Payment UID last 4 captured; awaiting screenshot",
+    });
+    expect(state.sent.at(-1)?.text).toContain("請再上傳轉帳截圖");
+  });
+
+  it("handles only screenshot captured (no UID) correctly", async () => {
+    state.members = [
+      member({
+        status: "payment_pending",
+        renewalStep: "payment_pending",
+        paymentDeadlineAt: "2026-05-04T00:00:00.000Z",
+      }),
+    ];
+    const now = new Date("2026-05-02T00:00:00.000Z");
+
+    await handleTelegramUpdate(
+      {
+        update_id: 43,
+        message: {
+          message_id: 13,
+          from: { id: 1001, username: "user" },
+          chat: { id: 1001, type: "private" },
+          photo: [
+            { file_id: "small", width: 90, height: 90 },
+            { file_id: "large", width: 1280, height: 720 },
+          ],
+        },
+      },
+      now,
+    );
+
+    expect(state.members[0]).toMatchObject({
+      paymentProofFileId: "large",
+      paymentUidLast4: "",
+      lastBotMessage: "Payment screenshot captured; awaiting UID last 4",
+    });
+    expect(state.sent.at(-1)?.text).toContain("請再回覆 UID 末四碼");
+  });
+
   it("keeps exempt members non-expiring when they join through bot approval", async () => {
     state.members = [
       member({
