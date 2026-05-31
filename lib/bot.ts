@@ -270,7 +270,9 @@ async function sendPaymentRequest(
       "可以使用交易所內部轉帳給小夏：",
       "MEXC - UID：77242747",
       "",
-      "完成轉帳後，請回覆轉帳截圖和輸入UID末四碼，助理確認後會更新你的會籍狀態。",
+      "完成轉帳後，請直接在這個 Bot 對話上傳轉帳截圖，並在同一則訊息的文字說明或下一則訊息輸入 UID 末四碼（4 位數字）。",
+      "你可以傳：截圖 + caption：UID 末四碼 1234；或先傳截圖，再傳 1234。",
+      "兩項都收到後，助理確認後會更新你的會籍狀態。",
     ].join("\n"),
   );
 }
@@ -573,9 +575,14 @@ async function handleCallback(query: TelegramCallbackQuery, now: Date) {
       member.status === "renewal_due" ||
       isEarlyRenewalEligible(member, now)
     ) {
-      await answerCallbackQuery(query.id, "已收到：繼續留下來");
+      await answerCallbackQuery(
+        query.id,
+        "已收到：繼續留下來。請查看 Bot 傳送的付款與上傳截圖說明。",
+        true,
+      );
       await markCallbackSelection(query, "繼續留下來");
       await sendPaymentRequest(member, query.from.id, now);
+      await sendMessage(query.from.id, PAYMENT_PROOF_INSTRUCTIONS);
       return;
     }
 

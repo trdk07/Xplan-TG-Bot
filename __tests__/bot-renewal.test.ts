@@ -263,10 +263,14 @@ describe("renewal bot flow", () => {
     );
     expect(state.members[0].status).toBe("payment_pending");
     expect(state.members[0].paymentDeadlineAt).toBe("2026-05-04T00:00:00.000Z");
-    expect(state.sent.at(-1)?.text).toContain("已收到你的續費申請");
-    expect(state.sent.at(-1)?.text).toContain("3個月100U，一個月50U");
-    expect(state.sent.at(-1)?.text).toContain("MEXC - UID：77242747");
-    expect(state.sent.at(-1)?.text).not.toContain("BITMART");
+    const paymentInstruction = state.sent.at(-2)?.text || "";
+    expect(paymentInstruction).toContain("已收到你的續費申請");
+    expect(paymentInstruction).toContain("3個月100U，一個月50U");
+    expect(paymentInstruction).toContain("MEXC - UID：77242747");
+    expect(paymentInstruction).toContain("上傳轉帳截圖");
+    expect(paymentInstruction).toContain("UID 末四碼");
+    expect(paymentInstruction).not.toContain("BITMART");
+    expect(state.sent.at(-1)?.text).toContain("請上傳轉帳截圖");
 
     await handleTelegramUpdate(
       {
@@ -322,7 +326,8 @@ describe("renewal bot flow", () => {
 
     expect(state.callbackAnswers.at(-1)).toMatchObject({
       id: "cb-ui",
-      text: "已收到：繼續留下來",
+      text: "已收到：繼續留下來。請查看 Bot 傳送的付款與上傳截圖說明。",
+      showAlert: true,
     });
     expect(state.edited.at(-1)).toMatchObject({
       chatId: 1001,
@@ -354,7 +359,8 @@ describe("renewal bot flow", () => {
     );
 
     expect(state.members[0].status).toBe("payment_pending");
-    expect(state.sent.at(-1)?.text).toContain("已收到你的續費申請");
+    expect(state.sent.at(-2)?.text).toContain("已收到你的續費申請");
+    expect(state.sent.at(-1)?.text).toContain("請上傳轉帳截圖");
 
     state.members = [
       member({
