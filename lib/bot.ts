@@ -16,6 +16,7 @@ import {
   type TelegramUpdate,
   answerCallbackQuery,
   approveChatJoinRequest,
+  editMessageText,
   createChatInviteLink,
   declineChatJoinRequest,
   kickChatMember,
@@ -34,10 +35,15 @@ const RENEWAL_OFFER = [
   "",
   "可以使用交易所內部轉帳給小夏：",
   "MEXC - UID：77242747",
-  "BITMART - UID：15157885",
 ].join("\n");
-const MANUAL_PAYMENT_REVIEW =
-  "目前暫不串接付款金流，收款由人工審核。完成轉帳後，請回覆轉帳截圖或交易資訊，管理員確認後會更新你的會籍狀態。";
+const PAYMENT_PROOF_INSTRUCTIONS =
+  "下一步：請上傳轉帳截圖，並輸入 UID 末四碼（4 位數字）。如果尚未轉帳，請先依照上方付款資訊完成轉帳；可以把 UID 末四碼寫在圖片說明，或下一則訊息傳 4 位數字。";
+const STALE_STEP_MESSAGE =
+  "這個按鈕已不是目前可操作的步驟。若需要協助，請聯絡助理確認。";
+const RENEWAL_EXPIRED_MESSAGE =
+  "這次續費回覆期限已過，系統已停止此續費流程。若需要重新加入或續費，請聯絡助理。";
+const PAYMENT_EXPIRED_MESSAGE =
+  "付款回覆期限已過，系統已停止此付款流程。若已完成轉帳或需要協助，請聯絡助理。";
 
 export const exchanges = {
   MEXC: {
@@ -69,7 +75,7 @@ function teacherContactKeyboard() {
   return [
     [
       {
-        text: "聯絡夏老師",
+        text: "聯絡小夏",
         url: `tg://user?id=${config.teacherTelegramUid}`,
       },
     ],
@@ -79,7 +85,7 @@ function teacherContactKeyboard() {
 function renewalKeyboard() {
   return [
     [
-      { text: "我要繼續留在群組", callback_data: "renewal:stay" },
+      { text: "繼續留下來", callback_data: "renewal:stay" },
       { text: "暫時不續留", callback_data: "renewal:leave" },
     ],
   ];
@@ -94,21 +100,34 @@ function trialResultKeyboard() {
   ];
 }
 
+function earlyRenewalKeyboard() {
+  return [[{ text: "提前開始續費", callback_data: "renewal:stay" }]];
+}
+
 function renewalReminderMessage(member: Member) {
-  const memberType = member.status === "active_paid" ? "付費會籍" : "體驗期";
+  if (member.status === "active_paid") {
+    return [
+      "你的訂閱期將在 7 天內到期。",
+      "",
+      "到期時 Bot 會再次詢問是否續費。",
+      "若你已決定續費，也可點擊下方按鈕提前開始續費申請。",
+    ].join("\n");
+  }
+
   return [
-    `你的${memberType}將在 7 天內到期。`,
-    RENEWAL_OFFER,
+    "你的體驗期將在 7 天內到期。",
+    "",
+    "續費方案：",
+    "3個月100U，一個月50U。（目前沒有年訂閱方案）",
+    "",
     "到期時 Bot 會再次詢問是否續費。",
-  ].join("\n\n");
+  ].join("\n");
 }
 
 function trialExpiredMessage() {
-  return [
-    "你的 30 天體驗期已到期。",
-    RENEWAL_OFFER,
-    "請先確認目前是否已經翻倉成功。",
-  ].join("\n\n");
+  return ["你的 30 天體驗期已到期。", "請先確認目前是否已經翻倉成功。"].join(
+    "\n",
+  );
 }
 
 function paidExpiredMessage() {
@@ -116,6 +135,7 @@ function paidExpiredMessage() {
     "你的付費會籍已到期。",
     RENEWAL_OFFER,
     "請確認是否要續費並繼續留在群組。",
+    "若你暫時不續留，也請點擊「暫時不續留」，助理才不用再人工追蹤確認。",
   ].join("\n\n");
 }
 
@@ -125,10 +145,10 @@ function pnlQuestion() {
 
 function renewalOfferQuestion() {
   return [
-    "已收到你的成果回覆。",
-    RENEWAL_OFFER,
+    "收到，感謝你分享目前的操作狀況。",
     "請確認是否要轉成續費的收費會員方案。",
-  ].join("\n\n");
+    "若你暫時不續留，也請點擊「暫時不續留」，助理才不用再人工追蹤確認。",
+  ].join("\n");
 }
 
 function shouldSendRenewalReminder(member: Member, now: Date): boolean {
@@ -137,27 +157,202 @@ function shouldSendRenewalReminder(member: Member, now: Date): boolean {
   return days !== null && days >= 0 && days <= RENEWAL_REMINDER_DAYS;
 }
 
+function renewalGraceDeadline(member: Member, now: Date): Date {
+  const config = getRuntimeConfig();
+  return addDays(new Date(member.reviewDueAt || now), config.paymentGraceDays);
+}
+
+function isRenewalGraceExpired(member: Member, now: Date): boolean {
+  return isPast(isoDateTime(renewalGraceDeadline(member, now)), now);
+}
+
+async function expireRenewalDueMember(
+  member: Member,
+  chatId: string | number,
+  now: Date,
+) {
+  await kickChatMember(member.telegramUserId);
+  await updateMember(member.pageId, {
+    status: "expired",
+    kickReason: "renewal_not_confirmed",
+    lastBotCheckAt: isoDateTime(now),
+    lastBotMessage: "Removed after delayed renewal response",
+  });
+  await sendMessage(chatId, RENEWAL_EXPIRED_MESSAGE);
+}
+
+async function expirePaymentPendingMember(
+  member: Member,
+  chatId: string | number,
+  now: Date,
+) {
+  await kickChatMember(member.telegramUserId);
+  await updateMember(member.pageId, {
+    status: "expired",
+    kickReason: "payment_deadline_missed",
+    lastBotCheckAt: isoDateTime(now),
+    lastBotMessage: "Payment proof submitted after deadline",
+  });
+  await sendMessage(chatId, PAYMENT_EXPIRED_MESSAGE);
+}
+
+function isEarlyRenewalEligible(member: Member, now: Date): boolean {
+  if (member.status !== "trial_active" && member.status !== "active_paid")
+    return false;
+  const days = daysUntil(member.reviewDueAt, now);
+  return days !== null && days >= 0 && days <= RENEWAL_REMINDER_DAYS;
+}
+
+export async function sendRenewalReminder(
+  member: Member,
+  now: Date,
+  lastBotMessage = "Renewal reminder sent",
+) {
+  await sendMessage(
+    member.telegramUserId,
+    renewalReminderMessage(member),
+    earlyRenewalKeyboard(),
+  );
+  await updateMember(member.pageId, {
+    renewalReminderSentAt: isoDateTime(now),
+    lastBotCheckAt: isoDateTime(now),
+    lastBotMessage,
+  });
+}
+
+async function markCallbackSelection(
+  query: TelegramCallbackQuery,
+  selectedLabel: string,
+  nextStepText = "",
+) {
+  const message = query.message;
+  if (!message?.text) return;
+
+  const selectedLine = `✅ 你已選擇：${selectedLabel}`;
+  const nextStepLine = nextStepText ? `下一步：${nextStepText}` : "";
+  const selectionBlock = nextStepLine
+    ? [selectedLine, nextStepLine].join("\n")
+    : selectedLine;
+  const text = message.text.includes("✅ 你已選擇：")
+    ? message.text
+    : [message.text, "", selectionBlock].join("\n");
+
+  await editMessageText(message.chat.id, message.message_id, text).catch(
+    () => undefined,
+  );
+}
+
 function addTag(tags: string[], tag: string): string[] {
   return tags.includes(tag) ? tags : [...tags, tag];
 }
 
-async function sendPaymentRequest(member: Member, chatId: string | number, now: Date) {
+async function sendPaymentRequest(
+  member: Member,
+  chatId: string | number,
+  now: Date,
+) {
   const config = getRuntimeConfig();
   const deadline = addDays(now, config.paymentGraceDays);
   await updateMember(member.pageId, {
     status: "payment_pending",
     renewalStep: "payment_pending",
     paymentDeadlineAt: isoDateTime(deadline),
+    paymentUidLast4: "",
+    paymentProofFileId: "",
+    paymentProofSubmittedAt: null,
     lastBotCheckAt: isoDateTime(now),
-    lastBotMessage: "Payment link sent",
+    lastBotMessage: "Payment request sent",
   });
   await sendMessage(
     chatId,
     [
-      "已收到你的續費意願，請依照以下方式完成付款。",
-      RENEWAL_OFFER,
-      MANUAL_PAYMENT_REVIEW,
-    ].join("\n\n"),
+      "已收到你的續費申請，請依照以下方式完成付款。",
+      "",
+      "續費方案：",
+      "收費方式：",
+      "3個月100U，一個月50U。（目前沒有年訂閱方案）",
+      "",
+      "可以使用交易所內部轉帳給小夏：",
+      "MEXC - UID：77242747",
+      "",
+      "完成轉帳後，請直接在這個 Bot 對話上傳轉帳截圖，並在同一則訊息的文字說明或下一則訊息輸入 UID 末四碼（4 位數字）。",
+      "你可以傳：截圖 + caption：UID 末四碼 1234；或先傳截圖，再傳 1234。",
+      "兩項都收到後，助理確認後會更新你的會籍狀態。",
+    ].join("\n"),
+  );
+}
+
+function largestPhotoFileId(message: TelegramMessage): string {
+  return message.photo?.at(-1)?.file_id || "";
+}
+
+function paymentUidLast4FromMessage(message: TelegramMessage): string {
+  const text = message.caption || message.text || "";
+  return text.match(/(?:^|\D)(\d{4})(?!\d)/)?.[1] || "";
+}
+
+async function handlePaymentProofMessage(
+  member: Member,
+  message: TelegramMessage,
+  now: Date,
+) {
+  if (isPast(member.paymentDeadlineAt, now)) {
+    await expirePaymentPendingMember(member, message.chat.id, now);
+    return;
+  }
+
+  const nextProofFileId =
+    largestPhotoFileId(message) || member.paymentProofFileId;
+  const nextUidLast4 =
+    paymentUidLast4FromMessage(message) || member.paymentUidLast4;
+  const patch: Partial<Member> = {
+    lastBotCheckAt: isoDateTime(now),
+  };
+
+  if (largestPhotoFileId(message)) {
+    patch.paymentProofFileId = largestPhotoFileId(message);
+    patch.paymentProofSubmittedAt = isoDateTime(now);
+  }
+  if (paymentUidLast4FromMessage(message)) {
+    patch.paymentUidLast4 = paymentUidLast4FromMessage(message);
+  }
+
+  if (!nextProofFileId && !nextUidLast4) {
+    await sendMessage(message.chat.id, PAYMENT_PROOF_INSTRUCTIONS);
+    return;
+  }
+
+  if (!nextProofFileId) {
+    await updateMember(member.pageId, {
+      ...patch,
+      lastBotMessage: "Payment UID last 4 captured; awaiting screenshot",
+    });
+    await sendMessage(message.chat.id, "已收到 UID 末四碼，請再上傳轉帳截圖。");
+    return;
+  }
+
+  if (!nextUidLast4) {
+    await updateMember(member.pageId, {
+      ...patch,
+      lastBotMessage: "Payment screenshot captured; awaiting UID last 4",
+    });
+    await sendMessage(
+      message.chat.id,
+      "已收到轉帳截圖，請再回覆 UID 末四碼（4 位數字）。",
+    );
+    return;
+  }
+
+  await updateMember(member.pageId, {
+    ...patch,
+    paymentProofFileId: nextProofFileId,
+    paymentUidLast4: nextUidLast4,
+    paymentProofSubmittedAt: member.paymentProofSubmittedAt || isoDateTime(now),
+    lastBotMessage: "Payment proof submitted",
+  });
+  await sendMessage(
+    message.chat.id,
+    "已收到你的轉帳截圖與 UID 末四碼，助理確認後會更新你的會籍狀態。",
   );
 }
 
@@ -166,13 +361,17 @@ async function refuseAccess(chatId: number, reason: string) {
     chatId,
     [
       `目前無法提供入群連結：${reason}`,
-      "請點擊下方按鈕聯絡夏老師協助確認名單資料。",
+      "請點擊下方按鈕聯絡小夏協助確認名單資料。",
     ].join("\n\n"),
     teacherContactKeyboard(),
   );
 }
 
-async function createInviteForMember(member: Member, chatId: number, now: Date) {
+async function createInviteForMember(
+  member: Member,
+  chatId: number,
+  now: Date,
+) {
   if (member.telegramUserId) {
     await unbanChatMember(member.telegramUserId);
   }
@@ -184,7 +383,9 @@ async function createInviteForMember(member: Member, chatId: number, now: Date) 
   });
 
   await updateMember(member.pageId, {
-    status: nonExpiringStatuses.has(member.status) ? member.status : "join_pending",
+    status: nonExpiringStatuses.has(member.status)
+      ? member.status
+      : "join_pending",
     telegramUsername: member.telegramUsername || undefined,
     inviteLink: invite.invite_link,
     inviteExpiresAt: isoDateTime(expiresAt),
@@ -235,7 +436,10 @@ async function handleStart(message: TelegramMessage, now: Date) {
   }
 
   if (activeGroupStatuses.has(member.status) && member.groupJoinedAt) {
-    await sendMessage(message.chat.id, "你目前已是有效成員，不需要重新申請入群。");
+    await sendMessage(
+      message.chat.id,
+      "你目前已是有效成員，不需要重新申請入群。",
+    );
     return;
   }
 
@@ -245,7 +449,10 @@ async function handleStart(message: TelegramMessage, now: Date) {
     !isPast(member.inviteExpiresAt, now) &&
     (member.status === "join_pending" || nonExpiringStatuses.has(member.status))
   ) {
-    await sendMessage(message.chat.id, `你已有尚未過期的專屬入群連結：\n${member.inviteLink}`);
+    await sendMessage(
+      message.chat.id,
+      `你已有尚未過期的專屬入群連結：\n${member.inviteLink}`,
+    );
     return;
   }
 
@@ -261,15 +468,23 @@ async function handleStart(message: TelegramMessage, now: Date) {
 }
 
 async function handleUidMessage(message: TelegramMessage, now: Date) {
-  if (!message.from || !message.text) return;
+  if (!message.from) return;
   const member = await findMemberByTelegramId(userId(message.from.id));
   if (!member) {
     await handleStart(message, now);
     return;
   }
 
-  if (member.status === "renewal_due" && member.renewalStep === "awaiting_pnl") {
-    const finalPnl = message.text.trim();
+  if (member.status === "payment_pending") {
+    await handlePaymentProofMessage(member, message, now);
+    return;
+  }
+
+  if (
+    member.status === "renewal_due" &&
+    member.renewalStep === "awaiting_pnl"
+  ) {
+    const finalPnl = (message.text || "").trim();
     if (finalPnl.length < 1) {
       await sendMessage(message.chat.id, pnlQuestion());
       return;
@@ -280,7 +495,11 @@ async function handleUidMessage(message: TelegramMessage, now: Date) {
       lastBotCheckAt: isoDateTime(now),
       lastBotMessage: "Final P/L captured",
     });
-    await sendMessage(message.chat.id, renewalOfferQuestion(), renewalKeyboard());
+    await sendMessage(
+      message.chat.id,
+      renewalOfferQuestion(),
+      renewalKeyboard(),
+    );
     return;
   }
 
@@ -289,10 +508,10 @@ async function handleUidMessage(message: TelegramMessage, now: Date) {
 
 async function handleCallback(query: TelegramCallbackQuery, now: Date) {
   if (!query.data) return;
-  await answerCallbackQuery(query.id);
 
   const member = await findMemberByTelegramId(userId(query.from.id));
   if (!member) {
+    await answerCallbackQuery(query.id, "目前找不到你的會員資料", true);
     await refuseAccess(
       query.from.id,
       "你不在目前的 Notion 名單內，或表單上的 Telegram username 與目前帳號不一致。",
@@ -304,6 +523,29 @@ async function handleCallback(query: TelegramCallbackQuery, now: Date) {
     query.data === "trial_result:success" ||
     query.data === "trial_result:not_yet"
   ) {
+    if (
+      member.status !== "renewal_due" ||
+      member.renewalStep !== "awaiting_trial_result"
+    ) {
+      await answerCallbackQuery(
+        query.id,
+        "這個按鈕已不是目前可操作的步驟",
+        true,
+      );
+      await sendMessage(query.from.id, STALE_STEP_MESSAGE);
+      return;
+    }
+    if (isRenewalGraceExpired(member, now)) {
+      await answerCallbackQuery(query.id, "這次續費回覆期限已過", true);
+      await expireRenewalDueMember(member, query.from.id, now);
+      return;
+    }
+
+    const selectedLabel =
+      query.data === "trial_result:success" ? "我已經翻倉成功" : "尚未翻倉成功";
+    await answerCallbackQuery(query.id, `已收到：${selectedLabel}`);
+    await markCallbackSelection(query, selectedLabel);
+
     await updateMember(member.pageId, {
       tags:
         query.data === "trial_result:success"
@@ -321,11 +563,61 @@ async function handleCallback(query: TelegramCallbackQuery, now: Date) {
   }
 
   if (query.data === "renewal:stay") {
-    await sendPaymentRequest(member, query.from.id, now);
+    if (member.status === "payment_pending") {
+      await answerCallbackQuery(
+        query.id,
+        "你已在付款流程中。完成轉帳後，請直接上傳轉帳截圖與 UID 末四碼。",
+      );
+      await sendMessage(query.from.id, PAYMENT_PROOF_INSTRUCTIONS);
+      return;
+    }
+    if (member.status === "renewal_due" && isRenewalGraceExpired(member, now)) {
+      await answerCallbackQuery(query.id, "這次續費回覆期限已過", true);
+      await expireRenewalDueMember(member, query.from.id, now);
+      return;
+    }
+    if (
+      member.status === "renewal_due" ||
+      isEarlyRenewalEligible(member, now)
+    ) {
+      await answerCallbackQuery(
+        query.id,
+        "已收到：繼續留下來。完成轉帳後，請在 Bot 對話上傳轉帳截圖與 UID 末四碼。",
+        true,
+      );
+      await markCallbackSelection(
+        query,
+        "繼續留下來",
+        "請查看下方付款資訊；完成轉帳後，上傳轉帳截圖與 UID 末四碼。",
+      );
+      await sendPaymentRequest(member, query.from.id, now);
+      await sendMessage(query.from.id, PAYMENT_PROOF_INSTRUCTIONS);
+      return;
+    }
+
+    await answerCallbackQuery(query.id, "這個按鈕已不是目前可操作的步驟", true);
+    await sendMessage(query.from.id, STALE_STEP_MESSAGE);
     return;
   }
 
   if (query.data === "renewal:leave") {
+    if (member.status !== "renewal_due") {
+      await answerCallbackQuery(
+        query.id,
+        "這個按鈕已不是目前可操作的步驟",
+        true,
+      );
+      await sendMessage(query.from.id, STALE_STEP_MESSAGE);
+      return;
+    }
+    if (isRenewalGraceExpired(member, now)) {
+      await answerCallbackQuery(query.id, "這次續費回覆期限已過", true);
+      await expireRenewalDueMember(member, query.from.id, now);
+      return;
+    }
+
+    await answerCallbackQuery(query.id, "已收到：暫時不續留");
+    await markCallbackSelection(query, "暫時不續留");
     await kickChatMember(member.telegramUserId);
     await updateMember(member.pageId, {
       status: "kicked",
@@ -334,8 +626,15 @@ async function handleCallback(query: TelegramCallbackQuery, now: Date) {
       lastBotCheckAt: isoDateTime(now),
       lastBotMessage: "User declined renewal and was removed",
     });
-    await sendMessage(query.from.id, "已收到，你將會被移出群組。之後需要重新加入時請聯絡管理員。");
+    await sendMessage(
+      query.from.id,
+      "已收到，你將會被移出群組。之後需要重新加入時請聯絡管理員。",
+    );
+    return;
   }
+
+  await answerCallbackQuery(query.id, "這個按鈕已不是目前可操作的步驟", true);
+  await sendMessage(query.from.id, STALE_STEP_MESSAGE);
 }
 
 async function handleJoinRequest(request: TelegramChatJoinRequest, now: Date) {
@@ -419,7 +718,10 @@ async function handleChatMember(update: TelegramChatMemberUpdated, now: Date) {
   });
 }
 
-export async function handleTelegramUpdate(update: TelegramUpdate, now = new Date()) {
+export async function handleTelegramUpdate(
+  update: TelegramUpdate,
+  now = new Date(),
+) {
   if (update.message?.chat.type === "private") {
     if (isStartCommand(update.message.text)) {
       await handleStart(update.message, now);
@@ -462,19 +764,29 @@ export async function runDailyMembershipJob(now = new Date()) {
         lastBotCheckAt: isoDateTime(now),
         lastBotMessage: "Trial expired question sent",
       });
-      results.push({ pageId: member.pageId, action: "trial_expired_question_sent" });
+      results.push({
+        pageId: member.pageId,
+        action: "trial_expired_question_sent",
+      });
       continue;
     }
 
     if (member.status === "active_paid" && isPast(member.reviewDueAt, now)) {
-      await sendMessage(member.telegramUserId, paidExpiredMessage(), renewalKeyboard());
+      await sendMessage(
+        member.telegramUserId,
+        paidExpiredMessage(),
+        renewalKeyboard(),
+      );
       await updateMember(member.pageId, {
         status: "renewal_due",
         renewalStep: "renewal_offer_sent",
         lastBotCheckAt: isoDateTime(now),
         lastBotMessage: "Paid renewal question sent",
       });
-      results.push({ pageId: member.pageId, action: "paid_renewal_question_sent" });
+      results.push({
+        pageId: member.pageId,
+        action: "paid_renewal_question_sent",
+      });
       continue;
     }
 
@@ -482,19 +794,19 @@ export async function runDailyMembershipJob(now = new Date()) {
       (member.status === "trial_active" || member.status === "active_paid") &&
       shouldSendRenewalReminder(member, now)
     ) {
-      await sendMessage(member.telegramUserId, renewalReminderMessage(member));
-      await updateMember(member.pageId, {
-        renewalReminderSentAt: isoDateTime(now),
-        lastBotCheckAt: isoDateTime(now),
-        lastBotMessage: "Renewal reminder sent",
-      });
+      await sendRenewalReminder(member, now);
       results.push({ pageId: member.pageId, action: "renewal_reminder_sent" });
       continue;
     }
 
     if (
       member.status === "renewal_due" &&
-      isPast(isoDateTime(addDays(new Date(member.reviewDueAt || now), config.paymentGraceDays)), now)
+      isPast(
+        isoDateTime(
+          addDays(new Date(member.reviewDueAt || now), config.paymentGraceDays),
+        ),
+        now,
+      )
     ) {
       await kickChatMember(member.telegramUserId);
       await updateMember(member.pageId, {
@@ -503,11 +815,17 @@ export async function runDailyMembershipJob(now = new Date()) {
         lastBotCheckAt: isoDateTime(now),
         lastBotMessage: "Removed after renewal grace period",
       });
-      results.push({ pageId: member.pageId, action: "removed_no_renewal_response" });
+      results.push({
+        pageId: member.pageId,
+        action: "removed_no_renewal_response",
+      });
       continue;
     }
 
-    if (member.status === "payment_pending" && isPast(member.paymentDeadlineAt, now)) {
+    if (
+      member.status === "payment_pending" &&
+      isPast(member.paymentDeadlineAt, now)
+    ) {
       await kickChatMember(member.telegramUserId);
       await updateMember(member.pageId, {
         status: "expired",
@@ -515,7 +833,10 @@ export async function runDailyMembershipJob(now = new Date()) {
         lastBotCheckAt: isoDateTime(now),
         lastBotMessage: "Removed after payment deadline",
       });
-      results.push({ pageId: member.pageId, action: "removed_payment_deadline" });
+      results.push({
+        pageId: member.pageId,
+        action: "removed_payment_deadline",
+      });
     }
   }
 
