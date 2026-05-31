@@ -3,6 +3,7 @@ import {
   Ban,
   Eraser,
   Link2Off,
+  Monitor,
   RefreshCw,
   Save,
   Send,
@@ -13,6 +14,7 @@ import {
   kickMemberAction,
   markPaidAction,
   markInvitationEmailSentAction,
+  markTradingViewRevokedAction,
   requestPaymentProofAction,
   resendInviteAction,
   revokeInviteAction,
@@ -163,6 +165,18 @@ export default async function MemberDetailPage({
             <div>{member.lastBotMessage || "-"}</div>
             <div>Kick Reason</div>
             <div>{member.kickReason || "-"}</div>
+            <div>TradingView</div>
+            <div>{member.tradingView || "-"}</div>
+            <div>TradingView Access</div>
+            <div>
+              {member.tradingViewAccess === "待撤銷"
+                ? "🔴 待撤銷"
+                : member.tradingViewAccess === "已撤銷"
+                  ? "⚫ 已撤銷"
+                  : member.tradingView
+                    ? "⚪ 未設定"
+                    : "-"}
+            </div>
           </div>
         </section>
 
@@ -242,6 +256,14 @@ export default async function MemberDetailPage({
                 踢出群組
               </ActionButton>
             </form>
+
+            {member.tradingView && member.tradingViewAccess !== "已撤銷" ? (
+              <form action={markTradingViewRevokedAction.bind(null, pageId)}>
+                <ActionButton icon={Monitor} secondary>
+                  標記已撤銷 TradingView
+                </ActionButton>
+              </form>
+            ) : null}
           </div>
         </aside>
       </div>

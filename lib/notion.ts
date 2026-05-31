@@ -29,6 +29,8 @@ export type Member = {
   lastBotCheckAt: string | null;
   lastBotMessage: string;
   kickReason: string;
+  tradingView: string;
+  tradingViewAccess: string;
 };
 
 export type MemberPatch = Partial<
@@ -63,6 +65,8 @@ export const notionProperties = {
   lastBotCheckAt: "Last Bot Check At",
   lastBotMessage: "Last Bot Message",
   kickReason: "Kick Reason",
+  tradingView: "TradingView",
+  tradingViewAccess: "TradingView Access",
 } as const;
 
 const legacyProperties = {
@@ -188,6 +192,8 @@ export function mapNotionPageToMember(page: NotionPage): Member {
     lastBotCheckAt: dateProp(page, notionProperties.lastBotCheckAt),
     lastBotMessage: textProp(page, notionProperties.lastBotMessage),
     kickReason: textProp(page, notionProperties.kickReason),
+    tradingView: textProp(page, notionProperties.tradingView),
+    tradingViewAccess: selectProp(page, notionProperties.tradingViewAccess),
   };
 }
 
@@ -299,6 +305,11 @@ export function buildNotionProperties(patch: MemberPatch): Record<string, any> {
   }
   if (patch.kickReason !== undefined) {
     props[notionProperties.kickReason] = richText(patch.kickReason);
+  }
+  if (patch.tradingViewAccess !== undefined) {
+    props[notionProperties.tradingViewAccess] = {
+      select: patch.tradingViewAccess ? { name: patch.tradingViewAccess } : null,
+    };
   }
 
   return props;
