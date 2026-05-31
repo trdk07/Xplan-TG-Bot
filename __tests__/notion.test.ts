@@ -68,6 +68,24 @@ describe("Notion member mapping", () => {
     });
   });
 
+  it("falls back to common Tally email property names", () => {
+    const member = mapNotionPageToMember({
+      id: "page-email",
+      properties: {
+        [notionProperties.telegramUserId]: {
+          rich_text: [{ plain_text: "12345" }],
+        },
+        [notionProperties.telegramUsername]: {
+          rich_text: [{ plain_text: "@aceon" }],
+        },
+        Email: { email: "fallback@example.com" },
+        [notionProperties.status]: { select: { name: "eligible" } },
+      },
+    });
+
+    expect(member.email).toBe("fallback@example.com");
+  });
+
   it("builds sparse Notion update properties", () => {
     const props = buildNotionProperties({
       status: "payment_pending",

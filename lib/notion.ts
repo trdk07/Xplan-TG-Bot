@@ -67,6 +67,7 @@ export const notionProperties = {
 
 const legacyProperties = {
   telegramUsername: "TG 帳號",
+  email: ["Email", "E-mail", "電子郵件", "信箱", "Respondent Email"],
 } as const;
 
 type NotionPage = {
@@ -99,15 +100,28 @@ function dateValue(value: string | null | undefined) {
   return { date: value ? { start: value } : null };
 }
 
-function textProp(page: NotionPage, name: string): string {
-  const prop = page.properties[name];
+function valueFromTextLikeProp(prop: any): string {
   if (!prop) return "";
   if (typeof prop.email === "string") return prop.email;
+  if (typeof prop.phone_number === "string") return prop.phone_number;
+  if (typeof prop.url === "string") return prop.url;
   if (Array.isArray(prop.rich_text)) {
     return prop.rich_text.map((item: any) => item.plain_text || "").join("");
   }
   if (Array.isArray(prop.title)) {
     return prop.title.map((item: any) => item.plain_text || "").join("");
+  }
+  return "";
+}
+
+function textProp(page: NotionPage, name: string): string {
+  return valueFromTextLikeProp(page.properties[name]);
+}
+
+function firstTextProp(page: NotionPage, names: readonly string[]): string {
+  for (const name of names) {
+    const value = textProp(page, name);
+    if (value) return value;
   }
   return "";
 }
@@ -148,7 +162,9 @@ export function mapNotionPageToMember(page: NotionPage): Member {
     telegramUsername:
       textProp(page, notionProperties.telegramUsername) ||
       textProp(page, legacyProperties.telegramUsername),
-    email: textProp(page, notionProperties.email),
+    email:
+      textProp(page, notionProperties.email) ||
+      firstTextProp(page, legacyProperties.email),
     status: statusProp(page),
     tags: multiSelectProp(page, notionProperties.tags),
     exchangeRegistered: checkboxProp(page, notionProperties.exchangeRegistered),
