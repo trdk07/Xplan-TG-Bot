@@ -60,6 +60,13 @@ export function isMemberStatus(value: string): value is MemberStatus {
   return memberStatuses.includes(value as MemberStatus);
 }
 
+// Statuses available in the manual override dropdown.
+// active_paid is intentionally excluded — use the mark-paid buttons instead,
+// which also update reviewDueAt, paidAt, and notify the member via Bot.
+export const manualOverrideStatuses = memberStatuses.filter(
+  (s) => s !== "active_paid",
+);
+
 export function memberStatusLabel(status: MemberStatus): string {
   return memberStatusLabels[status];
 }

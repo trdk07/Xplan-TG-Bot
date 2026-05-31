@@ -202,6 +202,7 @@ async function expireRenewalDueMember(
     kickReason: "renewal_not_confirmed",
     lastBotCheckAt: isoDateTime(now),
     lastBotMessage: "Removed after delayed renewal response",
+    ...(member.tradingView ? { tradingViewAccess: "待撤銷" } : {}),
   });
   await sendMessage(chatId, RENEWAL_EXPIRED_MESSAGE);
 }
@@ -217,6 +218,7 @@ async function expirePaymentPendingMember(
     kickReason: "payment_deadline_missed",
     lastBotCheckAt: isoDateTime(now),
     lastBotMessage: "Payment proof submitted after deadline",
+    ...(member.tradingView ? { tradingViewAccess: "待撤銷" } : {}),
   });
   await sendMessage(chatId, PAYMENT_EXPIRED_MESSAGE);
 }
@@ -682,6 +684,7 @@ async function handleCallback(query: TelegramCallbackQuery, now: Date) {
       kickReason: "user_declined_renewal",
       lastBotCheckAt: isoDateTime(now),
       lastBotMessage: "User declined renewal and was removed",
+      ...(member.tradingView ? { tradingViewAccess: "待撤銷" } : {}),
     });
     await sendMessage(
       query.from.id,
@@ -764,6 +767,7 @@ async function handleChatMember(update: TelegramChatMemberUpdated, now: Date) {
         kickReason: "unauthorized_group_join",
         lastBotCheckAt: isoDateTime(now),
         lastBotMessage: "Unauthorized member removed",
+        ...(member.tradingView ? { tradingViewAccess: "待撤銷" } : {}),
       });
     }
     return;
@@ -871,6 +875,7 @@ export async function runDailyMembershipJob(now = new Date()) {
         kickReason: "renewal_not_confirmed",
         lastBotCheckAt: isoDateTime(now),
         lastBotMessage: "Removed after renewal grace period",
+        ...(member.tradingView ? { tradingViewAccess: "待撤銷" } : {}),
       });
       results.push({
         pageId: member.pageId,
@@ -889,6 +894,7 @@ export async function runDailyMembershipJob(now = new Date()) {
         kickReason: "payment_deadline_missed",
         lastBotCheckAt: isoDateTime(now),
         lastBotMessage: "Removed after payment deadline",
+        ...(member.tradingView ? { tradingViewAccess: "待撤銷" } : {}),
       });
       results.push({
         pageId: member.pageId,

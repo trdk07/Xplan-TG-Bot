@@ -276,6 +276,28 @@ function RenewalReviewSummary({ member }: { member: Member }) {
   );
 }
 
+function TradingViewSummary({ member }: { member: Member }) {
+  if (!member.tradingView) return null;
+  const isInactive = member.status === "expired" || member.status === "kicked";
+  if (!isInactive) return null;
+
+  return (
+    <div className="review-block">
+      <span className="mobile-label">TradingView</span>
+      <div className="payment-review">
+        <span className="compact-text">{member.tradingView}</span>
+        {member.tradingViewAccess === "待撤銷" ? (
+          <span className="mini-badge danger">待撤銷</span>
+        ) : member.tradingViewAccess === "已撤銷" ? (
+          <span className="mini-badge muted">已撤銷</span>
+        ) : (
+          <span className="mini-badge warning">未標記</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default async function AdminPage({
   searchParams,
 }: {
@@ -283,6 +305,7 @@ export default async function AdminPage({
     q?: string | string[];
     status?: string | string[];
     resent?: string | string[];
+    inactive?: string | string[];
   }>;
 }) {
   await requireAdmin();
@@ -290,6 +313,7 @@ export default async function AdminPage({
   const q = scalar(params.q);
   const rawStatus = scalar(params.status);
   const resentCount = scalar(params.resent);
+  const inactive = scalar(params.inactive);
   const status = memberStatuses.includes(rawStatus as MemberStatus)
     ? (rawStatus as MemberStatus)
     : "all";
@@ -304,6 +328,18 @@ export default async function AdminPage({
     loadError =
       error instanceof Error ? error.message : "Unable to load members";
   }
+
+  const tvPendingRevoke = members.filter(
+    (m) => m.tradingViewAccess === "待撤銷",
+  ).length;
+
+  const displayMembers =
+    inactive === "show"
+      ? members
+      : members.filter(
+          (m) => !["expired", "kicked", "denied"].includes(m.status),
+        );
+  const hiddenCount = members.length - displayMembers.length;
 
   const paymentProofReady = members.filter(
     (member) =>
@@ -379,6 +415,10 @@ export default async function AdminPage({
         <div className="stat stat-emphasis">
           <span className="subtle">待寄邀請 Email</span>
           <strong>{invitationEmailTargets.length}</strong>
+        </div>
+        <div className="stat stat-emphasis">
+          <span className="subtle">TradingView 待撤銷</span>
+          <strong>{tvPendingRevoke}</strong>
         </div>
       </section>
 
@@ -513,7 +553,36 @@ export default async function AdminPage({
         </form>
 
         <div className="members-list">
-          {members.map((member) => (
+          {hiddenCount > 0 ? (
+            <div style={{ marginBottom: 8 }}>
+              <Link
+                className="button secondary"
+                href={`/admin?q=${encodeURIComponent(q)}&status=${status}&inactive=show`}
+              >
+                顯示 {hiddenCount} 位歷史會員
+              </Link>
+            </div>
+          ) : inactive === "show" && members.length > displayMembers.length + hiddenCount ? null : inactive === "show" ? (
+            <div style={{ marginBottom: 8 }}>
+              <Link
+                className="button secondary"
+                href={`/admin?q=${encodeURIComponent(q)}&status=${status}`}
+              >
+                隱藏歷史會員
+              </Link>
+            </div>
+          ) : null}
+          {inactive === "show" && hiddenCount === 0 ? (
+            <div style={{ marginBottom: 8 }}>
+              <Link
+                className="button secondary"
+                href={`/admin?q=${encodeURIComponent(q)}&status=${status}`}
+              >
+                隱藏歷史會員
+              </Link>
+            </div>
+          ) : null}
+          {displayMembers.map((member) => (
             <article className="member-card" key={member.pageId}>
               <div className="member-main">
                 <div className="member-identity">
@@ -552,6 +621,7 @@ export default async function AdminPage({
                   <span className="mobile-label">Tags</span>
                   <span>{member.tags.length ? member.tags.join(", ") : "-"}</span>
                 </div>
+                <TradingViewSummary member={member} />
                 <div className="member-date-grid">
                   <DateStack label="Joined" value={member.groupJoinedAt} />
                   <DateStack label="Review Due" value={member.reviewDueAt} />

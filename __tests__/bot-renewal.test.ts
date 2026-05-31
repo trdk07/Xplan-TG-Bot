@@ -135,6 +135,8 @@ function member(overrides: Record<string, any> = {}) {
     lastBotCheckAt: null,
     lastBotMessage: "",
     kickReason: "",
+    tradingView: "",
+    tradingViewAccess: "",
     ...overrides,
   };
 }
@@ -377,6 +379,37 @@ describe("renewal bot flow", () => {
     );
     expect(state.sent.at(-1)?.text).toContain("上傳轉帳截圖");
     expect(state.sent.at(-1)?.text).toContain("UID 末四碼");
+  });
+
+  it("sets tradingViewAccess to 待撤銷 when kicking a member with tradingView via renewal:leave", async () => {
+    state.members = [
+      member({
+        status: "renewal_due",
+        renewalStep: "renewal_offer_sent",
+        reviewDueAt: "2026-05-08T00:00:00.000Z",
+        tradingView: "trader123",
+        tradingViewAccess: "",
+      }),
+    ];
+
+    await handleTelegramUpdate(
+      {
+        update_id: 99,
+        callback_query: {
+          id: "cb-leave",
+          from: { id: 1001 },
+          data: "renewal:leave",
+        },
+      },
+      new Date("2026-05-01T00:00:00.000Z"),
+    );
+
+    expect(state.members[0]).toMatchObject({
+      status: "kicked",
+      kickReason: "user_declined_renewal",
+      tradingViewAccess: "待撤銷",
+    });
+    expect(state.kicked).toContain("1001");
   });
 
   it("keeps delayed renewal buttons valid during grace but expires them after grace", async () => {
