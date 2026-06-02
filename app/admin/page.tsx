@@ -23,6 +23,11 @@ import {
 import { StatusBadge } from "@/app/components/StatusBadge";
 import { getDisplayConfig, getMissingConfig } from "@/lib/config";
 import { daysUntil, formatDateTime } from "@/lib/dates";
+import {
+  isPaymentFollowupCandidate,
+  isPaymentReviewReady,
+  isRenewalNoticeCandidate,
+} from "@/lib/member-state";
 import { listMembers, type Member } from "@/lib/notion";
 import {
   memberStatusLabel,
@@ -342,24 +347,22 @@ export default async function AdminPage({
   const hiddenCount = members.length - displayMembers.length;
 
   const paymentProofReady = members.filter(
-    (member) =>
-      member.status === "payment_pending" &&
-      member.paymentProofFileId &&
-      member.paymentUidLast4,
+    (member) => isPaymentReviewReady(member),
   ).length;
   const renewalWaiting = members.filter(
     (member) => member.status === "renewal_due",
   ).length;
 
-  const endingSoon = members.filter((member) => {
-    const days = daysUntil(member.reviewDueAt);
-    return (
-      (member.status === "trial_active" || member.status === "active_paid") &&
-      days !== null &&
-      days >= 0 &&
-      days <= 7
-    );
-  }).length;
+  const now = new Date();
+  const renewalNoticeTargets = members.filter((member) =>
+    isRenewalNoticeCandidate(member, now, {
+      allowAlreadyReminded: true,
+    }),
+  ).length;
+  const paymentFollowupTargets = members.filter((member) =>
+    isPaymentFollowupCandidate(member, now),
+  ).length;
+  const endingSoon = renewalNoticeTargets + paymentFollowupTargets;
   const invitationEmailTargets = members.filter(
     (member) =>
       member.status === "eligible" &&
@@ -433,15 +436,14 @@ export default async function AdminPage({
           <h2>
             <BellRing width={16} height={16} aria-hidden="true" /> 續約通知重發
           </h2>
-          <span className="subtle">目前 0～7 天內到期：{endingSoon} 位</span>
+          <span className="subtle">目前可提醒：{endingSoon} 位</span>
         </div>
         <div className="panel-body action-row">
           <div>
             <strong>重新發送最新版即將到期續約通知</strong>
             <p className="subtle">
-              會發給狀態為 trial_active / active_paid、Review Due At 距離現在
-              0～7 天內、且有 Telegram User ID
-              的會員；即使之前已收到舊提醒，也會重新發送。
+              會發給 0～7 天內到期、尚未進入續費流程的會員；若會員已在付款流程中，
+              只會提醒尚未補齊截圖或 UID 末四碼的人。已付款、待助理審核、已撤銷者會略過。
             </p>
           </div>
           <form action={resendRenewalRemindersAction}>
