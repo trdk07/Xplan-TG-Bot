@@ -1,5 +1,6 @@
 import { getRuntimeConfig } from "@/lib/config";
-import { addDays, daysUntil, isPast, isoDateTime } from "@/lib/dates";
+import { addDays, isPast, isoDateTime } from "@/lib/dates";
+import { isRenewalNoticeCandidate } from "@/lib/member-state";
 import {
   type Member,
   findMemberByTelegramId,
@@ -26,7 +27,6 @@ import {
 } from "@/lib/telegram";
 
 const INVITE_TTL_HOURS = 24;
-const RENEWAL_REMINDER_DAYS = 7;
 const FLIP_SUCCESS_TAG = "翻倉成功";
 const RENEWAL_OFFER = [
   "續費方案：",
@@ -176,12 +176,6 @@ function renewalOfferQuestion() {
   ].join("\n");
 }
 
-function shouldSendRenewalReminder(member: Member, now: Date): boolean {
-  if (member.renewalReminderSentAt || !member.reviewDueAt) return false;
-  const days = daysUntil(member.reviewDueAt, now);
-  return days !== null && days >= 0 && days <= RENEWAL_REMINDER_DAYS;
-}
-
 function renewalGraceDeadline(member: Member, now: Date): Date {
   const config = getRuntimeConfig();
   return addDays(new Date(member.reviewDueAt || now), config.paymentGraceDays);
@@ -224,10 +218,9 @@ async function expirePaymentPendingMember(
 }
 
 function isEarlyRenewalEligible(member: Member, now: Date): boolean {
-  if (member.status !== "trial_active" && member.status !== "active_paid")
-    return false;
-  const days = daysUntil(member.reviewDueAt, now);
-  return days !== null && days >= 0 && days <= RENEWAL_REMINDER_DAYS;
+  return isRenewalNoticeCandidate(member, now, {
+    allowAlreadyReminded: true,
+  });
 }
 
 export async function sendRenewalReminder(
@@ -852,8 +845,7 @@ export async function runDailyMembershipJob(now = new Date()) {
     }
 
     if (
-      (member.status === "trial_active" || member.status === "active_paid") &&
-      shouldSendRenewalReminder(member, now)
+      isRenewalNoticeCandidate(member, now)
     ) {
       await sendRenewalReminder(member, now);
       results.push({ pageId: member.pageId, action: "renewal_reminder_sent" });
