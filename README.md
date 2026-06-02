@@ -73,6 +73,18 @@ Run the schema helper after adding new bot fields:
 npm run notion:ensure-schema
 ```
 
+The Notion view helper organizes the human-facing database tabs without editing
+member rows. It defaults to dry-run mode:
+
+```bash
+npm run notion:ensure-views
+npm run notion:ensure-views -- --apply
+```
+
+It keeps the main table intact, tightens the current-member view, and creates
+operational views for trial members, payment follow-up, payment review, paid
+members, TradingView revocation, historical members, and raw application data.
+
 ## Local Development
 
 This project uses Next 16, which requires Node `>=20.19.0`.
