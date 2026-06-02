@@ -13,11 +13,14 @@ import { getAdminPassword, getRuntimeConfig } from "@/lib/config";
 import {
   addDays,
   addMonths,
-  daysUntil,
   formatDateTime,
   isoDateTime,
   renewalBaseDate,
 } from "@/lib/dates";
+import {
+  isPaymentFollowupCandidate,
+  isRenewalNoticeCandidate,
+} from "@/lib/member-state";
 import {
   getMemberByPageId,
   listMembers,
@@ -173,20 +176,34 @@ export async function resendRenewalRemindersAction() {
 
   let sentCount = 0;
   for (const member of members) {
-    const days = daysUntil(member.reviewDueAt, now);
-    const shouldResend =
-      Boolean(member.telegramUserId) &&
-      (member.status === "trial_active" || member.status === "active_paid") &&
-      days !== null &&
-      days >= 0 &&
-      days <= 7;
-
-    if (shouldResend) {
+    if (
+      isRenewalNoticeCandidate(member, now, {
+        allowAlreadyReminded: true,
+      })
+    ) {
       await sendRenewalReminder(
         member,
         now,
         "Renewal reminder resent manually by admin",
       );
+      sentCount += 1;
+      continue;
+    }
+
+    if (isPaymentFollowupCandidate(member, now)) {
+      await sendMessage(
+        member.telegramUserId,
+        [
+          "你目前已在續費付款流程中，但付款資料尚未完整。",
+          "",
+          "請上傳轉帳截圖，並回覆 UID 末四碼（4 位數字）。",
+          "如果已完成其中一項，請補上另一項即可。",
+        ].join("\n"),
+      );
+      await updateMember(member.pageId, {
+        lastBotCheckAt: isoDateTime(now),
+        lastBotMessage: "Payment follow-up resent manually by admin",
+      });
       sentCount += 1;
     }
   }
