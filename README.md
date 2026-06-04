@@ -25,6 +25,7 @@ TEACHER_TG_UID=1222518302
 TRIAL_DAYS=30
 PAYMENT_GRACE_DAYS=3
 JOB_SECRET=
+PARTNER_API_TOKEN=
 MEXC_API_BASE_URL=https://api.mexc.com
 MEXC_API_ACCESS_KEY=
 MEXC_API_SECRET_KEY=
@@ -70,6 +71,8 @@ Required properties:
 - `Last Bot Check At` date
 - `Last Bot Message` rich text
 - `Kick Reason` rich text
+- `TradingView` rich text
+- `TradingView Access` select
 
 Status options:
 
@@ -134,6 +137,17 @@ curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
 ```
 
 The daily renewal endpoint remains available at `/api/jobs/daily`. The deployed Worker includes a scheduled handler that calls that endpoint daily when `triggers.crons` is enabled in `wrangler.jsonc`.
+
+## Partner TradingView API
+
+Set `PARTNER_API_TOKEN` as a Cloudflare Worker secret before enabling partner access. The partner can then call:
+
+```bash
+curl -H "Authorization: Bearer $PARTNER_API_TOKEN" \
+  "https://your-worker.example/api/partners/tradingview-members"
+```
+
+The endpoint returns only unique, non-empty `TradingView` values for members whose `Status` is currently allowed to remain in the Telegram group: `trial_active`, `renewal_due`, `payment_pending`, `active_paid`, `partner`, `exempt`, or `VIP`.
 
 ## GitHub Actions Deployment
 
