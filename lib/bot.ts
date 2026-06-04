@@ -8,7 +8,12 @@ import {
   listMembers,
   updateMember,
 } from "@/lib/notion";
-import { activeGroupStatuses, nonExpiringStatuses } from "@/lib/status";
+import {
+  activeGroupStatuses,
+  blockedEntryStatuses,
+  memberStatusLabel,
+  nonExpiringStatuses,
+} from "@/lib/status";
 import {
   type TelegramCallbackQuery,
   type TelegramChatJoinRequest,
@@ -457,6 +462,18 @@ async function handleStart(message: TelegramMessage, now: Date) {
     await refuseAccess(
       message.chat.id,
       "你不在目前的 Notion 名單內，或表單上的 Telegram username 與目前帳號不一致。",
+    );
+    return;
+  }
+
+  if (blockedEntryStatuses.has(member.status)) {
+    await updateMember(member.pageId, {
+      lastBotCheckAt: isoDateTime(now),
+      lastBotMessage: `Invite refused for blocked status: ${member.status}`,
+    });
+    await refuseAccess(
+      message.chat.id,
+      `目前的會員狀態是「${memberStatusLabel(member.status)}」，需由助理重新確認。`,
     );
     return;
   }

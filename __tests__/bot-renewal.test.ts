@@ -45,7 +45,15 @@ vi.mock("@/lib/notion", () => ({
       ) || null
     );
   }),
-  findMemberByTelegramUsername: vi.fn(async () => null),
+  findMemberByTelegramUsername: vi.fn(async (username: string | undefined) => {
+    if (!username) return null;
+    const normalized = `@${username.replace(/^@/, "")}`.toLowerCase();
+    return (
+      state.members.find(
+        (member) => member.telegramUsername.toLowerCase() === normalized,
+      ) || null
+    );
+  }),
   findMemberByExchangeUid: vi.fn(
     async (exchangeName: string, exchangeUid: string) => {
       return (
@@ -576,6 +584,71 @@ describe("renewal bot flow", () => {
     expect(state.sent[0].text).toContain("專屬短效入群連結");
     expect(state.sent[0].text).not.toContain("交易所");
     expect(state.sent[0].text).not.toContain("UID");
+  });
+
+  it.each([
+    ["expired", "已過期"],
+    ["kicked", "已踢出"],
+    ["denied", "已拒絕"],
+  ])(
+    "does not send an invite to a %s member found by Telegram user id",
+    async (status, label) => {
+      state.members = [
+        member({
+          pageId: "page-1",
+          telegramUserId: "1001",
+          status,
+          kickReason: "payment_deadline_missed",
+        }),
+      ];
+
+      await handleTelegramUpdate({
+        update_id: 44,
+        message: {
+          message_id: 1,
+          from: { id: 1001, username: "user" },
+          chat: { id: 1001, type: "private" },
+          text: "/start",
+        },
+      });
+
+      expect(state.invites).toHaveLength(0);
+      expect(state.unbanned).toHaveLength(0);
+      expect(state.members[0].status).toBe(status);
+      expect(state.sent[0].text).toContain("目前無法提供入群連結");
+      expect(state.sent[0].text).toContain(label);
+    },
+  );
+
+  it("does not send an invite to a kicked member found by Telegram username", async () => {
+    state.members = [
+      member({
+        pageId: "page-1",
+        telegramUserId: "",
+        telegramUsername: "@user",
+        status: "kicked",
+        kickReason: "payment_deadline_missed",
+      }),
+    ];
+
+    await handleTelegramUpdate({
+      update_id: 45,
+      message: {
+        message_id: 1,
+        from: { id: 1001, username: "user" },
+        chat: { id: 1001, type: "private" },
+        text: "/start",
+      },
+    });
+
+    expect(state.invites).toHaveLength(0);
+    expect(state.unbanned).toHaveLength(0);
+    expect(state.members[0]).toMatchObject({
+      telegramUserId: "1001",
+      status: "kicked",
+    });
+    expect(state.sent[0].text).toContain("目前無法提供入群連結");
+    expect(state.sent[0].text).toContain("已踢出");
   });
 
   it("reuses an unexpired pending invite on start", async () => {
