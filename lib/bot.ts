@@ -2,10 +2,15 @@ import { getRuntimeConfig } from "@/lib/config";
 import { addDays, isPast, isoDateTime } from "@/lib/dates";
 import { isRenewalNoticeCandidate } from "@/lib/member-state";
 import {
+  getMexcDirectSubaffiliate,
+  mexcDepositMeetsMinimum,
+} from "@/lib/mexc";
+import {
   type Member,
   findMemberByTelegramId,
   findMemberByTelegramUsername,
   listMembers,
+  normalizeExchangeUid,
   updateMember,
 } from "@/lib/notion";
 import {
@@ -49,6 +54,8 @@ const RENEWAL_EXPIRED_MESSAGE =
   "這次續費回覆期限已過，系統已停止此續費流程。若需要重新加入或續費，請聯絡助理。";
 const PAYMENT_EXPIRED_MESSAGE =
   "付款回覆期限已過，系統已停止此付款流程。若已完成轉帳或需要協助，請聯絡助理。";
+const MEXC_UID_MESSAGE =
+  "請回覆你的 MEXC UID。Bot 會確認這個 UID 是否已透過我們的 MEXC 註冊連結完成註冊，並確認入金金額是否達 100 USDT。";
 
 export const exchanges = {
   MEXC: {
@@ -398,6 +405,26 @@ async function refuseAccess(chatId: number, reason: string) {
   );
 }
 
+function hasVerifiedMexcUid(member: Member): boolean {
+  return (
+    member.exchangeRegistered && Boolean(normalizeExchangeUid(member.exchangeUid))
+  );
+}
+
+function needsMexcUidCollection(member: Member): boolean {
+  return (
+    member.status === "eligible" ||
+    member.status === "collecting_info" ||
+    member.status === "invite_sent" ||
+    (member.status === "join_pending" && !hasVerifiedMexcUid(member))
+  );
+}
+
+function mexcUidFromMessage(message: TelegramMessage): string {
+  const text = (message.text || message.caption || "").trim();
+  return text.match(/\d{5,}/)?.[0] || "";
+}
+
 async function createInviteForMember(
   member: Member,
   chatId: number,
@@ -499,11 +526,127 @@ async function handleStart(message: TelegramMessage, now: Date) {
     return;
   }
 
+  if (needsMexcUidCollection(member)) {
+    await updateMember(member.pageId, {
+      status: "collecting_info",
+      telegramUserId,
+      telegramUsername: usernameFromMessage(message),
+      lastBotCheckAt: isoDateTime(now),
+      lastBotMessage: "MEXC UID requested",
+    });
+    await sendMessage(message.chat.id, MEXC_UID_MESSAGE);
+    return;
+  }
+
   await createInviteForMember(
     {
       ...member,
       telegramUserId,
       telegramUsername: usernameFromMessage(message),
+    },
+    message.chat.id,
+    now,
+  );
+}
+
+async function handleMexcUidMessage(
+  member: Member,
+  message: TelegramMessage,
+  now: Date,
+) {
+  const config = getRuntimeConfig();
+  const submittedUid = mexcUidFromMessage(message);
+  if (!submittedUid) {
+    await updateMember(member.pageId, {
+      status: "collecting_info",
+      lastBotCheckAt: isoDateTime(now),
+      lastBotMessage: "MEXC UID missing",
+    });
+    await refuseAccess(message.chat.id, "沒有 UID，無法確認 MEXC 下級帳號資料。");
+    return;
+  }
+
+  const existingUid = normalizeExchangeUid(member.exchangeUid);
+  if (existingUid && existingUid !== normalizeExchangeUid(submittedUid)) {
+    await updateMember(member.pageId, {
+      status: "collecting_info",
+      lastBotCheckAt: isoDateTime(now),
+      lastBotMessage: "Submitted MEXC UID mismatched Notion UID",
+    });
+    await refuseAccess(
+      message.chat.id,
+      "你提供的 MEXC UID 與系統紀錄的 MEXC UID 不一致，請聯絡小夏協助確認。",
+    );
+    return;
+  }
+
+  let referral: Awaited<ReturnType<typeof getMexcDirectSubaffiliate>>;
+  try {
+    referral = await getMexcDirectSubaffiliate(submittedUid, now);
+  } catch (error) {
+    await updateMember(member.pageId, {
+      status: "collecting_info",
+      exchangeUid: submittedUid,
+      uidSubmittedAt: isoDateTime(now),
+      lastBotCheckAt: isoDateTime(now),
+      lastBotMessage: "MEXC UID verification failed",
+    });
+    await refuseAccess(
+      message.chat.id,
+      "目前無法確認 MEXC UID，請聯絡小夏協助人工確認。",
+    );
+    return;
+  }
+
+  if (!referral) {
+    await updateMember(member.pageId, {
+      status: "collecting_info",
+      exchangeUid: submittedUid,
+      uidSubmittedAt: isoDateTime(now),
+      lastBotCheckAt: isoDateTime(now),
+      lastBotMessage: "MEXC UID not found",
+    });
+    await refuseAccess(
+      message.chat.id,
+      "查不到這個 MEXC UID，請聯絡小夏協助確認。",
+    );
+    return;
+  }
+
+  if (!mexcDepositMeetsMinimum(referral, config.mexcMinDepositUsdt)) {
+    await updateMember(member.pageId, {
+      status: "collecting_info",
+      exchangeRegistered: true,
+      exchangeName: "MEXC",
+      exchangeUid: submittedUid,
+      uidSubmittedAt: isoDateTime(now),
+      lastBotCheckAt: isoDateTime(now),
+      lastBotMessage: "MEXC deposit below minimum",
+    });
+    await refuseAccess(
+      message.chat.id,
+      `入金金額未達 ${config.mexcMinDepositUsdt} USDT，請聯絡小夏協助確認。`,
+    );
+    return;
+  }
+
+  await updateMember(member.pageId, {
+    status: "eligible",
+    exchangeRegistered: true,
+    exchangeName: "MEXC",
+    exchangeUid: submittedUid,
+    uidSubmittedAt: isoDateTime(now),
+    lastBotCheckAt: isoDateTime(now),
+    lastBotMessage: "MEXC UID and deposit verified",
+  });
+  await createInviteForMember(
+    {
+      ...member,
+      status: "eligible",
+      exchangeRegistered: true,
+      exchangeName: "MEXC",
+      exchangeUid: submittedUid,
+      telegramUsername: usernameFromMessage(message) || member.telegramUsername,
     },
     message.chat.id,
     now,
@@ -520,6 +663,11 @@ async function handleUidMessage(message: TelegramMessage, now: Date) {
 
   if (member.status === "payment_pending") {
     await handlePaymentProofMessage(member, message, now);
+    return;
+  }
+
+  if (needsMexcUidCollection(member)) {
+    await handleMexcUidMessage(member, message, now);
     return;
   }
 

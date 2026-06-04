@@ -11,6 +11,14 @@ export type RuntimeConfig = {
   trialDays: number;
   paymentGraceDays: number;
   jobSecret: string | null;
+  mexcApiBaseUrl: string;
+  mexcApiAccessKey: string | null;
+  mexcApiSecretKey: string | null;
+  mexcAffiliateEndpoint: string;
+  mexcAffiliateUidParam: string;
+  mexcAffiliateMemberInfo: string | null;
+  mexcAffiliateLookbackDays: number;
+  mexcMinDepositUsdt: number;
 };
 
 const requiredKeys = [
@@ -52,6 +60,15 @@ export function getRuntimeConfig(): RuntimeConfig {
     trialDays: intEnv("TRIAL_DAYS", 30),
     paymentGraceDays: intEnv("PAYMENT_GRACE_DAYS", 3),
     jobSecret: process.env.JOB_SECRET || null,
+    mexcApiBaseUrl: process.env.MEXC_API_BASE_URL || "https://api.mexc.com",
+    mexcApiAccessKey: process.env.MEXC_API_ACCESS_KEY || null,
+    mexcApiSecretKey: process.env.MEXC_API_SECRET_KEY || null,
+    mexcAffiliateEndpoint:
+      process.env.MEXC_AFFILIATE_ENDPOINT || "/api/v3/rebate/affiliate/referral",
+    mexcAffiliateUidParam: process.env.MEXC_AFFILIATE_UID_PARAM || "uid",
+    mexcAffiliateMemberInfo: process.env.MEXC_AFFILIATE_MEMBER_INFO || null,
+    mexcAffiliateLookbackDays: intEnv("MEXC_AFFILIATE_LOOKBACK_DAYS", 365),
+    mexcMinDepositUsdt: intEnv("MEXC_MIN_DEPOSIT_USDT", 100),
   };
 }
 
@@ -77,5 +94,7 @@ export function getDisplayConfig() {
     trialDays: intEnv("TRIAL_DAYS", 30),
     paymentGraceDays: intEnv("PAYMENT_GRACE_DAYS", 3),
     hasJobSecret: Boolean(process.env.JOB_SECRET),
+    hasMexcApiAccessKey: Boolean(process.env.MEXC_API_ACCESS_KEY),
+    hasMexcApiSecretKey: Boolean(process.env.MEXC_API_SECRET_KEY),
   };
 }
