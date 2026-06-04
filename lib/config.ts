@@ -11,6 +11,7 @@ export type RuntimeConfig = {
   trialDays: number;
   paymentGraceDays: number;
   jobSecret: string | null;
+  partnerApiToken: string | null;
   mexcApiBaseUrl: string;
   mexcApiAccessKey: string | null;
   mexcApiSecretKey: string | null;
@@ -60,6 +61,7 @@ export function getRuntimeConfig(): RuntimeConfig {
     trialDays: intEnv("TRIAL_DAYS", 30),
     paymentGraceDays: intEnv("PAYMENT_GRACE_DAYS", 3),
     jobSecret: process.env.JOB_SECRET || null,
+    partnerApiToken: process.env.PARTNER_API_TOKEN?.trim() || null,
     mexcApiBaseUrl: process.env.MEXC_API_BASE_URL || "https://api.mexc.com",
     mexcApiAccessKey: process.env.MEXC_API_ACCESS_KEY || null,
     mexcApiSecretKey: process.env.MEXC_API_SECRET_KEY || null,
@@ -94,6 +96,7 @@ export function getDisplayConfig() {
     trialDays: intEnv("TRIAL_DAYS", 30),
     paymentGraceDays: intEnv("PAYMENT_GRACE_DAYS", 3),
     hasJobSecret: Boolean(process.env.JOB_SECRET),
+    hasPartnerApiToken: Boolean(process.env.PARTNER_API_TOKEN),
     hasMexcApiAccessKey: Boolean(process.env.MEXC_API_ACCESS_KEY),
     hasMexcApiSecretKey: Boolean(process.env.MEXC_API_SECRET_KEY),
   };
