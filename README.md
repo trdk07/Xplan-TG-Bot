@@ -29,7 +29,7 @@ JOB_SECRET=
 
 The Telegram bot must be an administrator in the private supergroup with invite and ban permissions. Configure the Telegram webhook with `allowed_updates` including `message`, `callback_query`, `chat_join_request`, and `chat_member`, plus the same secret token as `TELEGRAM_WEBHOOK_SECRET`.
 
-`EXCHANGE_NAME` and the exchange/UID properties are kept for historical admin data. The current `/start` flow does not ask users for exchange registration or UID; matching by Telegram numeric ID or username is enough to issue a protected invite link.
+`EXCHANGE_NAME` and the exchange/UID properties are kept for historical admin data. The current `/start` flow does not ask users for exchange registration or UID; matching by Telegram numeric ID or username is enough to identify the Notion member record. Members with `expired`, `kicked`, or `denied` status are not sent an invite link automatically and must contact the assistant for review.
 
 ## Notion Data Source
 
