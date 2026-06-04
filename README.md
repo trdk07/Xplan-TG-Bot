@@ -25,11 +25,21 @@ TEACHER_TG_UID=1222518302
 TRIAL_DAYS=30
 PAYMENT_GRACE_DAYS=3
 JOB_SECRET=
+MEXC_API_BASE_URL=https://api.mexc.com
+MEXC_API_ACCESS_KEY=
+MEXC_API_SECRET_KEY=
+MEXC_AFFILIATE_ENDPOINT=/api/v3/rebate/affiliate/referral
+MEXC_AFFILIATE_UID_PARAM=uid
+MEXC_AFFILIATE_MEMBER_INFO=
+MEXC_AFFILIATE_LOOKBACK_DAYS=365
+MEXC_MIN_DEPOSIT_USDT=100
 ```
 
 The Telegram bot must be an administrator in the private supergroup with invite and ban permissions. Configure the Telegram webhook with `allowed_updates` including `message`, `callback_query`, `chat_join_request`, and `chat_member`, plus the same secret token as `TELEGRAM_WEBHOOK_SECRET`.
 
-`EXCHANGE_NAME` and the exchange/UID properties are kept for historical admin data. The current `/start` flow does not ask users for exchange registration or UID; matching by Telegram numeric ID or username is enough to identify the Notion member record. Members with `expired`, `kicked`, or `denied` status are not sent an invite link automatically and must contact the assistant for review.
+`EXCHANGE_NAME` and the exchange/UID properties are used by the `/start` flow. Matching by Telegram numeric ID or username identifies the Notion member record first. New or not-yet-approved members are then asked to reply with their MEXC UID. If Notion already has an `Exchange UID`, the submitted UID must match it. The Bot then checks the MEXC affiliate API by UID, does not query by `inviteCode`, and only sends an invite link when the UID exists in the affiliate data and the deposit amount is at least 100 USDT. Members with `expired`, `kicked`, or `denied` status are not sent an invite link automatically and must contact the assistant for review.
+
+The default `MEXC_AFFILIATE_ENDPOINT` uses the official UID referral endpoint. If MEXC provides a different affiliate endpoint for the account, override `MEXC_AFFILIATE_ENDPOINT` and `MEXC_AFFILIATE_UID_PARAM` in the deployment environment.
 
 ## Notion Data Source
 
