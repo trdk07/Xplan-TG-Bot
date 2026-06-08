@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   Ban,
+  CalendarPlus,
   Eraser,
   Link2Off,
   RefreshCw,
@@ -10,6 +11,7 @@ import {
 } from "lucide-react";
 import {
   clearInviteAction,
+  extendTrialAction,
   kickMemberAction,
   markPaidAction,
   markInvitationEmailSentAction,
@@ -51,6 +53,7 @@ export default async function MemberDetailPage({
   const markPaidThreeMonths = markPaidAction.bind(null, pageId, 3);
   const requestPaymentProof = requestPaymentProofAction.bind(null, pageId);
   const markInvitationEmailSent = markInvitationEmailSentAction.bind(null, pageId);
+  const extendTrial = extendTrialAction.bind(null, pageId);
   const kick = kickMemberAction.bind(null, pageId);
   const resendInvite = resendInviteAction.bind(null, pageId);
   const revokeInvite = revokeInviteAction.bind(null, pageId);
@@ -238,6 +241,14 @@ export default async function MemberDetailPage({
                 清除連結欄位
               </ActionButton>
             </form>
+
+            {!["active_paid", "partner", "exempt", "VIP"].includes(member.status) && (
+              <form action={extendTrial}>
+                <ActionButton icon={CalendarPlus} secondary>
+                  延長體驗期一個月
+                </ActionButton>
+              </form>
+            )}
 
             <form action={kick}>
               <ActionButton icon={Ban} danger>

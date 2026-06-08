@@ -283,6 +283,36 @@ export async function markInvitationEmailSentAction(pageId: string) {
   revalidatePath(`/admin/member/${pageId}`);
 }
 
+export async function extendTrialAction(pageId: string) {
+  await assertAdminAction();
+  const now = new Date();
+  const member = await getMemberByPageId(pageId);
+  if (!member) throw new Error("Member not found");
+
+  const base = renewalBaseDate(member.reviewDueAt, now);
+  const newReviewDueAt = addMonths(base, 1);
+
+  await updateMember(pageId, {
+    status: "trial_active",
+    reviewDueAt: isoDateTime(newReviewDueAt),
+    renewalStep: "",
+    renewalReminderSentAt: null,
+    kickReason: "",
+    lastBotCheckAt: isoDateTime(now),
+    lastBotMessage: "Trial extended by 1 month by admin",
+  });
+
+  if (member.telegramUserId) {
+    await sendMessage(
+      member.telegramUserId,
+      `管理員已為你延長體驗期，新的到期日為 ${formatDateTime(isoDateTime(newReviewDueAt))}，繼續加油！`,
+    );
+  }
+
+  revalidatePath("/admin");
+  revalidatePath(`/admin/member/${pageId}`);
+}
+
 export async function kickMemberAction(pageId: string) {
   await assertAdminAction();
   const member = await getMemberByPageId(pageId);
