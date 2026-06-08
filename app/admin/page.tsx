@@ -12,10 +12,10 @@ import {
   LogOut,
   Search,
   Settings,
-  ShieldCheck,
   Users,
 } from "lucide-react";
 import {
+  kickMemberAction,
   logoutAction,
   requestPaymentProofAction,
   resendRenewalRemindersAction,
@@ -334,10 +334,6 @@ export default async function AdminPage({
       error instanceof Error ? error.message : "Unable to load members";
   }
 
-  const tvPendingRevoke = members.filter(
-    (m) => m.tradingViewAccess === "待撤銷",
-  ).length;
-
   const displayMembers =
     inactive === "show"
       ? members
@@ -382,48 +378,68 @@ export default async function AdminPage({
             Notion-only membership gate and renewal dashboard.
           </p>
         </div>
-        <form action={logoutAction}>
-          <button className="button secondary" type="submit">
-            <LogOut width={16} height={16} aria-hidden="true" />
-            登出
-          </button>
-        </form>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <Link className="button secondary" href="/admin/tradingview">
+            TradingView 名單
+          </Link>
+          <form action={logoutAction}>
+            <button className="button secondary" type="submit">
+              <LogOut width={16} height={16} aria-hidden="true" />
+              登出
+            </button>
+          </form>
+        </div>
       </header>
 
-      <section className="grid stats">
-        <div className="stat">
-          <span className="subtle">Loaded Members</span>
-          <strong>{members.length}</strong>
-        </div>
-        <div className="stat">
-          <span className="subtle">Active</span>
-          <strong>{statCount(members, ["trial_active", "active_paid"])}</strong>
-        </div>
-        <div className="stat">
-          <span className="subtle">Payment Pending</span>
-          <strong>{statCount(members, ["payment_pending"])}</strong>
-        </div>
-        <div className="stat stat-emphasis">
-          <span className="subtle">待續留回覆</span>
-          <strong>{renewalWaiting}</strong>
-        </div>
-        <div className="stat stat-emphasis">
-          <span className="subtle">待審核付款</span>
-          <strong>{paymentProofReady}</strong>
-        </div>
-        <div className="stat">
-          <span className="subtle">Ending Soon</span>
-          <strong>{endingSoon}</strong>
-        </div>
-        <div className="stat stat-emphasis">
-          <span className="subtle">待寄邀請 Email</span>
-          <strong>{invitationEmailTargets.length}</strong>
-        </div>
-        <div className="stat stat-emphasis">
-          <span className="subtle">TradingView 待撤銷</span>
-          <strong>{tvPendingRevoke}</strong>
-        </div>
-      </section>
+      <div className="stats-group">
+        <h3 className="stats-group-label">【現況】</h3>
+        <section className="grid stats">
+          <Link className="stat stat-link" href="/admin">
+            <span className="subtle">總人數</span>
+            <strong>{members.length}</strong>
+          </Link>
+          <Link className="stat stat-link" href="/admin?status=active_paid">
+            <span className="subtle">訂閱中</span>
+            <strong>{statCount(members, ["active_paid"])}</strong>
+          </Link>
+          <Link className="stat stat-link" href="/admin?status=trial_active">
+            <span className="subtle">體驗中</span>
+            <strong>{statCount(members, ["trial_active", "sent_7day_survey", "sent_3day_offer"])}</strong>
+          </Link>
+          <Link className="stat stat-link" href="/admin?status=payment_pending">
+            <span className="subtle">待付款</span>
+            <strong>{statCount(members, ["payment_pending"])}</strong>
+          </Link>
+        </section>
+      </div>
+
+      <div className="stats-group">
+        <h3 className="stats-group-label">【狀況監控】</h3>
+        <section className="grid stats">
+          <Link className="stat stat-link stat-emphasis" href="/admin?status=payment_pending">
+            <span className="subtle">審核付款</span>
+            <strong>{paymentProofReady}</strong>
+          </Link>
+          <Link className="stat stat-link stat-emphasis" href="/admin?status=renewal_due">
+            <span className="subtle">到期未回</span>
+            <strong>{renewalWaiting}</strong>
+          </Link>
+          <Link className="stat stat-link" href="/admin?status=trial_active">
+            <span className="subtle">即將到期</span>
+            <strong>{endingSoon}</strong>
+          </Link>
+        </section>
+      </div>
+
+      <div className="stats-group">
+        <h3 className="stats-group-label">【行政】</h3>
+        <section className="grid stats">
+          <Link className="stat stat-link stat-emphasis" href="/admin?status=eligible">
+            <span className="subtle">待寄邀件</span>
+            <strong>{invitationEmailTargets.length}</strong>
+          </Link>
+        </section>
+      </div>
 
       {resentCount ? (
         <div className="notice success" role="status">
@@ -457,14 +473,14 @@ export default async function AdminPage({
 
       <section className="panel action-panel">
         <div className="panel-head">
-          <h2>入群申請工具</h2>
+          <h2>備援工具</h2>
           <Link className="button secondary" href="/admin/applications">
             MEXC CSV 雙向比對
           </Link>
         </div>
         <div className="panel-body">
           <p className="subtle">
-            截止申請後可貼上 MEXC 後台下載的 CSV，和 Notion/Tally 名單快速比對，並批次標記可入群。
+            Bot 正常運作時不需使用。若 MEXC API 無法驗證，可用此工具人工比對後手動標記可入群。
           </p>
         </div>
       </section>
@@ -650,6 +666,15 @@ export default async function AdminPage({
                   <Filter width={16} height={16} aria-hidden="true" />
                   管理
                 </Link>
+                <form action={kickMemberAction.bind(null, member.pageId)}>
+                  <button
+                    className="button danger"
+                    type="submit"
+                    disabled={!member.telegramUserId}
+                  >
+                    踢出
+                  </button>
+                </form>
               </div>
             </article>
           ))}
@@ -659,18 +684,6 @@ export default async function AdminPage({
         </div>
       </section>
 
-      <section className="grid stats" style={{ marginTop: 20 }}>
-        <div className="stat">
-          <ShieldCheck width={20} height={20} aria-hidden="true" />
-          <span className="subtle">Gate</span>
-          <strong>Join Request</strong>
-        </div>
-        <div className="stat">
-          <CircleDollarSign width={20} height={20} aria-hidden="true" />
-          <span className="subtle">Payment</span>
-          <strong>Pseudocode</strong>
-        </div>
-      </section>
     </main>
   );
 }

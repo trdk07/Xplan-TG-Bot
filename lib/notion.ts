@@ -23,6 +23,7 @@ export type Member = {
   paymentProofFileId: string;
   paymentProofSubmittedAt: string | null;
   paidAt: string | null;
+  subscriptionMonths: number | null;
   finalPnl: string;
   renewalStep: string;
   renewalReminderSentAt: string | null;
@@ -59,6 +60,7 @@ export const notionProperties = {
   paymentProofFileId: "Payment Proof File ID",
   paymentProofSubmittedAt: "Payment Proof Submitted At",
   paidAt: "Paid At",
+  subscriptionMonths: "Subscription Months",
   finalPnl: "Final P/L",
   renewalStep: "Renewal Step",
   renewalReminderSentAt: "Renewal Reminder Sent At",
@@ -186,6 +188,13 @@ export function mapNotionPageToMember(page: NotionPage): Member {
     paymentProofFileId: textProp(page, notionProperties.paymentProofFileId),
     paymentProofSubmittedAt: dateProp(page, notionProperties.paymentProofSubmittedAt),
     paidAt: dateProp(page, notionProperties.paidAt),
+    subscriptionMonths: (() => {
+      const n = page.properties[notionProperties.subscriptionMonths]?.number;
+      if (n != null) return n;
+      const msg = textProp(page, notionProperties.lastBotMessage);
+      const m = msg.match(/\((\d+) months?\)/);
+      return m ? parseInt(m[1], 10) : null;
+    })(),
     finalPnl: textProp(page, notionProperties.finalPnl),
     renewalStep: selectProp(page, notionProperties.renewalStep),
     renewalReminderSentAt: dateProp(page, notionProperties.renewalReminderSentAt),
@@ -283,6 +292,9 @@ export function buildNotionProperties(patch: MemberPatch): Record<string, any> {
   }
   if (patch.paidAt !== undefined) {
     props[notionProperties.paidAt] = dateValue(patch.paidAt);
+  }
+  if (patch.subscriptionMonths !== undefined) {
+    props[notionProperties.subscriptionMonths] = { number: patch.subscriptionMonths };
   }
   if (patch.finalPnl !== undefined) {
     props[notionProperties.finalPnl] = richText(patch.finalPnl);

@@ -90,6 +90,7 @@ export async function markPaidAction(pageId: string, durationMonths: 1 | 3 = 1) 
     await updateMember(pageId, {
       status: "join_pending",
       paidAt: isoDateTime(now),
+      subscriptionMonths: durationMonths,
       reviewDueAt: isoDateTime(reviewDueAt),
       paymentDeadlineAt: null,
       renewalStep: "",
@@ -115,6 +116,7 @@ export async function markPaidAction(pageId: string, durationMonths: 1 | 3 = 1) 
     await updateMember(pageId, {
       status: "active_paid",
       paidAt: isoDateTime(now),
+      subscriptionMonths: durationMonths,
       reviewDueAt: isoDateTime(reviewDueAt),
       paymentDeadlineAt: null,
       renewalStep: "",
