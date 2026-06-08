@@ -291,13 +291,6 @@ function TradingViewSummary({ member }: { member: Member }) {
       <span className="mobile-label">TradingView</span>
       <div className="payment-review">
         <span className="compact-text">{member.tradingView}</span>
-        {member.tradingViewAccess === "待撤銷" ? (
-          <span className="mini-badge danger">待撤銷</span>
-        ) : member.tradingViewAccess === "已撤銷" ? (
-          <span className="mini-badge muted">已撤銷</span>
-        ) : (
-          <span className="mini-badge warning">未標記</span>
-        )}
       </div>
     </div>
   );

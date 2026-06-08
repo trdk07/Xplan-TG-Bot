@@ -296,18 +296,6 @@ export async function kickMemberAction(pageId: string) {
     kickReason: "manual_admin_kick",
     lastBotCheckAt: isoDateTime(new Date()),
     lastBotMessage: "Kicked manually by admin",
-    ...(member.tradingView ? { tradingViewAccess: "待撤銷" } : {}),
-  });
-  revalidatePath("/admin");
-  revalidatePath(`/admin/member/${pageId}`);
-}
-
-export async function markTradingViewRevokedAction(pageId: string) {
-  await assertAdminAction();
-  await updateMember(pageId, {
-    tradingViewAccess: "已撤銷",
-    lastBotCheckAt: isoDateTime(new Date()),
-    lastBotMessage: "TradingView access marked revoked by admin",
   });
   revalidatePath("/admin");
   revalidatePath(`/admin/member/${pageId}`);

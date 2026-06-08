@@ -243,7 +243,6 @@ async function expireRenewalDueMember(
     kickReason: "renewal_not_confirmed",
     lastBotCheckAt: isoDateTime(now),
     lastBotMessage: "Removed after delayed renewal response",
-    ...(member.tradingView ? { tradingViewAccess: "待撤銷" } : {}),
   });
   await sendMessage(chatId, RENEWAL_EXPIRED_MESSAGE);
 }
@@ -259,7 +258,6 @@ async function expirePaymentPendingMember(
     kickReason: "payment_deadline_missed",
     lastBotCheckAt: isoDateTime(now),
     lastBotMessage: "Payment proof submitted after deadline",
-    ...(member.tradingView ? { tradingViewAccess: "待撤銷" } : {}),
   });
   await sendMessage(chatId, PAYMENT_EXPIRED_MESSAGE);
 }
@@ -985,8 +983,7 @@ async function handleChatMember(update: TelegramChatMemberUpdated, now: Date) {
         kickReason: "unauthorized_group_join",
         lastBotCheckAt: isoDateTime(now),
         lastBotMessage: "Unauthorized member removed",
-        ...(member.tradingView ? { tradingViewAccess: "待撤銷" } : {}),
-      });
+          });
     }
     return;
   }
@@ -1038,8 +1035,7 @@ export async function runDailyMembershipJob(now = new Date()) {
         kickReason: "renewal_not_confirmed",
         lastBotCheckAt: isoDateTime(now),
         lastBotMessage: "Removed: renewal_due past reviewDueAt",
-        ...(member.tradingView ? { tradingViewAccess: "待撤銷" } : {}),
-      });
+          });
       await sendMessage(member.telegramUserId, expiredKickMessage(), rejoinKeyboard());
       results.push({ pageId: member.pageId, action: "removed_renewal_due" });
       continue;
@@ -1056,8 +1052,7 @@ export async function runDailyMembershipJob(now = new Date()) {
         kickReason: "payment_deadline_missed",
         lastBotCheckAt: isoDateTime(now),
         lastBotMessage: "Removed: payment_pending past deadline",
-        ...(member.tradingView ? { tradingViewAccess: "待撤銷" } : {}),
-      });
+          });
       await sendMessage(member.telegramUserId, expiredKickMessage(), rejoinKeyboard());
       results.push({ pageId: member.pageId, action: "removed_payment_pending" });
       continue;
@@ -1071,8 +1066,7 @@ export async function runDailyMembershipJob(now = new Date()) {
         kickReason: "user_refused_renewal",
         lastBotCheckAt: isoDateTime(now),
         lastBotMessage: "Removed: user_refused past reviewDueAt",
-        ...(member.tradingView ? { tradingViewAccess: "待撤銷" } : {}),
-      });
+          });
       await sendMessage(member.telegramUserId, graduationMessage());
       results.push({ pageId: member.pageId, action: "removed_user_refused" });
       continue;
