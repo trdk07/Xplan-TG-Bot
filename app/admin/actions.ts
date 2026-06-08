@@ -74,27 +74,63 @@ export async function markPaidAction(pageId: string, durationMonths: 1 | 3 = 1) 
   const member = await getMemberByPageId(pageId);
   if (!member) throw new Error("Member not found");
 
+  const wasKicked = Boolean(member.kickReason);
   const baseDate = renewalBaseDate(member.reviewDueAt, now);
   const reviewDueAt = addMonths(baseDate, durationMonths);
-  await updateMember(pageId, {
-    status: "active_paid",
-    paidAt: isoDateTime(now),
-    reviewDueAt: isoDateTime(reviewDueAt),
-    paymentDeadlineAt: null,
-    renewalStep: "",
-    renewalReminderSentAt: null,
-    kickReason: "",
-    lastBotCheckAt: isoDateTime(now),
-    lastBotMessage: `Marked paid manually by admin (${durationMonths} month${durationMonths > 1 ? "s" : ""})`,
-  });
-  if (member.telegramUserId) {
+  const label = `${durationMonths} month${durationMonths > 1 ? "s" : ""}`;
+
+  if (wasKicked && member.telegramUserId) {
+    // Member was previously kicked — generate invite link so they can rejoin
+    await unbanChatMember(member.telegramUserId);
+    const expiresAt = addDays(now, 1);
+    const invite = await createChatInviteLink({
+      name: `paid-${member.telegramUserId}`.slice(0, 32),
+      expireDate: expiresAt,
+    });
+    await updateMember(pageId, {
+      status: "join_pending",
+      paidAt: isoDateTime(now),
+      reviewDueAt: isoDateTime(reviewDueAt),
+      paymentDeadlineAt: null,
+      renewalStep: "",
+      renewalReminderSentAt: null,
+      kickReason: "",
+      inviteLink: invite.invite_link,
+      inviteExpiresAt: isoDateTime(expiresAt),
+      lastBotCheckAt: isoDateTime(now),
+      lastBotMessage: `Marked paid by admin (${label}), invite sent for rejoin`,
+    });
     await sendMessage(
       member.telegramUserId,
-      `付款狀態已更新，你的會籍目前為有效狀態，有效期限至 ${formatDateTime(
-        isoDateTime(reviewDueAt),
-      )}。`,
+      [
+        "你的訂閱已審核通過！",
+        "",
+        `有效期限至 ${formatDateTime(isoDateTime(reviewDueAt))}。`,
+        "",
+        "請點擊下方專屬連結重新加入群組（連結僅可使用一次，並於 24 小時後失效）：",
+        invite.invite_link,
+      ].join("\n"),
     );
+  } else {
+    await updateMember(pageId, {
+      status: "active_paid",
+      paidAt: isoDateTime(now),
+      reviewDueAt: isoDateTime(reviewDueAt),
+      paymentDeadlineAt: null,
+      renewalStep: "",
+      renewalReminderSentAt: null,
+      kickReason: "",
+      lastBotCheckAt: isoDateTime(now),
+      lastBotMessage: `Marked paid by admin (${label})`,
+    });
+    if (member.telegramUserId) {
+      await sendMessage(
+        member.telegramUserId,
+        `訂閱已更新，目前為有效狀態，有效期限至 ${formatDateTime(isoDateTime(reviewDueAt))}。`,
+      );
+    }
   }
+
   revalidatePath("/admin");
   revalidatePath(`/admin/member/${pageId}`);
 }

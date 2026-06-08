@@ -196,15 +196,12 @@ describe("renewal bot flow", () => {
     await runDailyMembershipJob(now);
 
     expect(state.sent).toHaveLength(1);
-    expect(state.sent[0].text).toContain("你的體驗期將在 7 天內到期");
-    expect(state.sent[0].text).toContain("3個月100U，一個月50U");
+    expect(state.sent[0].text).toContain("7 天後到期");
     expect(state.sent[0].text).not.toContain("MEXC - UID");
     expect(state.sent[0].text).not.toContain("BITMART");
-    expect(state.sent[0].keyboard?.[0]?.[0]).toMatchObject({
-      text: "提前開始續費",
-      callback_data: "renewal:stay",
-    });
-    expect(state.members[0].renewalReminderSentAt).toBe(now.toISOString());
+    expect(state.sent[0].keyboard?.[0]?.[0]?.callback_data).toBe("trial_result:success");
+    expect(state.members[0].status).toBe("sent_7day_survey");
+    expect(state.members[0].renewalStep).toBe("awaiting_trial_result");
   });
 
   it("sends paid members a subscription reminder with early renewal action", async () => {
@@ -218,31 +215,24 @@ describe("renewal bot flow", () => {
     await runDailyMembershipJob(now);
 
     expect(state.sent).toHaveLength(1);
-    expect(state.sent[0].text).toContain("你的訂閱期將在 7 天內到期");
-    expect(state.sent[0].text).toContain(
-      "若你已決定續費，也可點擊下方按鈕提前開始續費申請",
-    );
+    expect(state.sent[0].text).toContain("你的訂閱將在 7 天內到期");
+    expect(state.sent[0].text).toContain("若你已決定續訂");
     expect(state.sent[0].text).not.toContain("MEXC - UID");
     expect(state.sent[0].text).not.toContain("BITMART");
-    expect(state.sent[0].keyboard?.[0]?.[0]?.callback_data).toBe(
-      "renewal:stay",
-    );
+    expect(state.sent[0].keyboard?.[0]?.[0]?.callback_data).toBe("renewal:stay");
+    expect(state.members[0].status).toBe("sent_7day_survey");
   });
 
   it("collects trial result, final P/L, and sends manual payment instructions", async () => {
+    // 7-day survey was already sent; member is awaiting trial result
     state.members = [
       member({
-        reviewDueAt: "2026-05-01T00:00:00.000Z",
+        status: "sent_7day_survey",
+        renewalStep: "awaiting_trial_result",
+        reviewDueAt: "2026-05-08T00:00:00.000Z",
       }),
     ];
     const now = new Date("2026-05-01T00:00:00.000Z");
-
-    await runDailyMembershipJob(now);
-    expect(state.members[0]).toMatchObject({
-      status: "renewal_due",
-      renewalStep: "awaiting_trial_result",
-    });
-    expect(state.sent.at(-1)?.text).toContain("翻倉成功");
 
     await handleTelegramUpdate(
       {
@@ -257,9 +247,7 @@ describe("renewal bot flow", () => {
     );
     expect(state.members[0].tags).toContain("翻倉成功");
     expect(state.members[0].renewalStep).toBe("awaiting_pnl");
-    expect(state.sent.at(-1)?.text).toContain(
-      "請直接回覆目前的合約收益概略即可",
-    );
+    expect(state.sent.at(-1)?.text).toContain("請直接回覆目前的合約收益概略即可");
 
     await handleTelegramUpdate(
       {
@@ -277,9 +265,7 @@ describe("renewal bot flow", () => {
       finalPnl: "+25%",
       renewalStep: "renewal_offer_sent",
     });
-    expect(state.sent.at(-1)?.keyboard?.[0]?.[0]?.callback_data).toBe(
-      "renewal:stay",
-    );
+    expect(state.sent.at(-1)?.keyboard?.[0]?.[0]?.callback_data).toBe("renewal:stay");
 
     await handleTelegramUpdate(
       {
@@ -293,7 +279,7 @@ describe("renewal bot flow", () => {
       now,
     );
     expect(state.members[0].status).toBe("payment_pending");
-    expect(state.members[0].paymentDeadlineAt).toBe("2026-05-04T00:00:00.000Z");
+    expect(state.members[0].paymentDeadlineAt).toBe("2026-05-08T00:00:00.000Z"); // = reviewDueAt
     const paymentInstruction = state.sent.at(-2)?.text || "";
     expect(paymentInstruction).toContain("已收到你的續費申請");
     expect(paymentInstruction).toContain("3個月100U，一個月50U");
@@ -324,9 +310,7 @@ describe("renewal bot flow", () => {
       paymentProofFileId: "large-photo",
       paymentProofSubmittedAt: now.toISOString(),
     });
-    expect(state.sent.at(-1)?.text).toContain(
-      "已收到你的轉帳截圖與 UID 末四碼",
-    );
+    expect(state.sent.at(-1)?.text).toContain("已收到你的轉帳截圖與 UID 末四碼");
   });
 
   it("visually marks clicked inline buttons as selected", async () => {
@@ -357,14 +341,14 @@ describe("renewal bot flow", () => {
 
     expect(state.callbackAnswers.at(-1)).toMatchObject({
       id: "cb-ui",
-      text: "已收到：繼續留下來。完成轉帳後，請在 Bot 對話上傳轉帳截圖與 UID 末四碼。",
+      text: "已收到：繼續訂閱。完成轉帳後，請在 Bot 對話上傳轉帳截圖與 UID 末四碼。",
       showAlert: true,
     });
     expect(state.edited.at(-1)).toMatchObject({
       chatId: 1001,
       messageId: 99,
     });
-    expect(state.edited.at(-1)?.text).toContain("✅ 你已選擇：繼續留下來");
+    expect(state.edited.at(-1)?.text).toContain("✅ 你已選擇：繼續訂閱");
     expect(state.edited.at(-1)?.text).toContain("上傳轉帳截圖與 UID 末四碼");
     expect(state.edited.at(-1)?.keyboard).toBeUndefined();
   });
@@ -410,7 +394,7 @@ describe("renewal bot flow", () => {
     expect(state.sent.at(-1)?.text).toContain("UID 末四碼");
   });
 
-  it("sets tradingViewAccess to 待撤銷 when kicking a member with tradingView via renewal:leave", async () => {
+  it("sets status to user_refused and keeps member in group when renewal:leave is clicked", async () => {
     state.members = [
       member({
         status: "renewal_due",
@@ -434,14 +418,15 @@ describe("renewal bot flow", () => {
     );
 
     expect(state.members[0]).toMatchObject({
-      status: "kicked",
-      kickReason: "user_declined_renewal",
-      tradingViewAccess: "待撤銷",
+      status: "user_refused",
+      renewalStep: "completed",
     });
-    expect(state.kicked).toContain("1001");
+    expect(state.kicked).toHaveLength(0); // not kicked immediately — daily job handles it at expiry
+    expect(state.members[0].tradingViewAccess).toBe(""); // not revoked until daily job kicks
   });
 
-  it("keeps delayed renewal buttons valid during grace but expires them after grace", async () => {
+  it("keeps renewal buttons valid while in renewal_due, and blocks them once expired", async () => {
+    // renewal_due member can still act even after reviewDueAt (daily job hasn't run yet)
     state.members = [
       member({
         status: "renewal_due",
@@ -454,22 +439,23 @@ describe("renewal bot flow", () => {
       {
         update_id: 20,
         callback_query: {
-          id: "cb-grace",
+          id: "cb-stay",
           from: { id: 1001 },
           data: "renewal:stay",
         },
       },
-      new Date("2026-05-03T00:00:00.000Z"),
+      new Date("2026-05-02T00:00:00.000Z"),
     );
 
     expect(state.members[0].status).toBe("payment_pending");
     expect(state.sent.at(-2)?.text).toContain("已收到你的續費申請");
     expect(state.sent.at(-1)?.text).toContain("請上傳轉帳截圖");
 
+    // Once daily job has kicked the member (status=expired), buttons no longer work
     state.members = [
       member({
-        status: "renewal_due",
-        renewalStep: "renewal_offer_sent",
+        status: "expired",
+        kickReason: "renewal_not_confirmed",
         reviewDueAt: "2026-05-01T00:00:00.000Z",
       }),
     ];
@@ -480,7 +466,7 @@ describe("renewal bot flow", () => {
       {
         update_id: 21,
         callback_query: {
-          id: "cb-expired",
+          id: "cb-stale",
           from: { id: 1001 },
           data: "renewal:stay",
         },
@@ -488,12 +474,9 @@ describe("renewal bot flow", () => {
       new Date("2026-05-04T00:00:00.000Z"),
     );
 
-    expect(state.members[0]).toMatchObject({
-      status: "expired",
-      kickReason: "renewal_not_confirmed",
-    });
-    expect(state.kicked).toEqual(["1001"]);
-    expect(state.sent.at(-1)?.text).toContain("這次續費回覆期限已過");
+    expect(state.members[0].status).toBe("expired"); // unchanged
+    expect(state.kicked).toHaveLength(0);
+    expect(state.sent.at(-1)?.text).toContain("這個按鈕已不是目前可操作的步驟");
   });
 
   it("does not accept stale trial result buttons after the member has moved on", async () => {
@@ -572,7 +555,7 @@ describe("renewal bot flow", () => {
       status: "renewal_due",
       renewalStep: "renewal_offer_sent",
     });
-    expect(state.sent[0].text).toContain("付費會籍已到期");
+    expect(state.sent[0].text).toContain("你的訂閱已到期");
     expect(state.sent[0].text).not.toContain("翻倉成功");
   });
 
@@ -685,6 +668,7 @@ describe("renewal bot flow", () => {
         pageId: "page-1",
         telegramUserId: "1001",
         status: "collecting_info",
+        exchangeRegistered: false, // not yet verified — UID collection still required
         exchangeUid: "111111111",
       }),
     ];
@@ -1045,26 +1029,24 @@ describe("renewal bot flow", () => {
     expect(state.sent.at(-1)?.text).toContain("免續費限制");
   });
 
-  it("sends pre-expiry question 3 days before trial expires and sets renewal_due", async () => {
+  it("sends 3-day subscription offer before trial expires and sets sent_3day_offer", async () => {
     const now = new Date("2026-06-07T01:00:00.000Z");
     // reviewDueAt is exactly 3 days away
     state.members = [
       member({
         status: "trial_active",
         reviewDueAt: "2026-06-10T01:00:00.000Z",
-        renewalReminderSentAt: "2026-06-03T00:00:00.000Z",
       }),
     ];
 
     await runDailyMembershipJob(now);
 
     expect(state.sent).toHaveLength(1);
-    expect(state.sent[0].text).toContain("3 天後到期");
+    expect(state.sent[0].text).toContain("3 天內到期");
     expect(state.sent[0].keyboard).toBeDefined();
     expect(state.members[0]).toMatchObject({
-      status: "renewal_due",
-      renewalStep: "awaiting_trial_result",
-      lastBotMessage: "Pre-expiry question sent",
+      status: "sent_3day_offer",
+      lastBotMessage: "3-day subscription offer sent",
     });
   });
 

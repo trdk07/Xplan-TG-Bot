@@ -18,6 +18,7 @@ import {
   blockedEntryStatuses,
   memberStatusLabel,
   nonExpiringStatuses,
+  normalMembershipStatuses,
 } from "@/lib/status";
 import {
   type TelegramCallbackQuery,
@@ -97,10 +98,14 @@ function teacherContactKeyboard() {
 function renewalKeyboard() {
   return [
     [
-      { text: "繼續留下來", callback_data: "renewal:stay" },
-      { text: "暫時不續留", callback_data: "renewal:leave" },
+      { text: "繼續訂閱", callback_data: "renewal:stay" },
+      { text: "暫時不續訂", callback_data: "renewal:leave" },
     ],
   ];
+}
+
+function rejoinKeyboard() {
+  return [[{ text: "申請恢復訂閱", callback_data: "rejoin_apply" }]];
 }
 
 function trialResultKeyboard() {
@@ -113,7 +118,7 @@ function trialResultKeyboard() {
 }
 
 function earlyRenewalKeyboard() {
-  return [[{ text: "提前開始續費", callback_data: "renewal:stay" }]];
+  return [[{ text: "提前開始訂閱", callback_data: "renewal:stay" }]];
 }
 
 export function paymentProofRequestKeyboard() {
@@ -142,45 +147,68 @@ export function manualPaymentProofRequestMessage() {
 }
 
 function renewalReminderMessage(member: Member) {
-  if (member.status === "active_paid") {
+  if (member.status === "active_paid" || member.status === "sent_7day_survey") {
     return [
-      "你的訂閱期將在 7 天內到期。",
+      "你的訂閱將在 7 天內到期。",
       "",
-      "到期時 Bot 會再次詢問是否續費。",
-      "若你已決定續費，也可點擊下方按鈕提前開始續費申請。",
+      "到期時 Bot 會再次詢問是否續訂。",
+      "若你已決定續訂，也可點擊下方按鈕提前開始訂閱申請。",
     ].join("\n");
   }
 
   return [
     "你的體驗期將在 7 天內到期。",
     "",
-    "續費方案：",
-    "3個月100U，一個月50U。（目前沒有年訂閱方案）",
+    "訂閱方案：",
+    "3 個月 100U，1 個月 50U。（目前沒有年訂閱方案）",
     "",
-    "到期時 Bot 會再次詢問是否續費。",
+    "到期時 Bot 會再次詢問是否續訂。",
   ].join("\n");
 }
 
-function preExpiryMessage() {
+function sevenDayTrialSurveyMessage() {
   return [
-    "你的 30 天體驗期將在 3 天後到期。",
-    "請確認目前是否已翻倉成功，到期時群組資格將自動結束。",
+    "你的 30 天體驗期將在 7 天後到期。",
+    "請確認目前是否已翻倉成功。",
   ].join("\n");
 }
 
-function trialExpiredMessage() {
-  return ["你的 30 天體驗期已到期。", "請先確認目前是否已經翻倉成功。"].join(
-    "\n",
-  );
+function subscriptionInfoMessage() {
+  return [
+    "你的訂閱將在 3 天內到期。",
+    "",
+    "訂閱方案：",
+    "3 個月 100U，1 個月 50U。（目前沒有年訂閱方案）",
+    "",
+    "可以使用交易所內部轉帳給小夏：",
+    "MEXC - UID：77242747",
+    "",
+    "若你已決定續訂，可點擊下方按鈕提前開始。",
+    "若你暫時不續訂，也請點擊「暫時不續訂」，助理才不用再人工追蹤確認。",
+  ].join("\n");
 }
 
-function paidExpiredMessage() {
+function membershipExpiredRenewalMessage() {
   return [
-    "你的付費會籍已到期。",
+    "你的訂閱已到期。",
+    "",
     RENEWAL_OFFER,
-    "請確認是否要續費並繼續留在群組。",
-    "若你暫時不續留，也請點擊「暫時不續留」，助理才不用再人工追蹤確認。",
+    "",
+    "請確認是否要訂閱並繼續留在群組。",
+    "若你暫時不續訂，也請點擊「暫時不續訂」，助理才不用再人工追蹤確認。",
   ].join("\n\n");
+}
+
+function expiredKickMessage() {
+  return [
+    "你的訂閱已到期，系統已自動將你移出群組。",
+    "",
+    "若你因忙碌遺漏、或已完成轉帳但未及時完成審核，請點擊下方按鈕重新提交憑證申請恢復訂閱。",
+  ].join("\n");
+}
+
+function graduationMessage() {
+  return "畢業快樂！若日後想重新加入，歡迎隨時聯絡助理。";
 }
 
 function pnlQuestion() {
@@ -289,13 +317,18 @@ async function sendPaymentRequest(
   member: Member,
   chatId: string | number,
   now: Date,
+  deadline?: Date,
 ) {
   const config = getRuntimeConfig();
-  const deadline = addDays(now, config.paymentGraceDays);
+  const actualDeadline =
+    deadline ??
+    (member.reviewDueAt
+      ? new Date(member.reviewDueAt)
+      : addDays(now, config.paymentGraceDays));
   await updateMember(member.pageId, {
     status: "payment_pending",
     renewalStep: "payment_pending",
-    paymentDeadlineAt: isoDateTime(deadline),
+    paymentDeadlineAt: isoDateTime(actualDeadline),
     paymentUidLast4: "",
     paymentProofFileId: "",
     paymentProofSubmittedAt: null,
@@ -420,10 +453,11 @@ function hasVerifiedMexcUid(member: Member): boolean {
 
 function needsMexcUidCollection(member: Member): boolean {
   return (
-    member.status === "eligible" ||
-    member.status === "collecting_info" ||
-    member.status === "invite_sent" ||
-    (member.status === "join_pending" && !hasVerifiedMexcUid(member))
+    (member.status === "eligible" ||
+      member.status === "collecting_info" ||
+      member.status === "invite_sent" ||
+      member.status === "join_pending") &&
+    !hasVerifiedMexcUid(member)
   );
 }
 
@@ -679,7 +713,7 @@ async function handleUidMessage(message: TelegramMessage, now: Date) {
   }
 
   if (
-    member.status === "renewal_due" &&
+    member.status === "sent_7day_survey" &&
     member.renewalStep === "awaiting_pnl"
   ) {
     const finalPnl = (message.text || "").trim();
@@ -703,6 +737,12 @@ async function handleUidMessage(message: TelegramMessage, now: Date) {
 
   await handleStart(message, now);
 }
+
+const renewalDecisionStatuses = new Set([
+  "sent_7day_survey",
+  "sent_3day_offer",
+  "renewal_due",
+]);
 
 async function handleCallback(query: TelegramCallbackQuery, now: Date) {
   if (!query.data) return;
@@ -729,11 +769,7 @@ async function handleCallback(query: TelegramCallbackQuery, now: Date) {
       return;
     }
 
-    await answerCallbackQuery(
-      query.id,
-      "請上傳轉帳截圖，並輸入 UID 末四碼。",
-      true,
-    );
+    await answerCallbackQuery(query.id, "請上傳轉帳截圖，並輸入 UID 末四碼。", true);
     await markCallbackSelection(
       query,
       "我已完成轉帳，補傳付款資料",
@@ -748,20 +784,11 @@ async function handleCallback(query: TelegramCallbackQuery, now: Date) {
     query.data === "trial_result:not_yet"
   ) {
     if (
-      member.status !== "renewal_due" ||
+      member.status !== "sent_7day_survey" ||
       member.renewalStep !== "awaiting_trial_result"
     ) {
-      await answerCallbackQuery(
-        query.id,
-        "這個按鈕已不是目前可操作的步驟",
-        true,
-      );
+      await answerCallbackQuery(query.id, "這個按鈕已不是目前可操作的步驟", true);
       await sendMessage(query.from.id, STALE_STEP_MESSAGE);
-      return;
-    }
-    if (isRenewalGraceExpired(member, now)) {
-      await answerCallbackQuery(query.id, "這次續費回覆期限已過", true);
-      await expireRenewalDueMember(member, query.from.id, now);
       return;
     }
 
@@ -769,7 +796,6 @@ async function handleCallback(query: TelegramCallbackQuery, now: Date) {
       query.data === "trial_result:success" ? "我已經翻倉成功" : "尚未翻倉成功";
     await answerCallbackQuery(query.id, `已收到：${selectedLabel}`);
     await markCallbackSelection(query, selectedLabel);
-
     await updateMember(member.pageId, {
       tags:
         query.data === "trial_result:success"
@@ -795,23 +821,15 @@ async function handleCallback(query: TelegramCallbackQuery, now: Date) {
       await sendMessage(query.from.id, PAYMENT_PROOF_INSTRUCTIONS);
       return;
     }
-    if (member.status === "renewal_due" && isRenewalGraceExpired(member, now)) {
-      await answerCallbackQuery(query.id, "這次續費回覆期限已過", true);
-      await expireRenewalDueMember(member, query.from.id, now);
-      return;
-    }
-    if (
-      member.status === "renewal_due" ||
-      isEarlyRenewalEligible(member, now)
-    ) {
+    if (renewalDecisionStatuses.has(member.status)) {
       await answerCallbackQuery(
         query.id,
-        "已收到：繼續留下來。完成轉帳後，請在 Bot 對話上傳轉帳截圖與 UID 末四碼。",
+        "已收到：繼續訂閱。完成轉帳後，請在 Bot 對話上傳轉帳截圖與 UID 末四碼。",
         true,
       );
       await markCallbackSelection(
         query,
-        "繼續留下來",
+        "繼續訂閱",
         "請查看下方付款資訊；完成轉帳後，上傳轉帳截圖與 UID 末四碼。",
       );
       await sendPaymentRequest(member, query.from.id, now);
@@ -825,36 +843,57 @@ async function handleCallback(query: TelegramCallbackQuery, now: Date) {
   }
 
   if (query.data === "renewal:leave") {
-    if (member.status !== "renewal_due") {
-      await answerCallbackQuery(
-        query.id,
-        "這個按鈕已不是目前可操作的步驟",
-        true,
-      );
+    if (!renewalDecisionStatuses.has(member.status)) {
+      await answerCallbackQuery(query.id, "這個按鈕已不是目前可操作的步驟", true);
       await sendMessage(query.from.id, STALE_STEP_MESSAGE);
       return;
     }
-    if (isRenewalGraceExpired(member, now)) {
-      await answerCallbackQuery(query.id, "這次續費回覆期限已過", true);
-      await expireRenewalDueMember(member, query.from.id, now);
-      return;
-    }
 
-    await answerCallbackQuery(query.id, "已收到：暫時不續留");
-    await markCallbackSelection(query, "暫時不續留");
-    await kickChatMember(member.telegramUserId);
+    await answerCallbackQuery(query.id, "已收到：暫時不續訂");
+    await markCallbackSelection(query, "暫時不續訂");
     await updateMember(member.pageId, {
-      status: "kicked",
+      status: "user_refused",
       renewalStep: "completed",
-      kickReason: "user_declined_renewal",
       lastBotCheckAt: isoDateTime(now),
-      lastBotMessage: "User declined renewal and was removed",
-      ...(member.tradingView ? { tradingViewAccess: "待撤銷" } : {}),
+      lastBotMessage: "User declined renewal, kept until expiry",
     });
     await sendMessage(
       query.from.id,
-      "已收到，你將會被移出群組。之後需要重新加入時請聯絡管理員。",
+      "已收到，你的群組資格將保留到到期日為止，到期後系統會自動移出。",
     );
+    return;
+  }
+
+  if (query.data === "rejoin_apply") {
+    if (member.status !== "expired") {
+      await answerCallbackQuery(query.id, "這個按鈕已不是目前可操作的步驟", true);
+      await sendMessage(query.from.id, STALE_STEP_MESSAGE);
+      return;
+    }
+    const config = getRuntimeConfig();
+    const deadline = addDays(now, config.paymentGraceDays);
+    await updateMember(member.pageId, {
+      status: "payment_pending",
+      renewalStep: "payment_pending",
+      paymentDeadlineAt: isoDateTime(deadline),
+      paymentUidLast4: "",
+      paymentProofFileId: "",
+      paymentProofSubmittedAt: null,
+      lastBotCheckAt: isoDateTime(now),
+      lastBotMessage: "Rejoin application submitted",
+    });
+    await answerCallbackQuery(query.id, "已收到補件申請");
+    await sendMessage(
+      query.from.id,
+      [
+        "已收到申請，請依照以下方式完成付款。",
+        "",
+        RENEWAL_OFFER,
+        "",
+        "完成轉帳後，請直接在這個 Bot 對話上傳轉帳截圖，並輸入 UID 末四碼（4 位數字）。",
+      ].join("\n"),
+    );
+    await sendMessage(query.from.id, PAYMENT_PROOF_INSTRUCTIONS);
     return;
   }
 
@@ -891,14 +930,26 @@ async function handleJoinRequest(request: TelegramChatJoinRequest, now: Date) {
   const config = getRuntimeConfig();
   const acceptedInviteLink = member.inviteLink!;
   const isNonExpiringMember = nonExpiringStatuses.has(member.status);
+  const isPaidRejoin =
+    !isNonExpiringMember &&
+    Boolean(member.paidAt) &&
+    Boolean(member.reviewDueAt) &&
+    !isPast(member.reviewDueAt, now);
+  const statusAfterJoin = isNonExpiringMember
+    ? member.status
+    : isPaidRejoin
+      ? "active_paid"
+      : "trial_active";
+
   await approveChatJoinRequest(request.from.id);
   await revokeChatInviteLink(acceptedInviteLink);
   await updateMember(member.pageId, {
-    status: isNonExpiringMember ? member.status : "trial_active",
+    status: statusAfterJoin,
     groupJoinedAt: isoDateTime(now),
-    reviewDueAt: isNonExpiringMember
-      ? null
-      : isoDateTime(addDays(now, config.trialDays)),
+    reviewDueAt:
+      isNonExpiringMember || isPaidRejoin
+        ? member.reviewDueAt ?? null
+        : isoDateTime(addDays(now, config.trialDays)),
     renewalStep: "",
     renewalReminderSentAt: null,
     inviteLink: null,
@@ -912,7 +963,9 @@ async function handleJoinRequest(request: TelegramChatJoinRequest, now: Date) {
     request.user_chat_id,
     isNonExpiringMember
       ? "入群申請已通過，你的帳號已設定為免續費限制狀態。"
-      : "入群申請已通過，30 天後我會再詢問你是否要繼續留在群組。",
+      : isPaidRejoin
+        ? `入群申請已通過！你的訂閱已恢復，有效期限至 ${member.reviewDueAt ? new Date(member.reviewDueAt).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" }) : ""}。`
+        : "入群申請已通過，30 天後我會再詢問你是否要繼續留在群組。",
   );
 }
 
@@ -973,99 +1026,26 @@ export async function handleTelegramUpdate(
 }
 
 export async function runDailyMembershipJob(now = new Date()) {
-  const config = getRuntimeConfig();
   const members = await listMembers({ limit: 500 });
   const results: Array<{ pageId: string; action: string }> = [];
 
   for (const member of members) {
-    if (member.status === "trial_active" && isPast(member.reviewDueAt, now)) {
-      await sendMessage(
-        member.telegramUserId,
-        trialExpiredMessage(),
-        trialResultKeyboard(),
-      );
-      await updateMember(member.pageId, {
-        status: "renewal_due",
-        renewalStep: "awaiting_trial_result",
-        lastBotCheckAt: isoDateTime(now),
-        lastBotMessage: "Trial expired question sent",
-      });
-      results.push({
-        pageId: member.pageId,
-        action: "trial_expired_question_sent",
-      });
-      continue;
-    }
-
-    if (member.status === "active_paid" && isPast(member.reviewDueAt, now)) {
-      await sendMessage(
-        member.telegramUserId,
-        paidExpiredMessage(),
-        renewalKeyboard(),
-      );
-      await updateMember(member.pageId, {
-        status: "renewal_due",
-        renewalStep: "renewal_offer_sent",
-        lastBotCheckAt: isoDateTime(now),
-        lastBotMessage: "Paid renewal question sent",
-      });
-      results.push({
-        pageId: member.pageId,
-        action: "paid_renewal_question_sent",
-      });
-      continue;
-    }
-
-    if (
-      isRenewalNoticeCandidate(member, now)
-    ) {
-      await sendRenewalReminder(member, now);
-      results.push({ pageId: member.pageId, action: "renewal_reminder_sent" });
-      continue;
-    }
-
-    // 3 days before expiry: send "留/走" question early so members have time to respond
-    const daysLeft = daysUntil(member.reviewDueAt, now);
-    if (
-      member.status === "trial_active" &&
-      daysLeft !== null &&
-      daysLeft > 0 &&
-      daysLeft <= 3
-    ) {
-      await sendMessage(
-        member.telegramUserId,
-        preExpiryMessage(),
-        trialResultKeyboard(),
-      );
-      await updateMember(member.pageId, {
-        status: "renewal_due",
-        renewalStep: "awaiting_trial_result",
-        lastBotCheckAt: isoDateTime(now),
-        lastBotMessage: "Pre-expiry question sent",
-      });
-      results.push({ pageId: member.pageId, action: "pre_expiry_question_sent" });
-      continue;
-    }
-
-    if (
-      member.status === "renewal_due" &&
-      isPast(member.reviewDueAt, now)
-    ) {
+    // Order 1: renewal_due grace expired → kick
+    if (member.status === "renewal_due" && isPast(member.reviewDueAt, now)) {
       await kickChatMember(member.telegramUserId);
       await updateMember(member.pageId, {
         status: "expired",
         kickReason: "renewal_not_confirmed",
         lastBotCheckAt: isoDateTime(now),
-        lastBotMessage: "Removed after renewal grace period",
+        lastBotMessage: "Removed: renewal_due past reviewDueAt",
         ...(member.tradingView ? { tradingViewAccess: "待撤銷" } : {}),
       });
-      results.push({
-        pageId: member.pageId,
-        action: "removed_no_renewal_response",
-      });
+      await sendMessage(member.telegramUserId, expiredKickMessage(), rejoinKeyboard());
+      results.push({ pageId: member.pageId, action: "removed_renewal_due" });
       continue;
     }
 
+    // Order 2: payment_pending past deadline → kick
     if (
       member.status === "payment_pending" &&
       isPast(member.paymentDeadlineAt, now)
@@ -1075,13 +1055,102 @@ export async function runDailyMembershipJob(now = new Date()) {
         status: "expired",
         kickReason: "payment_deadline_missed",
         lastBotCheckAt: isoDateTime(now),
-        lastBotMessage: "Removed after payment deadline",
+        lastBotMessage: "Removed: payment_pending past deadline",
         ...(member.tradingView ? { tradingViewAccess: "待撤銷" } : {}),
       });
-      results.push({
-        pageId: member.pageId,
-        action: "removed_payment_deadline",
+      await sendMessage(member.telegramUserId, expiredKickMessage(), rejoinKeyboard());
+      results.push({ pageId: member.pageId, action: "removed_payment_pending" });
+      continue;
+    }
+
+    // Order 3: user_refused past reviewDueAt → kick silently
+    if (member.status === "user_refused" && isPast(member.reviewDueAt, now)) {
+      await kickChatMember(member.telegramUserId);
+      await updateMember(member.pageId, {
+        status: "expired",
+        kickReason: "user_refused_renewal",
+        lastBotCheckAt: isoDateTime(now),
+        lastBotMessage: "Removed: user_refused past reviewDueAt",
+        ...(member.tradingView ? { tradingViewAccess: "待撤銷" } : {}),
       });
+      await sendMessage(member.telegramUserId, graduationMessage());
+      results.push({ pageId: member.pageId, action: "removed_user_refused" });
+      continue;
+    }
+
+    // Orders 4–6 only apply to normal membership statuses
+    if (!normalMembershipStatuses.has(member.status)) continue;
+
+    // Order 4: normal active + past reviewDueAt → send renewal question
+    if (isPast(member.reviewDueAt, now)) {
+      await sendMessage(
+        member.telegramUserId,
+        membershipExpiredRenewalMessage(),
+        renewalKeyboard(),
+      );
+      await updateMember(member.pageId, {
+        status: "renewal_due",
+        renewalStep: "renewal_offer_sent",
+        lastBotCheckAt: isoDateTime(now),
+        lastBotMessage: "Renewal question sent on expiry",
+      });
+      results.push({ pageId: member.pageId, action: "renewal_question_sent" });
+      continue;
+    }
+
+    const daysLeft = daysUntil(member.reviewDueAt, now);
+    if (daysLeft === null) continue;
+
+    // Order 5: 1–3 days left, not already sent 3-day offer → send subscription info
+    if (member.status !== "sent_3day_offer" && daysLeft >= 1 && daysLeft <= 3) {
+      await sendMessage(
+        member.telegramUserId,
+        subscriptionInfoMessage(),
+        renewalKeyboard(),
+      );
+      await updateMember(member.pageId, {
+        status: "sent_3day_offer",
+        lastBotCheckAt: isoDateTime(now),
+        lastBotMessage: "3-day subscription offer sent",
+      });
+      results.push({ pageId: member.pageId, action: "3day_offer_sent" });
+      continue;
+    }
+
+    // Order 6: 4–7 days left, trial or paid (not already surveyed) → send 7-day notice
+    if (
+      (member.status === "trial_active" || member.status === "active_paid") &&
+      daysLeft >= 4 &&
+      daysLeft <= 7
+    ) {
+      if (member.status === "trial_active") {
+        await sendMessage(
+          member.telegramUserId,
+          sevenDayTrialSurveyMessage(),
+          trialResultKeyboard(),
+        );
+        await updateMember(member.pageId, {
+          status: "sent_7day_survey",
+          renewalStep: "awaiting_trial_result",
+          lastBotCheckAt: isoDateTime(now),
+          lastBotMessage: "7-day trial survey sent",
+        });
+        results.push({ pageId: member.pageId, action: "7day_trial_survey_sent" });
+      } else {
+        await sendMessage(
+          member.telegramUserId,
+          renewalReminderMessage(member),
+          earlyRenewalKeyboard(),
+        );
+        await updateMember(member.pageId, {
+          status: "sent_7day_survey",
+          renewalReminderSentAt: isoDateTime(now),
+          lastBotCheckAt: isoDateTime(now),
+          lastBotMessage: "7-day renewal reminder sent",
+        });
+        results.push({ pageId: member.pageId, action: "7day_renewal_reminder_sent" });
+      }
+      continue;
     }
   }
 

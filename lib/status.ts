@@ -4,6 +4,9 @@ export const memberStatuses = [
   "invite_sent",
   "join_pending",
   "trial_active",
+  "sent_7day_survey",
+  "sent_3day_offer",
+  "user_refused",
   "renewal_due",
   "payment_pending",
   "active_paid",
@@ -23,9 +26,12 @@ export const memberStatusLabels: Record<MemberStatus, string> = {
   invite_sent: "已發連結",
   join_pending: "等待入群",
   trial_active: "體驗中",
-  renewal_due: "待續留確認",
+  sent_7day_survey: "已發7天問卷",
+  sent_3day_offer: "已發3天訂閱通知",
+  user_refused: "已拒絕續訂",
+  renewal_due: "待續訂確認",
   payment_pending: "待付款",
-  active_paid: "已付款有效",
+  active_paid: "訂閱有效",
   partner: "合作夥伴",
   exempt: "免付款",
   VIP: "VIP",
@@ -42,12 +48,23 @@ export const nonExpiringStatuses = new Set<MemberStatus>([
 
 export const activeGroupStatuses = new Set<MemberStatus>([
   "trial_active",
+  "sent_7day_survey",
+  "sent_3day_offer",
+  "user_refused",
   "renewal_due",
   "payment_pending",
   "active_paid",
   "partner",
   "exempt",
   "VIP",
+]);
+
+// Statuses that represent an active membership period (used by Daily Job orders 4-6)
+export const normalMembershipStatuses = new Set<MemberStatus>([
+  "trial_active",
+  "active_paid",
+  "sent_7day_survey",
+  "sent_3day_offer",
 ]);
 
 export const blockedEntryStatuses = new Set<MemberStatus>([
@@ -60,7 +77,6 @@ export function isMemberStatus(value: string): value is MemberStatus {
   return memberStatuses.includes(value as MemberStatus);
 }
 
-// Statuses available in the manual override dropdown.
 // active_paid is intentionally excluded — use the mark-paid buttons instead,
 // which also update reviewDueAt, paidAt, and notify the member via Bot.
 export const manualOverrideStatuses = memberStatuses.filter(
@@ -75,6 +91,8 @@ export function badgeTone(status: MemberStatus): "ok" | "warn" | "danger" {
   if (
     status === "active_paid" ||
     status === "trial_active" ||
+    status === "sent_7day_survey" ||
+    status === "sent_3day_offer" ||
     nonExpiringStatuses.has(status)
   ) {
     return "ok";
