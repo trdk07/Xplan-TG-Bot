@@ -28,6 +28,7 @@ function member(overrides: Partial<Member> = {}): Member {
     paymentProofFileId: "",
     paymentProofSubmittedAt: null,
     paidAt: null,
+    subscriptionMonths: null,
     finalPnl: "",
     renewalStep: "",
     renewalReminderSentAt: null,
