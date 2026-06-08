@@ -291,13 +291,6 @@ function TradingViewSummary({ member }: { member: Member }) {
       <span className="mobile-label">TradingView</span>
       <div className="payment-review">
         <span className="compact-text">{member.tradingView}</span>
-        {member.tradingViewAccess === "待撤銷" ? (
-          <span className="mini-badge danger">待撤銷</span>
-        ) : member.tradingViewAccess === "已撤銷" ? (
-          <span className="mini-badge muted">已撤銷</span>
-        ) : (
-          <span className="mini-badge warning">未標記</span>
-        )}
       </div>
     </div>
   );
@@ -359,6 +352,13 @@ export default async function AdminPage({
     isPaymentFollowupCandidate(member, now),
   ).length;
   const endingSoon = renewalNoticeTargets + paymentFollowupTargets;
+  const paidMembersCount = members.filter((m) => m.paidAt).length;
+  const totalRevenue = members.reduce((sum, m) => {
+    if (!m.paidAt) return sum;
+    if (m.subscriptionMonths === 1) return sum + 50;
+    if (m.subscriptionMonths === 3) return sum + 100;
+    return sum;
+  }, 0);
   const invitationEmailTargets = members.filter(
     (member) =>
       member.status === "eligible" &&
@@ -503,6 +503,22 @@ export default async function AdminPage({
           />
         </div>
       </section>
+
+      <div className="stats-group">
+        <h3 className="stats-group-label">【財務】</h3>
+        <section className="grid stats">
+          <div className="stat">
+            <CircleDollarSign width={20} height={20} aria-hidden="true" />
+            <span className="subtle">累計收款</span>
+            <strong>{totalRevenue} U</strong>
+          </div>
+          <div className="stat">
+            <Users width={20} height={20} aria-hidden="true" />
+            <span className="subtle">付費人數</span>
+            <strong>{paidMembersCount} 位</strong>
+          </div>
+        </section>
+      </div>
 
       <section className="panel" style={{ marginBottom: 20 }}>
         <div className="panel-head">
