@@ -420,10 +420,11 @@ function hasVerifiedMexcUid(member: Member): boolean {
 
 function needsMexcUidCollection(member: Member): boolean {
   return (
-    member.status === "eligible" ||
-    member.status === "collecting_info" ||
-    member.status === "invite_sent" ||
-    (member.status === "join_pending" && !hasVerifiedMexcUid(member))
+    (member.status === "eligible" ||
+      member.status === "collecting_info" ||
+      member.status === "invite_sent" ||
+      member.status === "join_pending") &&
+    !hasVerifiedMexcUid(member)
   );
 }
 
