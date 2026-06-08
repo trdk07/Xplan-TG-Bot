@@ -36,7 +36,6 @@ function member(overrides: Partial<Member> = {}): Member {
     lastBotMessage: "",
     kickReason: "",
     tradingView: "",
-    tradingViewAccess: "",
     ...overrides,
   };
 }
