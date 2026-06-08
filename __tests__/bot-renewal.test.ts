@@ -1044,4 +1044,48 @@ describe("renewal bot flow", () => {
     });
     expect(state.sent.at(-1)?.text).toContain("免續費限制");
   });
+
+  it("sends pre-expiry question 3 days before trial expires and sets renewal_due", async () => {
+    const now = new Date("2026-06-07T01:00:00.000Z");
+    // reviewDueAt is exactly 3 days away
+    state.members = [
+      member({
+        status: "trial_active",
+        reviewDueAt: "2026-06-10T01:00:00.000Z",
+        renewalReminderSentAt: "2026-06-03T00:00:00.000Z",
+      }),
+    ];
+
+    await runDailyMembershipJob(now);
+
+    expect(state.sent).toHaveLength(1);
+    expect(state.sent[0].text).toContain("3 天後到期");
+    expect(state.sent[0].keyboard).toBeDefined();
+    expect(state.members[0]).toMatchObject({
+      status: "renewal_due",
+      renewalStep: "awaiting_trial_result",
+      lastBotMessage: "Pre-expiry question sent",
+    });
+  });
+
+  it("kicks renewal_due member on expiry day with no grace period", async () => {
+    const now = new Date("2026-06-07T01:00:00.000Z");
+    // reviewDueAt is in the past — expiry day has passed
+    state.members = [
+      member({
+        telegramUserId: "1001",
+        status: "renewal_due",
+        renewalStep: "awaiting_trial_result",
+        reviewDueAt: "2026-06-06T23:00:00.000Z",
+      }),
+    ];
+
+    await runDailyMembershipJob(now);
+
+    expect(state.kicked).toContain("1001");
+    expect(state.members[0]).toMatchObject({
+      status: "expired",
+      kickReason: "renewal_not_confirmed",
+    });
+  });
 });

@@ -161,6 +161,13 @@ function renewalReminderMessage(member: Member) {
   ].join("\n");
 }
 
+function preExpiryMessage() {
+  return [
+    "你的 30 天體驗期將在 3 天後到期。",
+    "請確認目前是否已翻倉成功，到期時群組資格將自動結束。",
+  ].join("\n");
+}
+
 function trialExpiredMessage() {
   return ["你的 30 天體驗期已到期。", "請先確認目前是否已經翻倉成功。"].join(
     "\n",
@@ -1017,14 +1024,32 @@ export async function runDailyMembershipJob(now = new Date()) {
       continue;
     }
 
+    // 3 days before expiry: send "留/走" question early so members have time to respond
+    const daysLeft = daysUntil(member.reviewDueAt, now);
+    if (
+      member.status === "trial_active" &&
+      daysLeft !== null &&
+      daysLeft > 0 &&
+      daysLeft <= 3
+    ) {
+      await sendMessage(
+        member.telegramUserId,
+        preExpiryMessage(),
+        trialResultKeyboard(),
+      );
+      await updateMember(member.pageId, {
+        status: "renewal_due",
+        renewalStep: "awaiting_trial_result",
+        lastBotCheckAt: isoDateTime(now),
+        lastBotMessage: "Pre-expiry question sent",
+      });
+      results.push({ pageId: member.pageId, action: "pre_expiry_question_sent" });
+      continue;
+    }
+
     if (
       member.status === "renewal_due" &&
-      isPast(
-        isoDateTime(
-          addDays(new Date(member.reviewDueAt || now), config.paymentGraceDays),
-        ),
-        now,
-      )
+      isPast(member.reviewDueAt, now)
     ) {
       await kickChatMember(member.telegramUserId);
       await updateMember(member.pageId, {
