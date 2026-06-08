@@ -188,7 +188,13 @@ export function mapNotionPageToMember(page: NotionPage): Member {
     paymentProofFileId: textProp(page, notionProperties.paymentProofFileId),
     paymentProofSubmittedAt: dateProp(page, notionProperties.paymentProofSubmittedAt),
     paidAt: dateProp(page, notionProperties.paidAt),
-    subscriptionMonths: page.properties[notionProperties.subscriptionMonths]?.number ?? null,
+    subscriptionMonths: (() => {
+      const n = page.properties[notionProperties.subscriptionMonths]?.number;
+      if (n != null) return n;
+      const msg = textProp(page, notionProperties.lastBotMessage);
+      const m = msg.match(/\((\d+) months?\)/);
+      return m ? parseInt(m[1], 10) : null;
+    })(),
     finalPnl: textProp(page, notionProperties.finalPnl),
     renewalStep: selectProp(page, notionProperties.renewalStep),
     renewalReminderSentAt: dateProp(page, notionProperties.renewalReminderSentAt),

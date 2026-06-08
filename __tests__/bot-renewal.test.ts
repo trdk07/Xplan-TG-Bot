@@ -746,8 +746,8 @@ describe("renewal bot flow", () => {
   });
 
   it.each([
-    ["expired", "已過期"],
-    ["kicked", "已踢出"],
+    ["expired", "已離開"],
+    ["kicked", "已離開"],
     ["denied", "已拒絕"],
   ])(
     "does not send an invite to a %s member found by Telegram user id",
@@ -807,7 +807,7 @@ describe("renewal bot flow", () => {
       status: "kicked",
     });
     expect(state.sent[0].text).toContain("目前無法提供入群連結");
-    expect(state.sent[0].text).toContain("已踢出");
+    expect(state.sent[0].text).toContain("已離開");
   });
 
   it("reuses an unexpired pending invite on start", async () => {
