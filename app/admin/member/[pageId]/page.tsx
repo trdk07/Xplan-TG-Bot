@@ -244,7 +244,7 @@ export default async function MemberDetailPage({
 
             {!["active_paid", "partner", "exempt", "VIP"].includes(member.status) && (
               <form action={extendTrial}>
-                <ActionButton icon={CalendarPlus} secondary>
+                <ActionButton icon={CalendarPlus} secondary small>
                   延長體驗期一個月
                 </ActionButton>
               </form>

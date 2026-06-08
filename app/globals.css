@@ -199,6 +199,13 @@ select {
   color: var(--accent-strong);
 }
 
+.button.small {
+  font-size: 0.8rem;
+  gap: 5px;
+  min-height: 28px;
+  padding: 4px 9px;
+}
+
 .button.danger {
   background: var(--danger);
   border-color: var(--danger);

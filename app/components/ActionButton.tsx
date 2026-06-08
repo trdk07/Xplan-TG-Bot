@@ -5,6 +5,7 @@ type ActionButtonProps = {
   icon: ComponentType<SVGProps<SVGSVGElement>>;
   danger?: boolean;
   secondary?: boolean;
+  small?: boolean;
   disabled?: boolean;
 };
 
@@ -13,15 +14,16 @@ export function ActionButton({
   icon: Icon,
   danger,
   secondary,
+  small,
   disabled,
 }: ActionButtonProps) {
   return (
     <button
-      className={`button${secondary ? " secondary" : ""}${danger ? " danger" : ""}`}
+      className={`button${secondary ? " secondary" : ""}${danger ? " danger" : ""}${small ? " small" : ""}`}
       disabled={disabled}
       type="submit"
     >
-      <Icon width={16} height={16} aria-hidden="true" />
+      <Icon width={small ? 13 : 16} height={small ? 13 : 16} aria-hidden="true" />
       {children}
     </button>
   );
