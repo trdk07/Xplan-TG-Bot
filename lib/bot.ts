@@ -1,8 +1,7 @@
 import { getRuntimeConfig } from "@/lib/config";
 import { addDays, daysUntil, isPast, isoDateTime } from "@/lib/dates";
 import { isRenewalNoticeCandidate } from "@/lib/member-state";
-import {
-} from "@/lib/mexc";
+import { getMexcDirectSubaffiliate, mexcDepositMeetsMinimum } from "@/lib/mexc";
 import {
   type Member,
   findMemberByTelegramId,
@@ -616,6 +615,55 @@ async function handleMexcUidMessage(
     return;
   }
 
+  const config = getRuntimeConfig();
+  let referral: Awaited<ReturnType<typeof getMexcDirectSubaffiliate>> = null;
+  try {
+    referral = await getMexcDirectSubaffiliate(submittedUid, now);
+  } catch {
+    await updateMember(member.pageId, {
+      status: "collecting_info",
+      exchangeUid: submittedUid,
+      uidSubmittedAt: isoDateTime(now),
+      lastBotCheckAt: isoDateTime(now),
+      lastBotMessage: "MEXC UID verification failed",
+    });
+    await refuseAccess(
+      message.chat.id,
+      "無法連接 MEXC 系統，請稍後再試，或聯絡小夏協助確認。",
+    );
+    return;
+  }
+
+  if (!referral) {
+    await updateMember(member.pageId, {
+      status: "collecting_info",
+      exchangeUid: submittedUid,
+      uidSubmittedAt: isoDateTime(now),
+      lastBotCheckAt: isoDateTime(now),
+      lastBotMessage: "MEXC UID not found in affiliate list",
+    });
+    await refuseAccess(
+      message.chat.id,
+      "查無此 MEXC UID，請確認是否使用我們的 MEXC 推薦連結完成註冊，或聯絡小夏協助確認。",
+    );
+    return;
+  }
+
+  if (!mexcDepositMeetsMinimum(referral, config.mexcMinDepositUsdt)) {
+    await updateMember(member.pageId, {
+      status: "collecting_info",
+      exchangeUid: submittedUid,
+      uidSubmittedAt: isoDateTime(now),
+      lastBotCheckAt: isoDateTime(now),
+      lastBotMessage: `MEXC deposit below minimum: ${referral.depositAmount} USDT`,
+    });
+    await refuseAccess(
+      message.chat.id,
+      `入金金額未達 ${config.mexcMinDepositUsdt} USDT，請確認入金後再試，或聯絡小夏協助確認。`,
+    );
+    return;
+  }
+
   await updateMember(member.pageId, {
     status: "eligible",
     exchangeRegistered: true,
@@ -623,7 +671,7 @@ async function handleMexcUidMessage(
     exchangeUid: submittedUid,
     uidSubmittedAt: isoDateTime(now),
     lastBotCheckAt: isoDateTime(now),
-    lastBotMessage: "MEXC UID collected (no API verification)",
+    lastBotMessage: "MEXC UID verified",
   });
   await createInviteForMember(
     {
