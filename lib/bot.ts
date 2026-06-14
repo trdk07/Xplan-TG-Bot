@@ -2,8 +2,6 @@ import { getRuntimeConfig } from "@/lib/config";
 import { addDays, daysUntil, isPast, isoDateTime } from "@/lib/dates";
 import { isRenewalNoticeCandidate } from "@/lib/member-state";
 import {
-  getMexcDirectSubaffiliate,
-  mexcDepositMeetsMinimum,
 } from "@/lib/mexc";
 import {
   type Member,
@@ -593,7 +591,6 @@ async function handleMexcUidMessage(
   message: TelegramMessage,
   now: Date,
 ) {
-  const config = getRuntimeConfig();
   const submittedUid = mexcUidFromMessage(message);
   if (!submittedUid) {
     await updateMember(member.pageId, {
@@ -619,71 +616,21 @@ async function handleMexcUidMessage(
     return;
   }
 
-  let referral: Awaited<ReturnType<typeof getMexcDirectSubaffiliate>>;
-  try {
-    referral = await getMexcDirectSubaffiliate(submittedUid, now);
-  } catch (error) {
-    await updateMember(member.pageId, {
-      status: "collecting_info",
-      exchangeUid: submittedUid,
-      uidSubmittedAt: isoDateTime(now),
-      lastBotCheckAt: isoDateTime(now),
-      lastBotMessage: "MEXC UID verification failed",
-    });
-    await refuseAccess(
-      message.chat.id,
-      "目前無法確認 MEXC UID，請聯絡小夏協助人工確認。",
-    );
-    return;
-  }
-
-  if (!referral) {
-    await updateMember(member.pageId, {
-      status: "collecting_info",
-      exchangeUid: submittedUid,
-      uidSubmittedAt: isoDateTime(now),
-      lastBotCheckAt: isoDateTime(now),
-      lastBotMessage: "MEXC UID not found",
-    });
-    await refuseAccess(
-      message.chat.id,
-      "查不到這個 MEXC UID，請聯絡小夏協助確認。",
-    );
-    return;
-  }
-
-  if (!mexcDepositMeetsMinimum(referral, config.mexcMinDepositUsdt)) {
-    await updateMember(member.pageId, {
-      status: "collecting_info",
-      exchangeRegistered: true,
-      exchangeName: "MEXC",
-      exchangeUid: submittedUid,
-      uidSubmittedAt: isoDateTime(now),
-      lastBotCheckAt: isoDateTime(now),
-      lastBotMessage: "MEXC deposit below minimum",
-    });
-    await refuseAccess(
-      message.chat.id,
-      `入金金額未達 ${config.mexcMinDepositUsdt} USDT，請聯絡小夏協助確認。`,
-    );
-    return;
-  }
-
   await updateMember(member.pageId, {
     status: "eligible",
     exchangeRegistered: true,
-    exchangeName: "MEXC",
+    exchangeName: "Mexc（抹茶）",
     exchangeUid: submittedUid,
     uidSubmittedAt: isoDateTime(now),
     lastBotCheckAt: isoDateTime(now),
-    lastBotMessage: "MEXC UID and deposit verified",
+    lastBotMessage: "MEXC UID collected (no API verification)",
   });
   await createInviteForMember(
     {
       ...member,
       status: "eligible",
       exchangeRegistered: true,
-      exchangeName: "MEXC",
+      exchangeName: "Mexc（抹茶）",
       exchangeUid: submittedUid,
       telegramUsername: usernameFromMessage(message) || member.telegramUsername,
     },
