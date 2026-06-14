@@ -39,6 +39,10 @@ describe("MEXC affiliate client", () => {
       expect(parsed.origin).toBe("https://api.mexc.test");
       expect(parsed.pathname).toBe("/api/v3/rebate/affiliate/referral");
       expect(parsed.searchParams.get("uid")).toBe("987654321");
+      expect(parsed.searchParams.get("page")).toBe("1");
+      expect(parsed.searchParams.get("pageSize")).toBe("100");
+      expect(parsed.searchParams.has("startTime")).toBe(false);
+      expect(parsed.searchParams.has("endTime")).toBe(false);
       expect(parsed.searchParams.has("inviteCode")).toBe(false);
       expect(parsed.searchParams.get("signature")).toBeTruthy();
       expect(init?.headers).toMatchObject({
