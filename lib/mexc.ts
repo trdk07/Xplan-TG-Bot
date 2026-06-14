@@ -1,5 +1,4 @@
 import { getRuntimeConfig } from "@/lib/config";
-import { addDays } from "@/lib/dates";
 
 export type MexcDirectSubaffiliate = {
   uid: string;
@@ -87,12 +86,13 @@ export async function getMexcDirectSubaffiliate(
     throw new Error("Missing MEXC API credentials");
   }
 
-  const endTime = now.getTime();
-  const startTime = addDays(now, -config.mexcAffiliateLookbackDays).getTime();
+  // MEXC affiliate referral accepts UID/page filters, but rejects startTime/endTime
+  // on this endpoint (observed code=601). Keep time-window filtering out of the
+  // referral lookup; depositAmount is returned on the referral record itself.
   const params = new URLSearchParams({
     [config.mexcAffiliateUidParam]: normalizedUid,
-    startTime: String(startTime),
-    endTime: String(endTime),
+    page: "1",
+    pageSize: "100",
     timestamp: String(now.getTime()),
   });
   const signature = await hmacSha256Hex(
