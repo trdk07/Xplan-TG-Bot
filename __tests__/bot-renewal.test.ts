@@ -620,7 +620,7 @@ describe("renewal bot flow", () => {
     expect(state.sent[0].text).toContain("請回覆你的 MEXC UID");
   });
 
-  it("verifies MEXC UID and deposit before sending an invite", async () => {
+  it("accepts MEXC UID and sends invite without API verification", async () => {
     state.members = [
       member({
         pageId: "page-1",
@@ -629,10 +629,6 @@ describe("renewal bot flow", () => {
         exchangeUid: "",
       }),
     ];
-    state.mexcReferrals.set("987654321", {
-      uid: "987654321",
-      depositAmount: "120.50",
-    });
     const now = new Date("2026-05-01T00:00:00.000Z");
 
     await handleTelegramUpdate(
@@ -648,13 +644,13 @@ describe("renewal bot flow", () => {
       now,
     );
 
-    expect(state.mexcCalls).toEqual(["987654321"]);
+    expect(state.mexcCalls).toHaveLength(0);
     expect(state.invites).toHaveLength(1);
     expect(state.unbanned).toEqual(["1001"]);
     expect(state.members[0]).toMatchObject({
       status: "join_pending",
       exchangeRegistered: true,
-      exchangeName: "MEXC",
+      exchangeName: "Mexc（抹茶）",
       exchangeUid: "987654321",
       uidSubmittedAt: now.toISOString(),
       telegramUsername: "@user",
@@ -689,7 +685,7 @@ describe("renewal bot flow", () => {
     expect(state.sent.at(-1)?.text).toContain("聯絡小夏");
   });
 
-  it("refuses invite when submitted MEXC UID is not found", async () => {
+  it("rejects invite when submitted UID has no digits", async () => {
     state.members = [
       member({
         pageId: "page-1",
@@ -705,17 +701,16 @@ describe("renewal bot flow", () => {
         message_id: 1,
         from: { id: 1001, username: "user" },
         chat: { id: 1001, type: "private" },
-        text: "987654321",
+        text: "hello",
       },
     });
 
-    expect(state.mexcCalls).toEqual(["987654321"]);
+    expect(state.mexcCalls).toHaveLength(0);
     expect(state.invites).toHaveLength(0);
-    expect(state.sent.at(-1)?.text).toContain("查不到這個 MEXC UID");
-    expect(state.sent.at(-1)?.text).toContain("聯絡小夏");
+    expect(state.sent.at(-1)?.text).toContain("沒有 UID");
   });
 
-  it("refuses invite when MEXC deposit is below 100 USDT", async () => {
+  it("accepts UID even when no Notion UID pre-filled", async () => {
     state.members = [
       member({
         pageId: "page-1",
@@ -724,10 +719,6 @@ describe("renewal bot flow", () => {
         exchangeUid: "",
       }),
     ];
-    state.mexcReferrals.set("987654321", {
-      uid: "987654321",
-      depositAmount: "99.99",
-    });
 
     await handleTelegramUpdate({
       update_id: 48,
@@ -735,14 +726,14 @@ describe("renewal bot flow", () => {
         message_id: 1,
         from: { id: 1001, username: "user" },
         chat: { id: 1001, type: "private" },
-        text: "987654321",
+        text: "12345678",
       },
     });
 
-    expect(state.mexcCalls).toEqual(["987654321"]);
-    expect(state.invites).toHaveLength(0);
-    expect(state.sent.at(-1)?.text).toContain("入金金額未達 100 USDT");
-    expect(state.sent.at(-1)?.text).toContain("聯絡小夏");
+    expect(state.mexcCalls).toHaveLength(0);
+    expect(state.invites).toHaveLength(1);
+    expect(state.members[0].exchangeUid).toBe("12345678");
+    expect(state.members[0].exchangeRegistered).toBe(true);
   });
 
   it.each([
