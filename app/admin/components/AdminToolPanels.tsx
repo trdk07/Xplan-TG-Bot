@@ -32,7 +32,7 @@ export function AdminToolPanels({
             </p>
           </div>
           <form action={resendRenewalRemindersAction}>
-            <ActionButton icon={BellRing}>重新發送即將到期續約通知</ActionButton>
+            <ActionButton icon={<BellRing />}>重新發送即將到期續約通知</ActionButton>
           </form>
         </div>
       </section>

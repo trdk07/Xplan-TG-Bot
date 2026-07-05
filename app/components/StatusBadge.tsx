@@ -1,5 +1,10 @@
 import { badgeTone, memberStatusLabel, type MemberStatus } from "@/lib/status";
 
 export function StatusBadge({ status }: { status: MemberStatus }) {
-  return <span className={`badge ${badgeTone(status)}`}>{memberStatusLabel(status)}</span>;
+  return (
+    <span className={`badge ${badgeTone(status)}`}>
+      <span className="badge-dot" aria-hidden="true" />
+      {memberStatusLabel(status)}
+    </span>
+  );
 }

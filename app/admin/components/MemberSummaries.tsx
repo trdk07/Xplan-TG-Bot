@@ -15,7 +15,10 @@ export function ExchangeSummary({ member }: { member: Member }) {
     <div className="payment-review">
       <span>{member.exchangeName || "-"}</span>
       {isLegacyBitMart ? (
-        <span className="mini-badge warning">舊會員｜續費改 MEXC</span>
+        <span className="mini-badge warning">
+          <span className="badge-dot" aria-hidden="true" />
+          舊會員｜續費改 MEXC
+        </span>
       ) : null}
     </div>
   );
@@ -34,11 +37,10 @@ export function PaymentReviewSummary({ member }: { member: Member }) {
   const state = paymentReviewState(member);
   if (!state) return <span className="subtle">-</span>;
 
-  const Icon = state.icon;
   return (
     <div className="payment-review">
       <span className={`mini-badge ${state.tone}`}>
-        <Icon width={14} height={14} aria-hidden="true" />
+        <span className="badge-dot" aria-hidden="true" />
         {state.label}
       </span>
       <span className="subtle small-text">{state.detail}</span>
@@ -66,11 +68,10 @@ export function RenewalReviewSummary({ member }: { member: Member }) {
   const state = renewalReviewState(member);
   if (!state) return <span className="subtle">-</span>;
 
-  const Icon = state.icon;
   return (
     <div className="payment-review">
       <span className={`mini-badge ${state.tone}`}>
-        <Icon width={14} height={14} aria-hidden="true" />
+        <span className="badge-dot" aria-hidden="true" />
         {state.label}
       </span>
       <span className="subtle small-text">{state.detail}</span>

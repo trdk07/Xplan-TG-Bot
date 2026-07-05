@@ -109,7 +109,7 @@ export default async function AdminPage({
             TradingView 名單
           </Link>
           <form action={logoutAction}>
-            <ActionButton icon={LogOut} secondary>
+            <ActionButton icon={<LogOut />} secondary>
               登出
             </ActionButton>
           </form>

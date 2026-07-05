@@ -49,11 +49,17 @@ export function StatsOverview({
       <div className="stats-group">
         <h3 className="stats-group-label">【狀況監控】</h3>
         <section className="grid stats">
-          <Link className="stat stat-link stat-emphasis" href="/admin?status=payment_pending">
+          <Link
+            className={`stat stat-link${paymentProofReady > 0 ? " stat-emphasis" : ""}`}
+            href="/admin?status=payment_pending"
+          >
             <span className="subtle">審核付款</span>
             <strong>{paymentProofReady}</strong>
           </Link>
-          <Link className="stat stat-link stat-emphasis" href="/admin?status=renewal_due">
+          <Link
+            className={`stat stat-link${renewalWaiting > 0 ? " stat-emphasis" : ""}`}
+            href="/admin?status=renewal_due"
+          >
             <span className="subtle">到期未回</span>
             <strong>{renewalWaiting}</strong>
           </Link>
@@ -67,7 +73,10 @@ export function StatsOverview({
       <div className="stats-group">
         <h3 className="stats-group-label">【行政】</h3>
         <section className="grid stats">
-          <Link className="stat stat-link stat-emphasis" href="/admin?status=eligible">
+          <Link
+            className={`stat stat-link${invitationEmailCount > 0 ? " stat-emphasis" : ""}`}
+            href="/admin?status=eligible"
+          >
             <span className="subtle">待寄邀件</span>
             <strong>{invitationEmailCount}</strong>
           </Link>

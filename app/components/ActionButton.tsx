@@ -1,12 +1,12 @@
 "use client";
 
-import type { ComponentType, SVGProps } from "react";
+import { cloneElement, isValidElement, type ReactElement, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import { Loader2 } from "lucide-react";
 
 type ActionButtonProps = {
-  children: React.ReactNode;
-  icon: ComponentType<SVGProps<SVGSVGElement>>;
+  children: ReactNode;
+  icon: ReactElement;
   danger?: boolean;
   secondary?: boolean;
   small?: boolean;
@@ -15,7 +15,7 @@ type ActionButtonProps = {
 
 export function ActionButton({
   children,
-  icon: Icon,
+  icon,
   danger,
   secondary,
   small,
@@ -23,6 +23,9 @@ export function ActionButton({
 }: ActionButtonProps) {
   const { pending } = useFormStatus();
   const size = small ? 13 : 16;
+  const sizedIcon = isValidElement<{ width?: number; height?: number }>(icon)
+    ? cloneElement(icon, { width: size, height: size })
+    : icon;
 
   return (
     <button
@@ -33,7 +36,7 @@ export function ActionButton({
       {pending ? (
         <Loader2 className="spin" width={size} height={size} aria-hidden="true" />
       ) : (
-        <Icon width={size} height={size} aria-hidden="true" />
+        sizedIcon
       )}
       {pending ? "處理中…" : children}
     </button>

@@ -74,9 +74,15 @@ export function MembersList({
             <div className="member-status-row">
               <StatusBadge status={member.status} />
               {member.invitationEmailSent ? (
-                <span className="mini-badge success">邀請已送出</span>
+                <span className="mini-badge success">
+                  <span className="badge-dot" aria-hidden="true" />
+                  邀請已送出
+                </span>
               ) : (
-                <span className="mini-badge muted">邀請未送出</span>
+                <span className="mini-badge muted">
+                  <span className="badge-dot" aria-hidden="true" />
+                  邀請未送出
+                </span>
               )}
             </div>
           </div>
@@ -113,7 +119,7 @@ export function MembersList({
 
           <div className="member-actions">
             <form action={requestPaymentProofAction.bind(null, member.pageId)}>
-              <ActionButton icon={Upload} secondary disabled={!member.telegramUserId}>
+              <ActionButton icon={<Upload />} secondary disabled={!member.telegramUserId}>
                 重新付款
               </ActionButton>
             </form>
@@ -125,7 +131,7 @@ export function MembersList({
               管理
             </Link>
             <form action={kickMemberAction.bind(null, member.pageId)}>
-              <ActionButton icon={Ban} danger disabled={!member.telegramUserId}>
+              <ActionButton icon={<Ban />} danger disabled={!member.telegramUserId}>
                 踢出
               </ActionButton>
             </form>

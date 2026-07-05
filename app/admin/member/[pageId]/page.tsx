@@ -191,17 +191,17 @@ export default async function MemberDetailPage({
                 </select>
                 <p className="field-hint">⚠️ 僅修正 Status 欄位，不會更新到期日或通知 Bot。若要標記付款，請用下方按鈕。</p>
               </div>
-              <ActionButton icon={Save}>更新狀態</ActionButton>
+              <ActionButton icon={<Save />}>更新狀態</ActionButton>
             </form>
 
             <form action={markInvitationEmailSent}>
-              <ActionButton icon={Send} secondary disabled={member.invitationEmailSent}>
+              <ActionButton icon={<Send />} secondary disabled={member.invitationEmailSent}>
                 標記已送出邀請 Email
               </ActionButton>
             </form>
 
             <form action={requestPaymentProof}>
-              <ActionButton icon={Upload} secondary disabled={!member.telegramUserId}>
+              <ActionButton icon={<Upload />} secondary disabled={!member.telegramUserId}>
                 重新付款
               </ActionButton>
             </form>
@@ -223,33 +223,33 @@ export default async function MemberDetailPage({
             </form>
 
             <form action={resendInvite}>
-              <ActionButton icon={Send} secondary>
+              <ActionButton icon={<Send />} secondary>
                 重送入群連結
               </ActionButton>
             </form>
 
             <form action={revokeInvite}>
-              <ActionButton icon={Link2Off} secondary disabled={!member.inviteLink}>
+              <ActionButton icon={<Link2Off />} secondary disabled={!member.inviteLink}>
                 撤銷連結
               </ActionButton>
             </form>
 
             <form action={clearInvite}>
-              <ActionButton icon={Eraser} secondary>
+              <ActionButton icon={<Eraser />} secondary>
                 清除連結欄位
               </ActionButton>
             </form>
 
             {!["active_paid", "partner", "exempt", "VIP"].includes(member.status) && (
               <form action={extendTrial}>
-                <ActionButton icon={CalendarPlus} secondary small>
+                <ActionButton icon={<CalendarPlus />} secondary small>
                   延長體驗期一個月
                 </ActionButton>
               </form>
             )}
 
             <form action={kick}>
-              <ActionButton icon={Ban} danger>
+              <ActionButton icon={<Ban />} danger>
                 踢出群組
               </ActionButton>
             </form>

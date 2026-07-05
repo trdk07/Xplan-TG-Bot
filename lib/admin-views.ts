@@ -1,10 +1,3 @@
-import {
-  BadgeCheck,
-  CalendarClock,
-  CircleDollarSign,
-  Clock3,
-  FileWarning,
-} from "lucide-react";
 import { daysUntil, formatDateTime } from "@/lib/dates";
 import type { Member } from "@/lib/notion";
 import type { MemberStatus } from "@/lib/status";
@@ -34,7 +27,6 @@ export function paymentReviewState(member: Member) {
       detail: member.paidAt
         ? `付款時間：${formatDateTime(member.paidAt)}`
         : "會籍有效",
-      icon: BadgeCheck,
     } as const;
   }
 
@@ -47,7 +39,6 @@ export function paymentReviewState(member: Member) {
       tone: "warning",
       label: "待審核",
       detail: `UID 末四碼：${member.paymentUidLast4}`,
-      icon: Clock3,
     } as const;
   }
 
@@ -56,7 +47,6 @@ export function paymentReviewState(member: Member) {
       tone: "warning",
       label: "待補件",
       detail: hasProof ? "缺 UID 末四碼" : "缺轉帳截圖",
-      icon: FileWarning,
     } as const;
   }
 
@@ -64,7 +54,6 @@ export function paymentReviewState(member: Member) {
     tone: "muted",
     label: "待付款資料",
     detail: "尚未收到截圖與 UID 末四碼",
-    icon: Clock3,
   } as const;
 }
 
@@ -83,7 +72,6 @@ export function renewalReviewState(member: Member) {
         tone: "warning",
         label: "待選翻倉",
         detail: "等學員按翻倉成功 / 尚未成功",
-        icon: Clock3,
       } as const;
     }
 
@@ -92,7 +80,6 @@ export function renewalReviewState(member: Member) {
         tone: "warning",
         label: "待回覆收益",
         detail: "等學員回覆合約收益狀況",
-        icon: Clock3,
       } as const;
     }
 
@@ -102,7 +89,6 @@ export function renewalReviewState(member: Member) {
       detail: member.finalPnl
         ? "已回覆收益，等續留選擇"
         : "等學員選擇續費 / 不續留",
-      icon: Clock3,
     } as const;
   }
 
@@ -111,7 +97,6 @@ export function renewalReviewState(member: Member) {
       tone: "warning",
       label: "已申請續費",
       detail: "等付款資料或助理審核",
-      icon: CircleDollarSign,
     } as const;
   }
 
@@ -122,7 +107,6 @@ export function renewalReviewState(member: Member) {
       detail: member.reviewDueAt
         ? `有效期限：${formatDateTime(member.reviewDueAt)}`
         : "會籍有效",
-      icon: BadgeCheck,
     } as const;
   }
 
@@ -132,7 +116,6 @@ export function renewalReviewState(member: Member) {
         tone: "warning",
         label: member.renewalReminderSentAt ? "已提醒續約" : "即將到期",
         detail: dueText,
-        icon: CalendarClock,
       } as const;
     }
 
@@ -142,7 +125,6 @@ export function renewalReviewState(member: Member) {
       detail: member.reviewDueAt
         ? `到期：${formatDateTime(member.reviewDueAt)}`
         : "尚無到期日",
-      icon: CalendarClock,
     } as const;
   }
 
@@ -151,7 +133,6 @@ export function renewalReviewState(member: Member) {
       tone: "danger",
       label: "不續留",
       detail: "學員已選擇暫時不續留",
-      icon: FileWarning,
     } as const;
   }
 
@@ -160,7 +141,6 @@ export function renewalReviewState(member: Member) {
       tone: "danger",
       label: "逾期未完成",
       detail: member.kickReason || "續約或付款期限已過",
-      icon: FileWarning,
     } as const;
   }
 
@@ -173,7 +153,6 @@ export function renewalReviewState(member: Member) {
       tone: "success",
       label: "免續約",
       detail: "不進入續約到期流程",
-      icon: BadgeCheck,
     } as const;
   }
 
