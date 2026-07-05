@@ -23,6 +23,7 @@ import {
 import { ActionButton } from "@/app/components/ActionButton";
 import { ConfirmMarkPaidButton } from "@/app/components/ConfirmMarkPaidButton";
 import { StatusBadge } from "@/app/components/StatusBadge";
+import { isLegacyBitMartMember } from "@/lib/admin-views";
 import { requireAdmin } from "@/lib/auth";
 import { addMonths, formatDateTime, renewalBaseDate } from "@/lib/dates";
 import { getMemberByPageId } from "@/lib/notion";
@@ -58,10 +59,7 @@ export default async function MemberDetailPage({
   const resendInvite = resendInviteAction.bind(null, pageId);
   const revokeInvite = revokeInviteAction.bind(null, pageId);
   const clearInvite = clearInviteAction.bind(null, pageId);
-  const isLegacyBitMartMember = member.exchangeName
-    .trim()
-    .toLowerCase()
-    .includes("bitmart");
+  const isLegacyBitMart = isLegacyBitMartMember(member);
 
   const now = new Date();
   const base = renewalBaseDate(member.reviewDueAt, now);
@@ -105,7 +103,7 @@ export default async function MemberDetailPage({
             <div>Exchange Name</div>
             <div>
               <div>{member.exchangeName || "-"}</div>
-              {isLegacyBitMartMember ? (
+              {isLegacyBitMart ? (
                 <div className="legacy-warning">
                   舊 BitMart 會員：續費付款已改由 MEXC 收款，審核 UID
                   末四碼時請以付款截圖 / MEXC 收款紀錄為準。

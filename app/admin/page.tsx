@@ -1,302 +1,25 @@
 import Link from "next/link";
-import {
-  BadgeCheck,
-  BellRing,
-  Ban,
-  CalendarClock,
-  CircleDollarSign,
-  Clock3,
-  FileWarning,
-  Filter,
-  Upload,
-  ImageIcon,
-  LogOut,
-  Search,
-  Settings,
-  Users,
-} from "lucide-react";
-import {
-  kickMemberAction,
-  logoutAction,
-  requestPaymentProofAction,
-  resendRenewalRemindersAction,
-} from "@/app/admin/actions";
+import { LogOut, Users } from "lucide-react";
+import { logoutAction } from "@/app/admin/actions";
+import { AdminToolPanels } from "@/app/admin/components/AdminToolPanels";
+import { MemberSearchForm } from "@/app/admin/components/MemberSearchForm";
+import { MembersList } from "@/app/admin/components/MembersList";
+import { SettingsPanel } from "@/app/admin/components/SettingsPanel";
+import { StatsOverview } from "@/app/admin/components/StatsOverview";
 import { ActionButton } from "@/app/components/ActionButton";
 import { ActionToast } from "@/app/components/ActionToast";
-import { StatusBadge } from "@/app/components/StatusBadge";
 import { getDisplayConfig, getMissingConfig } from "@/lib/config";
-import { daysUntil, formatDateTime } from "@/lib/dates";
 import {
   isPaymentFollowupCandidate,
   isPaymentReviewReady,
   isRenewalNoticeCandidate,
 } from "@/lib/member-state";
 import { listMembers, type Member } from "@/lib/notion";
-import {
-  memberStatusLabel,
-  memberStatuses,
-  type MemberStatus,
-} from "@/lib/status";
+import { type MemberStatus, memberStatuses } from "@/lib/status";
 import { requireAdmin } from "@/lib/auth";
-
-function statCount(members: Member[], statuses: MemberStatus[]) {
-  return members.filter((member) => statuses.includes(member.status)).length;
-}
 
 function scalar(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] || "" : value || "";
-}
-
-function isLegacyBitMartMember(member: Member) {
-  return member.exchangeName.trim().toLowerCase().includes("bitmart");
-}
-
-function legacyBitMartReviewNote(member: Member) {
-  return isLegacyBitMartMember(member)
-    ? "舊 BitMart 會員，續費請用 MEXC 收款紀錄核對"
-    : "";
-}
-
-function ExchangeSummary({ member }: { member: Member }) {
-  const isLegacyBitMart = isLegacyBitMartMember(member);
-
-  return (
-    <div className="payment-review">
-      <span>{member.exchangeName || "-"}</span>
-      {isLegacyBitMart ? (
-        <span className="mini-badge warning">舊會員｜續費改 MEXC</span>
-      ) : null}
-    </div>
-  );
-}
-
-function paymentReviewState(member: Member) {
-  const hasProof = Boolean(member.paymentProofFileId);
-  const hasUid = Boolean(member.paymentUidLast4);
-
-  if (member.status === "active_paid" || member.paidAt) {
-    return {
-      tone: "success",
-      label: "已標記付款",
-      detail: member.paidAt
-        ? `付款時間：${formatDateTime(member.paidAt)}`
-        : "會籍有效",
-      icon: BadgeCheck,
-    } as const;
-  }
-
-  if (member.status !== "payment_pending") {
-    return null;
-  }
-
-  if (hasProof && hasUid) {
-    return {
-      tone: "warning",
-      label: "待審核",
-      detail: `UID 末四碼：${member.paymentUidLast4}`,
-      icon: Clock3,
-    } as const;
-  }
-
-  if (hasProof || hasUid) {
-    return {
-      tone: "warning",
-      label: "待補件",
-      detail: hasProof ? "缺 UID 末四碼" : "缺轉帳截圖",
-      icon: FileWarning,
-    } as const;
-  }
-
-  return {
-    tone: "muted",
-    label: "待付款資料",
-    detail: "尚未收到截圖與 UID 末四碼",
-    icon: Clock3,
-  } as const;
-}
-
-function DateStack({ label, value }: { label: string; value: string | null }) {
-  return (
-    <div className="date-stack">
-      <span className="mobile-label">{label}</span>
-      <span>{formatDateTime(value)}</span>
-    </div>
-  );
-}
-
-function PaymentReviewSummary({ member }: { member: Member }) {
-  const state = paymentReviewState(member);
-  if (!state) return <span className="subtle">-</span>;
-
-  const Icon = state.icon;
-  return (
-    <div className="payment-review">
-      <span className={`mini-badge ${state.tone}`}>
-        <Icon width={14} height={14} aria-hidden="true" />
-        {state.label}
-      </span>
-      <span className="subtle small-text">{state.detail}</span>
-      {legacyBitMartReviewNote(member) ? (
-        <span className="legacy-note">{legacyBitMartReviewNote(member)}</span>
-      ) : null}
-      {member.paymentProofFileId ? (
-        <a
-          className="proof-link"
-          href={`/api/admin/payment-proof?fileId=${encodeURIComponent(
-            member.paymentProofFileId,
-          )}`}
-          target="_blank"
-          rel="noreferrer"
-        >
-          <ImageIcon width={14} height={14} aria-hidden="true" />
-          看截圖
-        </a>
-      ) : null}
-    </div>
-  );
-}
-
-function renewalReviewState(member: Member) {
-  const days = daysUntil(member.reviewDueAt);
-  const dueText =
-    days === null
-      ? "-"
-      : days < 0
-        ? `已逾期 ${Math.abs(days)} 天`
-        : `剩 ${days} 天`;
-
-  if (member.status === "renewal_due") {
-    if (member.renewalStep === "awaiting_trial_result") {
-      return {
-        tone: "warning",
-        label: "待選翻倉",
-        detail: "等學員按翻倉成功 / 尚未成功",
-        icon: Clock3,
-      } as const;
-    }
-
-    if (member.renewalStep === "awaiting_pnl") {
-      return {
-        tone: "warning",
-        label: "待回覆收益",
-        detail: "等學員回覆合約收益狀況",
-        icon: Clock3,
-      } as const;
-    }
-
-    return {
-      tone: "warning",
-      label: "待選續留",
-      detail: member.finalPnl
-        ? "已回覆收益，等續留選擇"
-        : "等學員選擇續費 / 不續留",
-      icon: Clock3,
-    } as const;
-  }
-
-  if (member.status === "payment_pending") {
-    return {
-      tone: "warning",
-      label: "已申請續費",
-      detail: "等付款資料或助理審核",
-      icon: CircleDollarSign,
-    } as const;
-  }
-
-  if (member.status === "active_paid") {
-    return {
-      tone: "success",
-      label: "已續約有效",
-      detail: member.reviewDueAt
-        ? `有效期限：${formatDateTime(member.reviewDueAt)}`
-        : "會籍有效",
-      icon: BadgeCheck,
-    } as const;
-  }
-
-  if (member.status === "trial_active") {
-    if (days !== null && days >= 0 && days <= 7) {
-      return {
-        tone: "warning",
-        label: member.renewalReminderSentAt ? "已提醒續約" : "即將到期",
-        detail: dueText,
-        icon: CalendarClock,
-      } as const;
-    }
-
-    return {
-      tone: "muted",
-      label: "體驗進行中",
-      detail: member.reviewDueAt
-        ? `到期：${formatDateTime(member.reviewDueAt)}`
-        : "尚無到期日",
-      icon: CalendarClock,
-    } as const;
-  }
-
-  if (member.kickReason === "user_declined_renewal") {
-    return {
-      tone: "danger",
-      label: "不續留",
-      detail: "學員已選擇暫時不續留",
-      icon: FileWarning,
-    } as const;
-  }
-
-  if (member.status === "expired") {
-    return {
-      tone: "danger",
-      label: "逾期未完成",
-      detail: member.kickReason || "續約或付款期限已過",
-      icon: FileWarning,
-    } as const;
-  }
-
-  if (
-    member.status === "partner" ||
-    member.status === "exempt" ||
-    member.status === "VIP"
-  ) {
-    return {
-      tone: "success",
-      label: "免續約",
-      detail: "不進入續約到期流程",
-      icon: BadgeCheck,
-    } as const;
-  }
-
-  return null;
-}
-
-function RenewalReviewSummary({ member }: { member: Member }) {
-  const state = renewalReviewState(member);
-  if (!state) return <span className="subtle">-</span>;
-
-  const Icon = state.icon;
-  return (
-    <div className="payment-review">
-      <span className={`mini-badge ${state.tone}`}>
-        <Icon width={14} height={14} aria-hidden="true" />
-        {state.label}
-      </span>
-      <span className="subtle small-text">{state.detail}</span>
-    </div>
-  );
-}
-
-function TradingViewSummary({ member }: { member: Member }) {
-  if (!member.tradingView) return null;
-  const isInactive = member.status === "expired" || member.status === "kicked";
-  if (!isInactive) return null;
-
-  return (
-    <div className="review-block">
-      <span className="mobile-label">TradingView</span>
-      <div className="payment-review">
-        <span className="compact-text">{member.tradingView}</span>
-      </div>
-    </div>
-  );
 }
 
 export default async function AdminPage({
@@ -393,55 +116,15 @@ export default async function AdminPage({
         </div>
       </header>
 
-      <div className="stats-group">
-        <h3 className="stats-group-label">【現況】</h3>
-        <section className="grid stats">
-          <Link className="stat stat-link" href="/admin">
-            <span className="subtle">總人數</span>
-            <strong>{members.length}</strong>
-          </Link>
-          <Link className="stat stat-link" href="/admin?status=active_paid">
-            <span className="subtle">訂閱中</span>
-            <strong>{statCount(members, ["active_paid"])}</strong>
-          </Link>
-          <Link className="stat stat-link" href="/admin?status=trial_active">
-            <span className="subtle">體驗中</span>
-            <strong>{statCount(members, ["trial_active", "sent_7day_survey", "sent_3day_offer"])}</strong>
-          </Link>
-          <Link className="stat stat-link" href="/admin?status=payment_pending">
-            <span className="subtle">待付款</span>
-            <strong>{statCount(members, ["payment_pending"])}</strong>
-          </Link>
-        </section>
-      </div>
-
-      <div className="stats-group">
-        <h3 className="stats-group-label">【狀況監控】</h3>
-        <section className="grid stats">
-          <Link className="stat stat-link stat-emphasis" href="/admin?status=payment_pending">
-            <span className="subtle">審核付款</span>
-            <strong>{paymentProofReady}</strong>
-          </Link>
-          <Link className="stat stat-link stat-emphasis" href="/admin?status=renewal_due">
-            <span className="subtle">到期未回</span>
-            <strong>{renewalWaiting}</strong>
-          </Link>
-          <Link className="stat stat-link" href="/admin?status=trial_active">
-            <span className="subtle">即將到期</span>
-            <strong>{endingSoon}</strong>
-          </Link>
-        </section>
-      </div>
-
-      <div className="stats-group">
-        <h3 className="stats-group-label">【行政】</h3>
-        <section className="grid stats">
-          <Link className="stat stat-link stat-emphasis" href="/admin?status=eligible">
-            <span className="subtle">待寄邀件</span>
-            <strong>{invitationEmailTargets.length}</strong>
-          </Link>
-        </section>
-      </div>
+      <StatsOverview
+        members={members}
+        paymentProofReady={paymentProofReady}
+        renewalWaiting={renewalWaiting}
+        endingSoon={endingSoon}
+        invitationEmailCount={invitationEmailTargets.length}
+        totalRevenue={totalRevenue}
+        paidMembersCount={paidMembersCount}
+      />
 
       {resentCount ? (
         <ActionToast
@@ -449,100 +132,13 @@ export default async function AdminPage({
         />
       ) : null}
 
-      <section className="panel action-panel">
-        <div className="panel-head">
-          <h2>
-            <BellRing width={16} height={16} aria-hidden="true" /> 續約通知重發
-          </h2>
-          <span className="subtle">目前可提醒：{endingSoon} 位</span>
-        </div>
-        <div className="panel-body action-row">
-          <div>
-            <strong>重新發送最新版即將到期續約通知</strong>
-            <p className="subtle">
-              會發給 0～7 天內到期、尚未進入續費流程的會員；若會員已在付款流程中，
-              只會提醒尚未補齊截圖或 UID 末四碼的人。已付款、待助理審核、已撤銷者會略過。
-            </p>
-          </div>
-          <form action={resendRenewalRemindersAction}>
-            <ActionButton icon={BellRing}>重新發送即將到期續約通知</ActionButton>
-          </form>
-        </div>
-      </section>
+      <AdminToolPanels
+        endingSoon={endingSoon}
+        invitationEmailCount={invitationEmailTargets.length}
+        invitationEmailList={invitationEmailList}
+      />
 
-      <section className="panel action-panel">
-        <div className="panel-head">
-          <h2>備援工具</h2>
-          <Link className="button secondary" href="/admin/applications">
-            MEXC CSV 雙向比對
-          </Link>
-        </div>
-        <div className="panel-body">
-          <p className="subtle">
-            Bot 正常運作時不需使用。若 MEXC API 無法驗證，可用此工具人工比對後手動標記可入群。
-          </p>
-        </div>
-      </section>
-
-      <section className="panel action-panel">
-        <div className="panel-head">
-          <h2>邀請 Email 名單</h2>
-          <span className="subtle">待寄：{invitationEmailTargets.length} 位</span>
-        </div>
-        <div className="panel-body">
-          <p className="subtle">
-            來源為 Notion 的 email 欄位；只列出 status = eligible 且尚未勾選「已送出邀請」的會員。
-            可直接複製下方名單到人工寄信工具。
-          </p>
-          <textarea
-            className="input email-copy-box"
-            readOnly
-            value={invitationEmailList}
-            aria-label="待寄邀請 Email 名單"
-          />
-        </div>
-      </section>
-
-      <div className="stats-group">
-        <h3 className="stats-group-label">【財務】</h3>
-        <section className="grid stats">
-          <div className="stat">
-            <CircleDollarSign width={20} height={20} aria-hidden="true" />
-            <span className="subtle">累計收款</span>
-            <strong>{totalRevenue} U</strong>
-          </div>
-          <div className="stat">
-            <Users width={20} height={20} aria-hidden="true" />
-            <span className="subtle">付費人數</span>
-            <strong>{paidMembersCount} 位</strong>
-          </div>
-        </section>
-      </div>
-
-      <section className="panel" style={{ marginBottom: 20 }}>
-        <div className="panel-head">
-          <h2>
-            <Settings width={16} height={16} aria-hidden="true" /> Settings
-          </h2>
-          <span className="subtle">
-            {missingConfig.length
-              ? `Missing: ${missingConfig.join(", ")}`
-              : "Config OK"}
-          </span>
-        </div>
-        <div className="kv">
-          <div>Exchange</div>
-          <div>{config.exchangeName}</div>
-          <div>Telegram Group</div>
-          <div>{config.telegramGroupId || "-"}</div>
-          <div>Notion Data Source</div>
-          <div>{config.notionDataSourceId || "-"}</div>
-          <div>Trial / Grace</div>
-          <div>
-            {config.trialDays} days / {config.paymentGraceDays} days
-          </div>
-        </div>
-      </section>
+      <SettingsPanel config={config} missingConfig={missingConfig} />
 
       <section className="panel">
         <div className="panel-head">
@@ -552,142 +148,16 @@ export default async function AdminPage({
           <span className="subtle">{loadError || "Synced from Notion"}</span>
         </div>
 
-        <form className="toolbar">
-          <div className="field">
-            <label htmlFor="q">Search</label>
-            <input
-              className="input"
-              id="q"
-              name="q"
-              defaultValue={q}
-              placeholder="Telegram ID, username, email, UID..."
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="status">Status</label>
-            <select
-              className="input"
-              id="status"
-              name="status"
-              defaultValue={status}
-            >
-              <option value="all">all</option>
-              {memberStatuses.map((item) => (
-                <option key={item} value={item}>
-                  {memberStatusLabel(item)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button className="button" type="submit">
-            <Search width={16} height={16} aria-hidden="true" />
-            搜尋
-          </button>
-        </form>
+        <MemberSearchForm q={q} status={status} />
 
-        <div className="members-list">
-          {hiddenCount > 0 ? (
-            <div style={{ marginBottom: 8 }}>
-              <Link
-                className="button secondary"
-                href={`/admin?q=${encodeURIComponent(q)}&status=${status}&inactive=show`}
-              >
-                顯示 {hiddenCount} 位歷史會員
-              </Link>
-            </div>
-          ) : inactive === "show" && members.length > displayMembers.length + hiddenCount ? null : inactive === "show" ? (
-            <div style={{ marginBottom: 8 }}>
-              <Link
-                className="button secondary"
-                href={`/admin?q=${encodeURIComponent(q)}&status=${status}`}
-              >
-                隱藏歷史會員
-              </Link>
-            </div>
-          ) : null}
-          {inactive === "show" && hiddenCount === 0 ? (
-            <div style={{ marginBottom: 8 }}>
-              <Link
-                className="button secondary"
-                href={`/admin?q=${encodeURIComponent(q)}&status=${status}`}
-              >
-                隱藏歷史會員
-              </Link>
-            </div>
-          ) : null}
-          {displayMembers.map((member) => (
-            <article className="member-card" key={member.pageId}>
-              <div className="member-main">
-                <div className="member-identity">
-                  <strong>{member.telegramUserId || "-"}</strong>
-                  <span className="subtle">{member.telegramUsername || "-"}</span>
-                  <span className="email-text">{member.email || "No email"}</span>
-                </div>
-                <div className="member-status-row">
-                  <StatusBadge status={member.status} />
-                  {member.invitationEmailSent ? (
-                    <span className="mini-badge success">邀請已送出</span>
-                  ) : (
-                    <span className="mini-badge muted">邀請未送出</span>
-                  )}
-                </div>
-              </div>
-
-              <div className="member-review-grid">
-                <div className="review-block important-block">
-                  <span className="mobile-label">續約狀態</span>
-                  <RenewalReviewSummary member={member} />
-                </div>
-                <div className="review-block important-block">
-                  <span className="mobile-label">付款審核</span>
-                  <PaymentReviewSummary member={member} />
-                </div>
-                <div className="review-block">
-                  <span className="mobile-label">交易所</span>
-                  <ExchangeSummary member={member} />
-                </div>
-                <div className="review-block compact-text">
-                  <span className="mobile-label">Exchange UID</span>
-                  <span>{member.exchangeUid || "-"}</span>
-                </div>
-                <div className="review-block compact-text">
-                  <span className="mobile-label">Tags</span>
-                  <span>{member.tags.length ? member.tags.join(", ") : "-"}</span>
-                </div>
-                <TradingViewSummary member={member} />
-                <div className="member-date-grid">
-                  <DateStack label="Joined" value={member.groupJoinedAt} />
-                  <DateStack label="Review Due" value={member.reviewDueAt} />
-                  <DateStack label="付款期限" value={member.paymentDeadlineAt} />
-                  <DateStack label="最後檢查" value={member.lastBotCheckAt} />
-                </div>
-              </div>
-
-              <div className="member-actions">
-                <form action={requestPaymentProofAction.bind(null, member.pageId)}>
-                  <ActionButton icon={Upload} secondary disabled={!member.telegramUserId}>
-                    重新付款
-                  </ActionButton>
-                </form>
-                <Link
-                  className="button secondary"
-                  href={`/admin/member/${member.pageId}`}
-                >
-                  <Filter width={16} height={16} aria-hidden="true" />
-                  管理
-                </Link>
-                <form action={kickMemberAction.bind(null, member.pageId)}>
-                  <ActionButton icon={Ban} danger disabled={!member.telegramUserId}>
-                    踢出
-                  </ActionButton>
-                </form>
-              </div>
-            </article>
-          ))}
-          {!members.length ? (
-            <div className="empty-state subtle">沒有符合條件的會員。</div>
-          ) : null}
-        </div>
+        <MembersList
+          members={members}
+          displayMembers={displayMembers}
+          hiddenCount={hiddenCount}
+          inactive={inactive}
+          q={q}
+          status={status}
+        />
       </section>
 
     </main>
