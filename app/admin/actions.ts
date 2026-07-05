@@ -74,6 +74,13 @@ export async function markPaidAction(pageId: string, durationMonths: 1 | 3 = 1) 
   const member = await getMemberByPageId(pageId);
   if (!member) throw new Error("Member not found");
 
+  if (member.paidAt && now.getTime() - new Date(member.paidAt).getTime() < 60_000) {
+    // Guards against double-submit re-adding another billing period.
+    revalidatePath("/admin");
+    revalidatePath(`/admin/member/${pageId}`);
+    return;
+  }
+
   const wasKicked = Boolean(member.kickReason);
   const baseDate = renewalBaseDate(member.reviewDueAt, now);
   const reviewDueAt = addMonths(baseDate, durationMonths);

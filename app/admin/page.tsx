@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   BadgeCheck,
   BellRing,
+  Ban,
   CalendarClock,
   CircleDollarSign,
   Clock3,
@@ -20,6 +21,8 @@ import {
   requestPaymentProofAction,
   resendRenewalRemindersAction,
 } from "@/app/admin/actions";
+import { ActionButton } from "@/app/components/ActionButton";
+import { ActionToast } from "@/app/components/ActionToast";
 import { StatusBadge } from "@/app/components/StatusBadge";
 import { getDisplayConfig, getMissingConfig } from "@/lib/config";
 import { daysUntil, formatDateTime } from "@/lib/dates";
@@ -383,10 +386,9 @@ export default async function AdminPage({
             TradingView 名單
           </Link>
           <form action={logoutAction}>
-            <button className="button secondary" type="submit">
-              <LogOut width={16} height={16} aria-hidden="true" />
+            <ActionButton icon={LogOut} secondary>
               登出
-            </button>
+            </ActionButton>
           </form>
         </div>
       </header>
@@ -442,9 +444,9 @@ export default async function AdminPage({
       </div>
 
       {resentCount ? (
-        <div className="notice success" role="status">
-          已重新發送最新版續約通知給 {resentCount} 位 0～7 天內到期的會員。
-        </div>
+        <ActionToast
+          message={`已重新發送最新版續約通知給 ${resentCount} 位 0～7 天內到期的會員。`}
+        />
       ) : null}
 
       <section className="panel action-panel">
@@ -463,10 +465,7 @@ export default async function AdminPage({
             </p>
           </div>
           <form action={resendRenewalRemindersAction}>
-            <button className="button" type="submit">
-              <BellRing width={16} height={16} aria-hidden="true" />
-              重新發送即將到期續約通知
-            </button>
+            <ActionButton icon={BellRing}>重新發送即將到期續約通知</ActionButton>
           </form>
         </div>
       </section>
@@ -666,14 +665,9 @@ export default async function AdminPage({
 
               <div className="member-actions">
                 <form action={requestPaymentProofAction.bind(null, member.pageId)}>
-                  <button
-                    className="button secondary"
-                    disabled={!member.telegramUserId}
-                    type="submit"
-                  >
-                    <Upload width={16} height={16} aria-hidden="true" />
+                  <ActionButton icon={Upload} secondary disabled={!member.telegramUserId}>
                     重新付款
-                  </button>
+                  </ActionButton>
                 </form>
                 <Link
                   className="button secondary"
@@ -683,13 +677,9 @@ export default async function AdminPage({
                   管理
                 </Link>
                 <form action={kickMemberAction.bind(null, member.pageId)}>
-                  <button
-                    className="button danger"
-                    type="submit"
-                    disabled={!member.telegramUserId}
-                  >
+                  <ActionButton icon={Ban} danger disabled={!member.telegramUserId}>
                     踢出
-                  </button>
+                  </ActionButton>
                 </form>
               </div>
             </article>
