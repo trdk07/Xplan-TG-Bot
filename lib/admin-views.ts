@@ -5,10 +5,44 @@ import {
   isRenewalNoticeCandidate,
 } from "@/lib/member-state";
 import type { Member } from "@/lib/notion";
-import type { MemberStatus } from "@/lib/status";
+import { nonExpiringStatuses, type MemberStatus } from "@/lib/status";
 
 export function statCount(members: Member[], statuses: MemberStatus[]) {
   return members.filter((member) => statuses.includes(member.status)).length;
+}
+
+/** The 50U/100U pricing lives here alongside the other revenue helpers — see also AdminToolPanels' plan copy. */
+export function memberRevenue(member: Member): number {
+  if (!member.paidAt) return 0;
+  if (member.subscriptionMonths === 1) return 50;
+  if (member.subscriptionMonths === 3) return 100;
+  return 0;
+}
+
+export type MonthlyRevenue = { month: string; revenue: number };
+
+export function monthlyRevenue(
+  members: Member[],
+  monthsBack = 12,
+): MonthlyRevenue[] {
+  const totals = new Map<string, number>();
+  for (const member of members) {
+    if (!member.paidAt) continue;
+    const month = member.paidAt.slice(0, 7);
+    totals.set(month, (totals.get(month) || 0) + memberRevenue(member));
+  }
+  return [...totals.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-monthsBack)
+    .map(([month, revenue]) => ({ month, revenue }));
+}
+
+/** Convertible = ever subject to the trial→paid decision (excludes partner/exempt/VIP). */
+export function renewalConversionRate(members: Member[]): number {
+  const convertible = members.filter((m) => !nonExpiringStatuses.has(m.status));
+  if (!convertible.length) return 0;
+  const converted = convertible.filter((m) => Boolean(m.paidAt));
+  return Math.round((converted.length / convertible.length) * 100);
 }
 
 export function isPaymentIncomplete(member: Member): boolean {

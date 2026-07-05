@@ -128,6 +128,9 @@ export default async function AdminPage({
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <Link className="button secondary" href="/admin/revenue">
+            收入報表
+          </Link>
           <Link className="button secondary" href="/admin/tradingview">
             TradingView 名單
           </Link>
