@@ -7,7 +7,7 @@ const COOKIE_NAME = "tg_bot_admin";
 const OPERATOR_COOKIE_NAME = "tg_bot_admin_operator";
 const SESSION_VALUE = "admin";
 
-export const knownOperators = ["老夏", "Rick"] as const;
+export const knownOperators = ["小夏", "Rick"] as const;
 export type Operator = (typeof knownOperators)[number];
 
 export function isKnownOperator(value: string): value is Operator {
