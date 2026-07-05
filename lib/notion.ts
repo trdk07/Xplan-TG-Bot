@@ -421,6 +421,26 @@ export async function findMemberByExchangeUid(
   );
 }
 
+export function memberMatchesQuery(member: Member, query: string): boolean {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return true;
+  return [
+    member.telegramUserId,
+    member.telegramUsername,
+    member.email,
+    member.exchangeName,
+    member.exchangeUid,
+    member.tags.join(" "),
+    member.finalPnl,
+    member.renewalStep,
+    member.status,
+    member.kickReason,
+  ]
+    .join(" ")
+    .toLowerCase()
+    .includes(normalized);
+}
+
 export async function listMembers(options?: {
   status?: MemberStatus | "all";
   query?: string;
@@ -453,23 +473,7 @@ export async function listMembers(options?: {
 
   const query = options?.query?.trim().toLowerCase();
   const filtered = query
-    ? statusFiltered.filter((member) =>
-        [
-          member.telegramUserId,
-          member.telegramUsername,
-          member.email,
-          member.exchangeName,
-          member.exchangeUid,
-          member.tags.join(" "),
-          member.finalPnl,
-          member.renewalStep,
-          member.status,
-          member.kickReason,
-        ]
-          .join(" ")
-          .toLowerCase()
-          .includes(query),
-      )
+    ? statusFiltered.filter((member) => memberMatchesQuery(member, query))
     : statusFiltered;
 
   return filtered.slice(0, options?.limit || filtered.length);

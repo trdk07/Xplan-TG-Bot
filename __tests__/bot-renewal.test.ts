@@ -130,6 +130,7 @@ vi.mock("@/lib/mexc", () => ({
     Number.parseFloat(referral.depositAmount || "0") >= minimumUsdt,
 }));
 
+import { sendMessage } from "@/lib/telegram";
 import {
   exchanges,
   handleTelegramUpdate,
@@ -202,6 +203,31 @@ describe("renewal bot flow", () => {
     expect(state.sent[0].keyboard?.[0]?.[0]?.callback_data).toBe("trial_result:success");
     expect(state.members[0].status).toBe("sent_7day_survey");
     expect(state.members[0].renewalStep).toBe("awaiting_trial_result");
+  });
+
+  it("continues processing other members when one member's daily job step throws, and notifies the teacher", async () => {
+    const failing = member({ pageId: "page-fail", telegramUserId: "2002" });
+    const ok = member({ pageId: "page-ok", telegramUserId: "1001" });
+    state.members = [failing, ok];
+    const now = new Date("2026-05-01T00:00:00.000Z");
+
+    vi.mocked(sendMessage).mockImplementationOnce(async () => {
+      throw new Error("telegram boom");
+    });
+
+    const results = await runDailyMembershipJob(now);
+
+    const failingResult = results.find((r) => r.pageId === "page-fail");
+    expect(failingResult?.action).toBe("error");
+    expect(failingResult?.detail).toContain("telegram boom");
+
+    const okResult = results.find((r) => r.pageId === "page-ok");
+    expect(okResult?.action).toBe("7day_trial_survey_sent");
+    expect(ok.status).toBe("sent_7day_survey");
+
+    const teacherMessage = state.sent.find((s) => s.chatId === "1222518302");
+    expect(teacherMessage).toBeTruthy();
+    expect(teacherMessage?.text).toContain("失敗 1");
   });
 
   it("sends paid members a subscription reminder with early renewal action", async () => {

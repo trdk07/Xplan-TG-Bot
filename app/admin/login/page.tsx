@@ -1,5 +1,6 @@
 import { LockKeyhole } from "lucide-react";
 import { loginAction } from "@/app/admin/actions";
+import { knownOperators } from "@/lib/auth";
 
 export default async function LoginPage({
   searchParams,
@@ -15,6 +16,17 @@ export default async function LoginPage({
         <h1>Bot 管理後台</h1>
         <p className="subtle">輸入管理密碼後即可查看 Notion 會員狀態與手動操作。</p>
         <form action={loginAction} className="stack">
+          <div className="field">
+            <label htmlFor="operator">操作人</label>
+            <select className="input" id="operator" name="operator" defaultValue={knownOperators[0]}>
+              {knownOperators.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+            <p className="field-hint">用來記錄之後每個操作是誰做的。</p>
+          </div>
           <div className="field">
             <label htmlFor="password">Admin Password</label>
             <input

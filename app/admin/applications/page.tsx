@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
+import { ActionToast } from "@/app/components/ActionToast";
 import { MexcCsvMatcher } from "@/app/admin/applications/MexcCsvMatcher";
 import { requireAdmin } from "@/lib/auth";
 import { listMembers } from "@/lib/notion";
@@ -44,9 +45,7 @@ export default async function ApplicationReviewPage({
       </header>
 
       {approved ? (
-        <div className="notice success" role="status">
-          已批次標記 {approved} 位會員為可入群。
-        </div>
+        <ActionToast message={`已批次標記 ${approved} 位會員為可入群。`} />
       ) : null}
 
       <section className="panel">

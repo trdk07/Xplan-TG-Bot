@@ -1,6 +1,7 @@
 "use client";
 
-import { BadgeCheck } from "lucide-react";
+import { BadgeCheck, Loader2 } from "lucide-react";
+import { useFormStatus } from "react-dom";
 
 type Props = {
   label: string;
@@ -9,20 +10,29 @@ type Props = {
 };
 
 export function ConfirmMarkPaidButton({ label, previewDate, confirmMessage }: Props) {
+  const { pending } = useFormStatus();
+
   return (
     <button
       className="button"
       type="submit"
+      disabled={pending}
       onClick={(e) => {
         if (!window.confirm(confirmMessage)) {
           e.preventDefault();
         }
       }}
     >
-      <BadgeCheck width={16} height={16} aria-hidden="true" />
+      {pending ? (
+        <Loader2 className="spin" width={16} height={16} aria-hidden="true" />
+      ) : (
+        <BadgeCheck width={16} height={16} aria-hidden="true" />
+      )}
       <span className="confirm-btn-content">
-        <span>{label}</span>
-        <span className="confirm-btn-preview">到期日將變為：{previewDate}</span>
+        <span>{pending ? "處理中…" : label}</span>
+        {pending ? null : (
+          <span className="confirm-btn-preview">到期日將變為：{previewDate}</span>
+        )}
       </span>
     </button>
   );
