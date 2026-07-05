@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Route } from "next";
 import { LogOut, Users } from "lucide-react";
 import { logoutAction } from "@/app/admin/actions";
 import { AdminToolPanels } from "@/app/admin/components/AdminToolPanels";
@@ -6,15 +7,17 @@ import { MemberSearchForm } from "@/app/admin/components/MemberSearchForm";
 import { MembersList } from "@/app/admin/components/MembersList";
 import { SettingsPanel } from "@/app/admin/components/SettingsPanel";
 import { StatsOverview } from "@/app/admin/components/StatsOverview";
+import { TodayInbox } from "@/app/admin/components/TodayInbox";
 import { ActionButton } from "@/app/components/ActionButton";
 import { ActionToast } from "@/app/components/ActionToast";
+import { isAdminView, isInvitationPending, matchesAdminView } from "@/lib/admin-views";
 import { getDisplayConfig, getMissingConfig } from "@/lib/config";
 import {
   isPaymentFollowupCandidate,
   isPaymentReviewReady,
   isRenewalNoticeCandidate,
 } from "@/lib/member-state";
-import { listMembers, type Member } from "@/lib/notion";
+import { listMembers, memberMatchesQuery, type Member } from "@/lib/notion";
 import { type MemberStatus, memberStatuses } from "@/lib/status";
 import { requireAdmin } from "@/lib/auth";
 
@@ -28,72 +31,92 @@ export default async function AdminPage({
   searchParams: Promise<{
     q?: string | string[];
     status?: string | string[];
+    view?: string | string[];
     resent?: string | string[];
     inactive?: string | string[];
+    density?: string | string[];
   }>;
 }) {
   await requireAdmin();
   const params = await searchParams;
   const q = scalar(params.q);
   const rawStatus = scalar(params.status);
+  const rawView = scalar(params.view);
   const resentCount = scalar(params.resent);
   const inactive = scalar(params.inactive);
+  const density = scalar(params.density) === "full" ? "full" : "compact";
   const status = memberStatuses.includes(rawStatus as MemberStatus)
     ? (rawStatus as MemberStatus)
     : "all";
+  const view = isAdminView(rawView) ? rawView : null;
   const config = getDisplayConfig();
   const missingConfig = getMissingConfig();
 
-  let members: Member[] = [];
+  // allMembers is the unfiltered source of truth for every stat card and
+  // the Inbox — it never changes based on the current search/status/view,
+  // so the numbers on screen always match what a filtered click-through shows.
+  let allMembers: Member[] = [];
   let loadError = "";
   try {
-    members = await listMembers({ status, query: q, limit: 500 });
+    allMembers = await listMembers({ limit: 500 });
   } catch (error) {
     loadError =
       error instanceof Error ? error.message : "Unable to load members";
   }
 
+  const now = new Date();
+
+  const queryFiltered = q
+    ? allMembers.filter((member) => memberMatchesQuery(member, q))
+    : allMembers;
+  const listedMembers = view
+    ? queryFiltered.filter((member) => matchesAdminView(member, view, now))
+    : status !== "all"
+      ? queryFiltered.filter((member) => member.status === status)
+      : queryFiltered;
+
   const displayMembers =
     inactive === "show"
-      ? members
-      : members.filter(
+      ? listedMembers
+      : listedMembers.filter(
           (m) => !["expired", "kicked", "denied"].includes(m.status),
         );
-  const hiddenCount = members.length - displayMembers.length;
+  const hiddenCount = listedMembers.length - displayMembers.length;
 
-  const paymentProofReady = members.filter(
-    (member) => isPaymentReviewReady(member),
+  const paymentProofReady = allMembers.filter((member) =>
+    isPaymentReviewReady(member),
   ).length;
-  const renewalWaiting = members.filter(
+  const renewalWaiting = allMembers.filter(
     (member) => member.status === "renewal_due",
   ).length;
 
-  const now = new Date();
-  const renewalNoticeTargets = members.filter((member) =>
+  const renewalNoticeTargets = allMembers.filter((member) =>
     isRenewalNoticeCandidate(member, now, {
       allowAlreadyReminded: true,
     }),
   ).length;
-  const paymentFollowupTargets = members.filter((member) =>
+  const paymentFollowupTargets = allMembers.filter((member) =>
     isPaymentFollowupCandidate(member, now),
   ).length;
   const endingSoon = renewalNoticeTargets + paymentFollowupTargets;
-  const paidMembersCount = members.filter((m) => m.paidAt).length;
-  const totalRevenue = members.reduce((sum, m) => {
+  const paidMembersCount = allMembers.filter((m) => m.paidAt).length;
+  const totalRevenue = allMembers.reduce((sum, m) => {
     if (!m.paidAt) return sum;
     if (m.subscriptionMonths === 1) return sum + 50;
     if (m.subscriptionMonths === 3) return sum + 100;
     return sum;
   }, 0);
-  const invitationEmailTargets = members.filter(
-    (member) =>
-      member.status === "eligible" &&
-      member.email &&
-      !member.invitationEmailSent,
+  const invitationEmailTargets = allMembers.filter((member) =>
+    isInvitationPending(member),
   );
   const invitationEmailList = invitationEmailTargets
     .map((member) => member.email)
     .join("\n");
+
+  const filterParam = view ? `view=${view}` : `status=${status}`;
+  const densityToggleHref = `/admin?q=${encodeURIComponent(q)}&${filterParam}${
+    inactive === "show" ? "&inactive=show" : ""
+  }&density=${density === "full" ? "compact" : "full"}`;
 
   return (
     <main className="shell">
@@ -116,8 +139,10 @@ export default async function AdminPage({
         </div>
       </header>
 
+      <TodayInbox members={allMembers} />
+
       <StatsOverview
-        members={members}
+        members={allMembers}
         paymentProofReady={paymentProofReady}
         renewalWaiting={renewalWaiting}
         endingSoon={endingSoon}
@@ -145,18 +170,24 @@ export default async function AdminPage({
           <h2>
             <Users width={16} height={16} aria-hidden="true" /> Members
           </h2>
-          <span className="subtle">{loadError || "Synced from Notion"}</span>
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <Link className="subtle small-text" href={densityToggleHref as Route}>
+              {density === "full" ? "精簡檢視" : "完整檢視"}
+            </Link>
+            <span className="subtle">{loadError || "Synced from Notion"}</span>
+          </div>
         </div>
 
         <MemberSearchForm q={q} status={status} />
 
         <MembersList
-          members={members}
+          members={listedMembers}
           displayMembers={displayMembers}
           hiddenCount={hiddenCount}
           inactive={inactive}
           q={q}
-          status={status}
+          filterParam={filterParam}
+          density={density}
         />
       </section>
 

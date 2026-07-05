@@ -7,6 +7,7 @@ import { assertAdminAction, clearAdminCookie, setAdminCookie } from "@/lib/auth"
 import {
   manualPaymentProofRequestMessage,
   paymentProofRequestKeyboard,
+  resendRenewalDueReminder,
   sendRenewalReminder,
 } from "@/lib/bot";
 import { getAdminPassword, getRuntimeConfig } from "@/lib/config";
@@ -290,6 +291,14 @@ export async function markInvitationEmailSentAction(pageId: string) {
       lastBotCheckAt: isoDateTime(new Date()),
       lastBotMessage: "Invitation email marked sent by admin",
     });
+  });
+}
+
+export async function resendRenewalDueReminderAction(pageId: string) {
+  await withAdminAction(pageId, async () => {
+    const member = await getMemberByPageId(pageId);
+    if (!member) throw new Error("Member not found");
+    await resendRenewalDueReminder(member, new Date());
   });
 }
 

@@ -21,7 +21,9 @@ type Props = {
   hiddenCount: number;
   inactive: string;
   q: string;
-  status: string;
+  /** Pre-built `status=x` or `view=x` query param to preserve across links. */
+  filterParam: string;
+  density: "compact" | "full";
 };
 
 export function MembersList({
@@ -30,15 +32,16 @@ export function MembersList({
   hiddenCount,
   inactive,
   q,
-  status,
+  filterParam,
+  density,
 }: Props) {
   return (
-    <div className="members-list">
+    <div className={`members-list${density === "compact" ? " density-compact" : ""}`}>
       {hiddenCount > 0 ? (
         <div style={{ marginBottom: 8 }}>
           <Link
             className="button secondary"
-            href={`/admin?q=${encodeURIComponent(q)}&status=${status}&inactive=show`}
+            href={`/admin?q=${encodeURIComponent(q)}&${filterParam}&inactive=show`}
           >
             顯示 {hiddenCount} 位歷史會員
           </Link>
@@ -47,7 +50,7 @@ export function MembersList({
         <div style={{ marginBottom: 8 }}>
           <Link
             className="button secondary"
-            href={`/admin?q=${encodeURIComponent(q)}&status=${status}`}
+            href={`/admin?q=${encodeURIComponent(q)}&${filterParam}`}
           >
             隱藏歷史會員
           </Link>
@@ -57,7 +60,7 @@ export function MembersList({
         <div style={{ marginBottom: 8 }}>
           <Link
             className="button secondary"
-            href={`/admin?q=${encodeURIComponent(q)}&status=${status}`}
+            href={`/admin?q=${encodeURIComponent(q)}&${filterParam}`}
           >
             隱藏歷史會員
           </Link>

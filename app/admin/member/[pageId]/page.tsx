@@ -174,38 +174,6 @@ export default async function MemberDetailPage({
             <h3>Actions</h3>
           </div>
           <div className="stack">
-            <form action={updateStatus} className="grid">
-              <div className="field">
-                <label htmlFor="status">手動修正 Status</label>
-                <select className="input" id="status" name="status" defaultValue={member.status}>
-                  {member.status === "active_paid" && (
-                    <option value="active_paid" disabled>
-                      已付款有效（請用下方標記付款按鈕）
-                    </option>
-                  )}
-                  {manualOverrideStatuses.map((status) => (
-                    <option key={status} value={status}>
-                      {memberStatusLabel(status)}
-                    </option>
-                  ))}
-                </select>
-                <p className="field-hint">⚠️ 僅修正 Status 欄位，不會更新到期日或通知 Bot。若要標記付款，請用下方按鈕。</p>
-              </div>
-              <ActionButton icon={<Save />}>更新狀態</ActionButton>
-            </form>
-
-            <form action={markInvitationEmailSent}>
-              <ActionButton icon={<Send />} secondary disabled={member.invitationEmailSent}>
-                標記已送出邀請 Email
-              </ActionButton>
-            </form>
-
-            <form action={requestPaymentProof}>
-              <ActionButton icon={<Upload />} secondary disabled={!member.telegramUserId}>
-                重新付款
-              </ActionButton>
-            </form>
-
             <form action={markPaidOneMonth}>
               <ConfirmMarkPaidButton
                 label="標記已付款（1 個月）"
@@ -223,20 +191,20 @@ export default async function MemberDetailPage({
             </form>
 
             <form action={resendInvite}>
-              <ActionButton icon={<Send />} secondary>
-                重送入群連結
+              <ActionButton icon={<Send />}>重送入群連結</ActionButton>
+            </form>
+
+            <div className="actions-divider" role="separator" aria-label="流程操作" />
+
+            <form action={requestPaymentProof}>
+              <ActionButton icon={<Upload />} secondary disabled={!member.telegramUserId}>
+                重新付款
               </ActionButton>
             </form>
 
-            <form action={revokeInvite}>
-              <ActionButton icon={<Link2Off />} secondary disabled={!member.inviteLink}>
-                撤銷連結
-              </ActionButton>
-            </form>
-
-            <form action={clearInvite}>
-              <ActionButton icon={<Eraser />} secondary>
-                清除連結欄位
+            <form action={markInvitationEmailSent}>
+              <ActionButton icon={<Send />} secondary disabled={member.invitationEmailSent}>
+                標記已送出邀請 Email
               </ActionButton>
             </form>
 
@@ -248,12 +216,48 @@ export default async function MemberDetailPage({
               </form>
             )}
 
-            <form action={kick}>
-              <ActionButton icon={<Ban />} danger>
-                踢出群組
-              </ActionButton>
-            </form>
+            <details className="advanced-actions">
+              <summary>進階操作</summary>
+              <div className="stack">
+                <form action={updateStatus} className="grid">
+                  <div className="field">
+                    <label htmlFor="status">手動修正 Status</label>
+                    <select className="input" id="status" name="status" defaultValue={member.status}>
+                      {member.status === "active_paid" && (
+                        <option value="active_paid" disabled>
+                          已付款有效（請用上方標記付款按鈕）
+                        </option>
+                      )}
+                      {manualOverrideStatuses.map((status) => (
+                        <option key={status} value={status}>
+                          {memberStatusLabel(status)}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="field-hint">⚠️ 僅修正 Status 欄位，不會更新到期日或通知 Bot。若要標記付款，請用上方按鈕。</p>
+                  </div>
+                  <ActionButton icon={<Save />} danger>更新狀態</ActionButton>
+                </form>
 
+                <form action={revokeInvite}>
+                  <ActionButton icon={<Link2Off />} danger disabled={!member.inviteLink}>
+                    撤銷連結
+                  </ActionButton>
+                </form>
+
+                <form action={clearInvite}>
+                  <ActionButton icon={<Eraser />} danger>
+                    清除連結欄位
+                  </ActionButton>
+                </form>
+
+                <form action={kick}>
+                  <ActionButton icon={<Ban />} danger>
+                    踢出群組
+                  </ActionButton>
+                </form>
+              </div>
+            </details>
           </div>
         </aside>
       </div>

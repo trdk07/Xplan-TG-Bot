@@ -35,4 +35,8 @@ export async function handleTelegramUpdate(
 export { exchanges, isStartCommand } from "@/lib/bot/utils";
 export { paymentProofRequestKeyboard } from "@/lib/bot/keyboards";
 export { manualPaymentProofRequestMessage } from "@/lib/bot/messages";
-export { runDailyMembershipJob, sendRenewalReminder } from "@/lib/bot/daily-job";
+export {
+  resendRenewalDueReminder,
+  runDailyMembershipJob,
+  sendRenewalReminder,
+} from "@/lib/bot/daily-job";

@@ -30,6 +30,18 @@ export async function sendRenewalReminder(
   });
 }
 
+export async function resendRenewalDueReminder(member: Member, now: Date) {
+  await sendMessage(
+    member.telegramUserId,
+    membershipExpiredRenewalMessage(),
+    renewalKeyboard(),
+  );
+  await updateMember(member.pageId, {
+    lastBotCheckAt: isoDateTime(now),
+    lastBotMessage: "Renewal due reminder resent manually by admin",
+  });
+}
+
 export async function runDailyMembershipJob(now = new Date()) {
   const members = await listMembers({ limit: 500 });
   const results: Array<{ pageId: string; action: string; detail?: string }> = [];

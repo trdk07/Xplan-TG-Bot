@@ -1,9 +1,81 @@
 import { daysUntil, formatDateTime } from "@/lib/dates";
+import {
+  isPaymentFollowupCandidate,
+  isPaymentReviewReady,
+  isRenewalNoticeCandidate,
+} from "@/lib/member-state";
 import type { Member } from "@/lib/notion";
 import type { MemberStatus } from "@/lib/status";
 
 export function statCount(members: Member[], statuses: MemberStatus[]) {
   return members.filter((member) => statuses.includes(member.status)).length;
+}
+
+export function isPaymentIncomplete(member: Member): boolean {
+  return paymentReviewState(member)?.label === "待補件";
+}
+
+export function isInvitationPending(member: Member): boolean {
+  return (
+    member.status === "eligible" &&
+    Boolean(member.email) &&
+    !member.invitationEmailSent
+  );
+}
+
+export function isTrialExperience(member: Member): boolean {
+  return (
+    member.status === "trial_active" ||
+    member.status === "sent_7day_survey" ||
+    member.status === "sent_3day_offer"
+  );
+}
+
+export function isEndingSoon(member: Member, now: Date): boolean {
+  return (
+    isRenewalNoticeCandidate(member, now, { allowAlreadyReminded: true }) ||
+    isPaymentFollowupCandidate(member, now)
+  );
+}
+
+/**
+ * Named list views whose member-count must always match the number of
+ * members returned when filtering by that view — the stat cards on the
+ * dashboard link straight into these instead of a raw status filter, so
+ * the number on the card and the number in the resulting list can never
+ * drift apart.
+ */
+export const adminViews = [
+  "payment_review_ready",
+  "payment_incomplete",
+  "trial_experience",
+  "ending_soon",
+  "invitation_pending",
+] as const;
+
+export type AdminView = (typeof adminViews)[number];
+
+export function isAdminView(value: string): value is AdminView {
+  return (adminViews as readonly string[]).includes(value);
+}
+
+export function matchesAdminView(
+  member: Member,
+  view: AdminView,
+  now: Date,
+): boolean {
+  switch (view) {
+    case "payment_review_ready":
+      return isPaymentReviewReady(member);
+    case "payment_incomplete":
+      return isPaymentIncomplete(member);
+    case "trial_experience":
+      return isTrialExperience(member);
+    case "ending_soon":
+      return isEndingSoon(member, now);
+    case "invitation_pending":
+      return isInvitationPending(member);
+  }
 }
 
 export function isLegacyBitMartMember(member: Member) {

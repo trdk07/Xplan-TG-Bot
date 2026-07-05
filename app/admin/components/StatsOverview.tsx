@@ -35,7 +35,7 @@ export function StatsOverview({
             <span className="subtle">訂閱中</span>
             <strong>{statCount(members, ["active_paid"])}</strong>
           </Link>
-          <Link className="stat stat-link" href="/admin?status=trial_active">
+          <Link className="stat stat-link" href="/admin?view=trial_experience">
             <span className="subtle">體驗中</span>
             <strong>{statCount(members, ["trial_active", "sent_7day_survey", "sent_3day_offer"])}</strong>
           </Link>
@@ -51,7 +51,7 @@ export function StatsOverview({
         <section className="grid stats">
           <Link
             className={`stat stat-link${paymentProofReady > 0 ? " stat-emphasis" : ""}`}
-            href="/admin?status=payment_pending"
+            href="/admin?view=payment_review_ready"
           >
             <span className="subtle">審核付款</span>
             <strong>{paymentProofReady}</strong>
@@ -63,7 +63,7 @@ export function StatsOverview({
             <span className="subtle">到期未回</span>
             <strong>{renewalWaiting}</strong>
           </Link>
-          <Link className="stat stat-link" href="/admin?status=trial_active">
+          <Link className="stat stat-link" href="/admin?view=ending_soon">
             <span className="subtle">即將到期</span>
             <strong>{endingSoon}</strong>
           </Link>
@@ -75,7 +75,7 @@ export function StatsOverview({
         <section className="grid stats">
           <Link
             className={`stat stat-link${invitationEmailCount > 0 ? " stat-emphasis" : ""}`}
-            href="/admin?status=eligible"
+            href="/admin?view=invitation_pending"
           >
             <span className="subtle">待寄邀件</span>
             <strong>{invitationEmailCount}</strong>
