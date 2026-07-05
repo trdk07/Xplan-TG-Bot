@@ -30,7 +30,11 @@ export async function sendRenewalReminder(
   });
 }
 
-export async function resendRenewalDueReminder(member: Member, now: Date) {
+export async function resendRenewalDueReminder(
+  member: Member,
+  now: Date,
+  lastBotMessage = "Renewal due reminder resent manually by admin",
+) {
   await sendMessage(
     member.telegramUserId,
     membershipExpiredRenewalMessage(),
@@ -38,7 +42,7 @@ export async function resendRenewalDueReminder(member: Member, now: Date) {
   );
   await updateMember(member.pageId, {
     lastBotCheckAt: isoDateTime(now),
-    lastBotMessage: "Renewal due reminder resent manually by admin",
+    lastBotMessage,
   });
 }
 

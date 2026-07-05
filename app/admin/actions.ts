@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { assertAdminAction, clearAdminCookie, setAdminCookie } from "@/lib/auth";
+import {
+  assertAdminAction,
+  clearAdminCookie,
+  getAdminOperator,
+  setAdminCookie,
+  type Operator,
+} from "@/lib/auth";
 import {
   manualPaymentProofRequestMessage,
   paymentProofRequestKeyboard,
@@ -43,11 +49,12 @@ const statusSchema = z.object({
 
 async function withAdminAction<T>(
   pageId: string,
-  fn: () => Promise<T>,
+  fn: (operator: Operator) => Promise<T>,
 ): Promise<T> {
   await assertAdminAction();
+  const operator = await getAdminOperator();
   try {
-    return await fn();
+    return await fn(operator);
   } finally {
     revalidatePath("/admin");
     revalidatePath(`/admin/member/${pageId}`);
@@ -59,7 +66,8 @@ export async function loginAction(formData: FormData) {
   if (password !== getAdminPassword()) {
     redirect("/admin/login?error=1");
   }
-  await setAdminCookie();
+  const operator = String(formData.get("operator") || "");
+  await setAdminCookie(operator);
   redirect("/admin");
 }
 
@@ -69,20 +77,20 @@ export async function logoutAction() {
 }
 
 export async function updateStatusAction(pageId: string, formData: FormData) {
-  await withAdminAction(pageId, async () => {
+  await withAdminAction(pageId, async (operator) => {
     const parsed = statusSchema.parse({
       status: formData.get("status"),
     });
     await updateMember(pageId, {
       status: parsed.status,
       lastBotCheckAt: isoDateTime(new Date()),
-      lastBotMessage: "Status changed manually by admin",
+      lastBotMessage: `Status changed manually by ${operator}`,
     });
   });
 }
 
 export async function markPaidAction(pageId: string, durationMonths: 1 | 3 = 1) {
-  await withAdminAction(pageId, async () => {
+  await withAdminAction(pageId, async (operator) => {
     const now = new Date();
     const member = await getMemberByPageId(pageId);
     if (!member) throw new Error("Member not found");
@@ -117,7 +125,7 @@ export async function markPaidAction(pageId: string, durationMonths: 1 | 3 = 1) 
         inviteLink: invite.invite_link,
         inviteExpiresAt: isoDateTime(expiresAt),
         lastBotCheckAt: isoDateTime(now),
-        lastBotMessage: `Marked paid by admin (${label}), invite sent for rejoin`,
+        lastBotMessage: `Marked paid by ${operator} (${label}), invite sent for rejoin`,
       });
       await sendMessage(
         member.telegramUserId,
@@ -141,7 +149,7 @@ export async function markPaidAction(pageId: string, durationMonths: 1 | 3 = 1) 
         renewalReminderSentAt: null,
         kickReason: "",
         lastBotCheckAt: isoDateTime(now),
-        lastBotMessage: `Marked paid by admin (${label})`,
+        lastBotMessage: `Marked paid by ${operator} (${label})`,
       });
       if (member.telegramUserId) {
         await sendMessage(
@@ -154,7 +162,7 @@ export async function markPaidAction(pageId: string, durationMonths: 1 | 3 = 1) 
 }
 
 export async function requestPaymentProofAction(pageId: string) {
-  await withAdminAction(pageId, async () => {
+  await withAdminAction(pageId, async (operator) => {
     const now = new Date();
 
     try {
@@ -181,7 +189,7 @@ export async function requestPaymentProofAction(pageId: string) {
         paymentProofSubmittedAt: null,
         paidAt: null,
         lastBotCheckAt: isoDateTime(now),
-        lastBotMessage: "Manual payment proof option sent by admin",
+        lastBotMessage: `Manual payment proof option sent by ${operator}`,
       });
 
       if (!updatedProperties.includes("Status")) {
@@ -221,6 +229,7 @@ export async function requestPaymentProofAction(pageId: string) {
 
 export async function resendRenewalRemindersAction() {
   await assertAdminAction();
+  const operator = await getAdminOperator();
   const now = new Date();
   const members = await listMembers({ limit: 500 });
 
@@ -234,7 +243,7 @@ export async function resendRenewalRemindersAction() {
       await sendRenewalReminder(
         member,
         now,
-        "Renewal reminder resent manually by admin",
+        `Renewal reminder resent manually by ${operator}`,
       );
       sentCount += 1;
       continue;
@@ -252,7 +261,7 @@ export async function resendRenewalRemindersAction() {
       );
       await updateMember(member.pageId, {
         lastBotCheckAt: isoDateTime(now),
-        lastBotMessage: "Payment follow-up resent manually by admin",
+        lastBotMessage: `Payment follow-up resent manually by ${operator}`,
       });
       sentCount += 1;
     }
@@ -264,6 +273,7 @@ export async function resendRenewalRemindersAction() {
 
 export async function batchMarkEligibleAction(formData: FormData) {
   await assertAdminAction();
+  const operator = await getAdminOperator();
   const raw = String(formData.get("pageIds") || "[]");
   const parsed = z.array(z.string().min(1)).safeParse(JSON.parse(raw));
   if (!parsed.success) throw new Error("Invalid member selection");
@@ -274,7 +284,7 @@ export async function batchMarkEligibleAction(formData: FormData) {
     await updateMember(pageId, {
       status: "eligible",
       lastBotCheckAt: now,
-      lastBotMessage: "Marked eligible from MEXC CSV comparison",
+      lastBotMessage: `Marked eligible from MEXC CSV comparison by ${operator}`,
       kickReason: "",
     });
   }
@@ -285,25 +295,29 @@ export async function batchMarkEligibleAction(formData: FormData) {
 }
 
 export async function markInvitationEmailSentAction(pageId: string) {
-  await withAdminAction(pageId, async () => {
+  await withAdminAction(pageId, async (operator) => {
     await updateMember(pageId, {
       invitationEmailSent: true,
       lastBotCheckAt: isoDateTime(new Date()),
-      lastBotMessage: "Invitation email marked sent by admin",
+      lastBotMessage: `Invitation email marked sent by ${operator}`,
     });
   });
 }
 
 export async function resendRenewalDueReminderAction(pageId: string) {
-  await withAdminAction(pageId, async () => {
+  await withAdminAction(pageId, async (operator) => {
     const member = await getMemberByPageId(pageId);
     if (!member) throw new Error("Member not found");
-    await resendRenewalDueReminder(member, new Date());
+    await resendRenewalDueReminder(
+      member,
+      new Date(),
+      `Renewal due reminder resent manually by ${operator}`,
+    );
   });
 }
 
 export async function extendTrialAction(pageId: string) {
-  await withAdminAction(pageId, async () => {
+  await withAdminAction(pageId, async (operator) => {
     const now = new Date();
     const member = await getMemberByPageId(pageId);
     if (!member) throw new Error("Member not found");
@@ -318,7 +332,7 @@ export async function extendTrialAction(pageId: string) {
       renewalReminderSentAt: null,
       kickReason: "",
       lastBotCheckAt: isoDateTime(now),
-      lastBotMessage: "Trial extended by 1 month by admin",
+      lastBotMessage: `Trial extended by 1 month by ${operator}`,
     });
 
     if (member.telegramUserId) {
@@ -331,7 +345,7 @@ export async function extendTrialAction(pageId: string) {
 }
 
 export async function kickMemberAction(pageId: string) {
-  await withAdminAction(pageId, async () => {
+  await withAdminAction(pageId, async (operator) => {
     const member = await getMemberByPageId(pageId);
     if (!member) throw new Error("Member not found");
 
@@ -342,13 +356,13 @@ export async function kickMemberAction(pageId: string) {
       status: "kicked",
       kickReason: "manual_admin_kick",
       lastBotCheckAt: isoDateTime(new Date()),
-      lastBotMessage: "Kicked manually by admin",
+      lastBotMessage: `Kicked manually by ${operator}`,
     });
   });
 }
 
 export async function resendInviteAction(pageId: string) {
-  await withAdminAction(pageId, async () => {
+  await withAdminAction(pageId, async (operator) => {
     const member = await getMemberByPageId(pageId);
     if (!member) throw new Error("Member not found");
 
@@ -366,7 +380,7 @@ export async function resendInviteAction(pageId: string) {
       inviteLink: invite.invite_link,
       inviteExpiresAt: isoDateTime(expiresAt),
       lastBotCheckAt: isoDateTime(new Date()),
-      lastBotMessage: "Invite resent manually by admin",
+      lastBotMessage: `Invite resent manually by ${operator}`,
     });
     if (member.telegramUserId) {
       await sendMessage(member.telegramUserId, `管理員已重新產生你的專屬入群連結：\n${invite.invite_link}`);
@@ -375,7 +389,7 @@ export async function resendInviteAction(pageId: string) {
 }
 
 export async function revokeInviteAction(pageId: string) {
-  await withAdminAction(pageId, async () => {
+  await withAdminAction(pageId, async (operator) => {
     const member = await getMemberByPageId(pageId);
     if (!member) throw new Error("Member not found");
 
@@ -386,18 +400,18 @@ export async function revokeInviteAction(pageId: string) {
       inviteLink: null,
       inviteExpiresAt: null,
       lastBotCheckAt: isoDateTime(new Date()),
-      lastBotMessage: "Invite revoked manually by admin",
+      lastBotMessage: `Invite revoked manually by ${operator}`,
     });
   });
 }
 
 export async function clearInviteAction(pageId: string) {
-  await withAdminAction(pageId, async () => {
+  await withAdminAction(pageId, async (operator) => {
     await updateMember(pageId, {
       inviteLink: null,
       inviteExpiresAt: null,
       lastBotCheckAt: isoDateTime(new Date()),
-      lastBotMessage: "Invite fields cleared manually by admin",
+      lastBotMessage: `Invite fields cleared manually by ${operator}`,
     });
   });
 }

@@ -19,7 +19,7 @@ import {
 } from "@/lib/member-state";
 import { listMembers, memberMatchesQuery, type Member } from "@/lib/notion";
 import { type MemberStatus, memberStatuses } from "@/lib/status";
-import { requireAdmin } from "@/lib/auth";
+import { getAdminOperator, requireAdmin } from "@/lib/auth";
 
 function scalar(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] || "" : value || "";
@@ -38,6 +38,7 @@ export default async function AdminPage({
   }>;
 }) {
   await requireAdmin();
+  const operator = await getAdminOperator();
   const params = await searchParams;
   const q = scalar(params.q);
   const rawStatus = scalar(params.status);
@@ -128,6 +129,7 @@ export default async function AdminPage({
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <span className="subtle">操作人：{operator}</span>
           <Link className="button secondary" href="/admin/revenue">
             收入報表
           </Link>
