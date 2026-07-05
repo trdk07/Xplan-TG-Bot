@@ -40,6 +40,19 @@ const statusSchema = z.object({
   status: z.string().refine(isMemberStatus),
 });
 
+async function withAdminAction<T>(
+  pageId: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  await assertAdminAction();
+  try {
+    return await fn();
+  } finally {
+    revalidatePath("/admin");
+    revalidatePath(`/admin/member/${pageId}`);
+  }
+}
+
 export async function loginAction(formData: FormData) {
   const password = String(formData.get("password") || "");
   if (password !== getAdminPassword()) {
@@ -55,163 +68,154 @@ export async function logoutAction() {
 }
 
 export async function updateStatusAction(pageId: string, formData: FormData) {
-  await assertAdminAction();
-  const parsed = statusSchema.parse({
-    status: formData.get("status"),
+  await withAdminAction(pageId, async () => {
+    const parsed = statusSchema.parse({
+      status: formData.get("status"),
+    });
+    await updateMember(pageId, {
+      status: parsed.status,
+      lastBotCheckAt: isoDateTime(new Date()),
+      lastBotMessage: "Status changed manually by admin",
+    });
   });
-  await updateMember(pageId, {
-    status: parsed.status,
-    lastBotCheckAt: isoDateTime(new Date()),
-    lastBotMessage: "Status changed manually by admin",
-  });
-  revalidatePath("/admin");
-  revalidatePath(`/admin/member/${pageId}`);
 }
 
 export async function markPaidAction(pageId: string, durationMonths: 1 | 3 = 1) {
-  await assertAdminAction();
-  const now = new Date();
-  const member = await getMemberByPageId(pageId);
-  if (!member) throw new Error("Member not found");
+  await withAdminAction(pageId, async () => {
+    const now = new Date();
+    const member = await getMemberByPageId(pageId);
+    if (!member) throw new Error("Member not found");
 
-  if (member.paidAt && now.getTime() - new Date(member.paidAt).getTime() < 60_000) {
-    // Guards against double-submit re-adding another billing period.
-    revalidatePath("/admin");
-    revalidatePath(`/admin/member/${pageId}`);
-    return;
-  }
+    if (member.paidAt && now.getTime() - new Date(member.paidAt).getTime() < 60_000) {
+      // Guards against double-submit re-adding another billing period.
+      return;
+    }
 
-  const wasKicked = Boolean(member.kickReason);
-  const baseDate = renewalBaseDate(member.reviewDueAt, now);
-  const reviewDueAt = addMonths(baseDate, durationMonths);
-  const label = `${durationMonths} month${durationMonths > 1 ? "s" : ""}`;
+    const wasKicked = Boolean(member.kickReason);
+    const baseDate = renewalBaseDate(member.reviewDueAt, now);
+    const reviewDueAt = addMonths(baseDate, durationMonths);
+    const label = `${durationMonths} month${durationMonths > 1 ? "s" : ""}`;
 
-  if (wasKicked && member.telegramUserId) {
-    // Member was previously kicked — generate invite link so they can rejoin
-    await unbanChatMember(member.telegramUserId);
-    const expiresAt = addDays(now, 1);
-    const invite = await createChatInviteLink({
-      name: `paid-${member.telegramUserId}`.slice(0, 32),
-      expireDate: expiresAt,
-    });
-    await updateMember(pageId, {
-      status: "join_pending",
-      paidAt: isoDateTime(now),
-      subscriptionMonths: durationMonths,
-      reviewDueAt: isoDateTime(reviewDueAt),
-      paymentDeadlineAt: null,
-      renewalStep: "",
-      renewalReminderSentAt: null,
-      kickReason: "",
-      inviteLink: invite.invite_link,
-      inviteExpiresAt: isoDateTime(expiresAt),
-      lastBotCheckAt: isoDateTime(now),
-      lastBotMessage: `Marked paid by admin (${label}), invite sent for rejoin`,
-    });
-    await sendMessage(
-      member.telegramUserId,
-      [
-        "你的訂閱已審核通過！",
-        "",
-        `有效期限至 ${formatDateTime(isoDateTime(reviewDueAt))}。`,
-        "",
-        "請點擊下方專屬連結重新加入群組（連結僅可使用一次，並於 24 小時後失效）：",
-        invite.invite_link,
-      ].join("\n"),
-    );
-  } else {
-    await updateMember(pageId, {
-      status: "active_paid",
-      paidAt: isoDateTime(now),
-      subscriptionMonths: durationMonths,
-      reviewDueAt: isoDateTime(reviewDueAt),
-      paymentDeadlineAt: null,
-      renewalStep: "",
-      renewalReminderSentAt: null,
-      kickReason: "",
-      lastBotCheckAt: isoDateTime(now),
-      lastBotMessage: `Marked paid by admin (${label})`,
-    });
-    if (member.telegramUserId) {
+    if (wasKicked && member.telegramUserId) {
+      // Member was previously kicked — generate invite link so they can rejoin
+      await unbanChatMember(member.telegramUserId);
+      const expiresAt = addDays(now, 1);
+      const invite = await createChatInviteLink({
+        name: `paid-${member.telegramUserId}`.slice(0, 32),
+        expireDate: expiresAt,
+      });
+      await updateMember(pageId, {
+        status: "join_pending",
+        paidAt: isoDateTime(now),
+        subscriptionMonths: durationMonths,
+        reviewDueAt: isoDateTime(reviewDueAt),
+        paymentDeadlineAt: null,
+        renewalStep: "",
+        renewalReminderSentAt: null,
+        kickReason: "",
+        inviteLink: invite.invite_link,
+        inviteExpiresAt: isoDateTime(expiresAt),
+        lastBotCheckAt: isoDateTime(now),
+        lastBotMessage: `Marked paid by admin (${label}), invite sent for rejoin`,
+      });
       await sendMessage(
         member.telegramUserId,
-        `訂閱已更新，目前為有效狀態，有效期限至 ${formatDateTime(isoDateTime(reviewDueAt))}。`,
+        [
+          "你的訂閱已審核通過！",
+          "",
+          `有效期限至 ${formatDateTime(isoDateTime(reviewDueAt))}。`,
+          "",
+          "請點擊下方專屬連結重新加入群組（連結僅可使用一次，並於 24 小時後失效）：",
+          invite.invite_link,
+        ].join("\n"),
       );
+    } else {
+      await updateMember(pageId, {
+        status: "active_paid",
+        paidAt: isoDateTime(now),
+        subscriptionMonths: durationMonths,
+        reviewDueAt: isoDateTime(reviewDueAt),
+        paymentDeadlineAt: null,
+        renewalStep: "",
+        renewalReminderSentAt: null,
+        kickReason: "",
+        lastBotCheckAt: isoDateTime(now),
+        lastBotMessage: `Marked paid by admin (${label})`,
+      });
+      if (member.telegramUserId) {
+        await sendMessage(
+          member.telegramUserId,
+          `訂閱已更新，目前為有效狀態，有效期限至 ${formatDateTime(isoDateTime(reviewDueAt))}。`,
+        );
+      }
     }
-  }
-
-  revalidatePath("/admin");
-  revalidatePath(`/admin/member/${pageId}`);
+  });
 }
 
 export async function requestPaymentProofAction(pageId: string) {
-  await assertAdminAction();
-  const now = new Date();
-
-  try {
-    const member = await getMemberByPageId(pageId);
-    if (!member) return;
-
-    if (!member.telegramUserId) {
-      await updateMemberExistingProperties(pageId, {
-        lastBotCheckAt: isoDateTime(now),
-        lastBotMessage:
-          "Manual payment proof request skipped: member has no Telegram User ID",
-      }).catch(() => []);
-      revalidatePath("/admin");
-      revalidatePath(`/admin/member/${pageId}`);
-      return;
-    }
-
-    const config = getRuntimeConfig();
-    const deadline = addDays(now, config.paymentGraceDays);
-    const updatedProperties = await updateMemberExistingProperties(pageId, {
-      status: "payment_pending",
-      renewalStep: "payment_pending",
-      paymentDeadlineAt: isoDateTime(deadline),
-      paymentUidLast4: "",
-      paymentProofFileId: "",
-      paymentProofSubmittedAt: null,
-      paidAt: null,
-      lastBotCheckAt: isoDateTime(now),
-      lastBotMessage: "Manual payment proof option sent by admin",
-    });
-
-    if (!updatedProperties.includes("Status")) {
-      await updateMemberExistingProperties(pageId, {
-        lastBotCheckAt: isoDateTime(now),
-        lastBotMessage:
-          "Manual payment proof option skipped: Notion Status property was not found",
-      }).catch(() => []);
-      return;
-    }
+  await withAdminAction(pageId, async () => {
+    const now = new Date();
 
     try {
-      await sendMessage(
-        member.telegramUserId,
-        manualPaymentProofRequestMessage(),
-        paymentProofRequestKeyboard(),
-      );
+      const member = await getMemberByPageId(pageId);
+      if (!member) return;
+
+      if (!member.telegramUserId) {
+        await updateMemberExistingProperties(pageId, {
+          lastBotCheckAt: isoDateTime(now),
+          lastBotMessage:
+            "Manual payment proof request skipped: member has no Telegram User ID",
+        }).catch(() => []);
+        return;
+      }
+
+      const config = getRuntimeConfig();
+      const deadline = addDays(now, config.paymentGraceDays);
+      const updatedProperties = await updateMemberExistingProperties(pageId, {
+        status: "payment_pending",
+        renewalStep: "payment_pending",
+        paymentDeadlineAt: isoDateTime(deadline),
+        paymentUidLast4: "",
+        paymentProofFileId: "",
+        paymentProofSubmittedAt: null,
+        paidAt: null,
+        lastBotCheckAt: isoDateTime(now),
+        lastBotMessage: "Manual payment proof option sent by admin",
+      });
+
+      if (!updatedProperties.includes("Status")) {
+        await updateMemberExistingProperties(pageId, {
+          lastBotCheckAt: isoDateTime(now),
+          lastBotMessage:
+            "Manual payment proof option skipped: Notion Status property was not found",
+        }).catch(() => []);
+        return;
+      }
+
+      try {
+        await sendMessage(
+          member.telegramUserId,
+          manualPaymentProofRequestMessage(),
+          paymentProofRequestKeyboard(),
+        );
+      } catch (error) {
+        await updateMemberExistingProperties(pageId, {
+          lastBotCheckAt: isoDateTime(now),
+          lastBotMessage: `Manual payment proof option failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        }).catch(() => []);
+      }
     } catch (error) {
+      console.error("requestPaymentProofAction failed", error);
       await updateMemberExistingProperties(pageId, {
         lastBotCheckAt: isoDateTime(now),
-        lastBotMessage: `Manual payment proof option failed: ${
+        lastBotMessage: `Manual payment proof action failed: ${
           error instanceof Error ? error.message : String(error)
         }`,
       }).catch(() => []);
     }
-  } catch (error) {
-    console.error("requestPaymentProofAction failed", error);
-    await updateMemberExistingProperties(pageId, {
-      lastBotCheckAt: isoDateTime(now),
-      lastBotMessage: `Manual payment proof action failed: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    }).catch(() => []);
-  } finally {
-    revalidatePath("/admin");
-    revalidatePath(`/admin/member/${pageId}`);
-  }
+  });
 }
 
 export async function resendRenewalRemindersAction() {
@@ -280,118 +284,111 @@ export async function batchMarkEligibleAction(formData: FormData) {
 }
 
 export async function markInvitationEmailSentAction(pageId: string) {
-  await assertAdminAction();
-  await updateMember(pageId, {
-    invitationEmailSent: true,
-    lastBotCheckAt: isoDateTime(new Date()),
-    lastBotMessage: "Invitation email marked sent by admin",
+  await withAdminAction(pageId, async () => {
+    await updateMember(pageId, {
+      invitationEmailSent: true,
+      lastBotCheckAt: isoDateTime(new Date()),
+      lastBotMessage: "Invitation email marked sent by admin",
+    });
   });
-  revalidatePath("/admin");
-  revalidatePath(`/admin/member/${pageId}`);
 }
 
 export async function extendTrialAction(pageId: string) {
-  await assertAdminAction();
-  const now = new Date();
-  const member = await getMemberByPageId(pageId);
-  if (!member) throw new Error("Member not found");
+  await withAdminAction(pageId, async () => {
+    const now = new Date();
+    const member = await getMemberByPageId(pageId);
+    if (!member) throw new Error("Member not found");
 
-  const base = renewalBaseDate(member.reviewDueAt, now);
-  const newReviewDueAt = addMonths(base, 1);
+    const base = renewalBaseDate(member.reviewDueAt, now);
+    const newReviewDueAt = addMonths(base, 1);
 
-  await updateMember(pageId, {
-    status: "trial_active",
-    reviewDueAt: isoDateTime(newReviewDueAt),
-    renewalStep: "",
-    renewalReminderSentAt: null,
-    kickReason: "",
-    lastBotCheckAt: isoDateTime(now),
-    lastBotMessage: "Trial extended by 1 month by admin",
+    await updateMember(pageId, {
+      status: "trial_active",
+      reviewDueAt: isoDateTime(newReviewDueAt),
+      renewalStep: "",
+      renewalReminderSentAt: null,
+      kickReason: "",
+      lastBotCheckAt: isoDateTime(now),
+      lastBotMessage: "Trial extended by 1 month by admin",
+    });
+
+    if (member.telegramUserId) {
+      await sendMessage(
+        member.telegramUserId,
+        `管理員已為你延長體驗期，新的到期日為 ${formatDateTime(isoDateTime(newReviewDueAt))}，繼續加油！`,
+      );
+    }
   });
-
-  if (member.telegramUserId) {
-    await sendMessage(
-      member.telegramUserId,
-      `管理員已為你延長體驗期，新的到期日為 ${formatDateTime(isoDateTime(newReviewDueAt))}，繼續加油！`,
-    );
-  }
-
-  revalidatePath("/admin");
-  revalidatePath(`/admin/member/${pageId}`);
 }
 
 export async function kickMemberAction(pageId: string) {
-  await assertAdminAction();
-  const member = await getMemberByPageId(pageId);
-  if (!member) throw new Error("Member not found");
+  await withAdminAction(pageId, async () => {
+    const member = await getMemberByPageId(pageId);
+    if (!member) throw new Error("Member not found");
 
-  if (member.telegramUserId) {
-    await kickChatMember(member.telegramUserId);
-  }
-  await updateMember(pageId, {
-    status: "kicked",
-    kickReason: "manual_admin_kick",
-    lastBotCheckAt: isoDateTime(new Date()),
-    lastBotMessage: "Kicked manually by admin",
+    if (member.telegramUserId) {
+      await kickChatMember(member.telegramUserId);
+    }
+    await updateMember(pageId, {
+      status: "kicked",
+      kickReason: "manual_admin_kick",
+      lastBotCheckAt: isoDateTime(new Date()),
+      lastBotMessage: "Kicked manually by admin",
+    });
   });
-  revalidatePath("/admin");
-  revalidatePath(`/admin/member/${pageId}`);
 }
 
 export async function resendInviteAction(pageId: string) {
-  await assertAdminAction();
-  const member = await getMemberByPageId(pageId);
-  if (!member) throw new Error("Member not found");
+  await withAdminAction(pageId, async () => {
+    const member = await getMemberByPageId(pageId);
+    if (!member) throw new Error("Member not found");
 
-  if (member.telegramUserId) {
-    await unbanChatMember(member.telegramUserId);
-  }
+    if (member.telegramUserId) {
+      await unbanChatMember(member.telegramUserId);
+    }
 
-  const expiresAt = addDays(new Date(), 1);
-  const invite = await createChatInviteLink({
-    name: `admin-${member.telegramUserId}`.slice(0, 32),
-    expireDate: expiresAt,
+    const expiresAt = addDays(new Date(), 1);
+    const invite = await createChatInviteLink({
+      name: `admin-${member.telegramUserId}`.slice(0, 32),
+      expireDate: expiresAt,
+    });
+    await updateMember(pageId, {
+      status: "join_pending",
+      inviteLink: invite.invite_link,
+      inviteExpiresAt: isoDateTime(expiresAt),
+      lastBotCheckAt: isoDateTime(new Date()),
+      lastBotMessage: "Invite resent manually by admin",
+    });
+    if (member.telegramUserId) {
+      await sendMessage(member.telegramUserId, `管理員已重新產生你的專屬入群連結：\n${invite.invite_link}`);
+    }
   });
-  await updateMember(pageId, {
-    status: "join_pending",
-    inviteLink: invite.invite_link,
-    inviteExpiresAt: isoDateTime(expiresAt),
-    lastBotCheckAt: isoDateTime(new Date()),
-    lastBotMessage: "Invite resent manually by admin",
-  });
-  if (member.telegramUserId) {
-    await sendMessage(member.telegramUserId, `管理員已重新產生你的專屬入群連結：\n${invite.invite_link}`);
-  }
-  revalidatePath("/admin");
-  revalidatePath(`/admin/member/${pageId}`);
 }
 
 export async function revokeInviteAction(pageId: string) {
-  await assertAdminAction();
-  const member = await getMemberByPageId(pageId);
-  if (!member) throw new Error("Member not found");
+  await withAdminAction(pageId, async () => {
+    const member = await getMemberByPageId(pageId);
+    if (!member) throw new Error("Member not found");
 
-  if (member.inviteLink) {
-    await revokeChatInviteLink(member.inviteLink);
-  }
-  await updateMember(pageId, {
-    inviteLink: null,
-    inviteExpiresAt: null,
-    lastBotCheckAt: isoDateTime(new Date()),
-    lastBotMessage: "Invite revoked manually by admin",
+    if (member.inviteLink) {
+      await revokeChatInviteLink(member.inviteLink);
+    }
+    await updateMember(pageId, {
+      inviteLink: null,
+      inviteExpiresAt: null,
+      lastBotCheckAt: isoDateTime(new Date()),
+      lastBotMessage: "Invite revoked manually by admin",
+    });
   });
-  revalidatePath("/admin");
-  revalidatePath(`/admin/member/${pageId}`);
 }
 
 export async function clearInviteAction(pageId: string) {
-  await assertAdminAction();
-  await updateMember(pageId, {
-    inviteLink: null,
-    inviteExpiresAt: null,
-    lastBotCheckAt: isoDateTime(new Date()),
-    lastBotMessage: "Invite fields cleared manually by admin",
+  await withAdminAction(pageId, async () => {
+    await updateMember(pageId, {
+      inviteLink: null,
+      inviteExpiresAt: null,
+      lastBotCheckAt: isoDateTime(new Date()),
+      lastBotMessage: "Invite fields cleared manually by admin",
+    });
   });
-  revalidatePath("/admin");
-  revalidatePath(`/admin/member/${pageId}`);
 }
