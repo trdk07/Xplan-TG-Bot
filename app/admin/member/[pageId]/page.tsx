@@ -23,6 +23,7 @@ import {
 import { ActionButton } from "@/app/components/ActionButton";
 import { ConfirmMarkPaidButton } from "@/app/components/ConfirmMarkPaidButton";
 import { StatusBadge } from "@/app/components/StatusBadge";
+import { DiscordDetails } from "@/app/admin/components/DiscordSummary";
 import { isLegacyBitMartMember } from "@/lib/admin-views";
 import { requireAdmin } from "@/lib/auth";
 import { addMonths, formatDateTime, renewalBaseDate } from "@/lib/dates";
@@ -92,6 +93,7 @@ export default async function MemberDetailPage({
             <div>{member.telegramUsername || "-"}</div>
             <div>Email</div>
             <div>{member.email || "-"}</div>
+            <DiscordDetails member={member} />
             <div>已送出邀請</div>
             <div>{member.invitationEmailSent ? "yes" : "no"}</div>
             <div>Status</div>

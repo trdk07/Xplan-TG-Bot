@@ -779,6 +779,23 @@ tr:hover td {
   grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(140px, 0.8fr);
 }
 
+.discord-summary {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.discord-role,
+.discord-id {
+  overflow-wrap: anywhere;
+}
+
+.discord-role {
+  font-size: 13px;
+}
+
 .density-compact .review-block:not(.important-block),
 .density-compact .member-date-grid {
   display: none;

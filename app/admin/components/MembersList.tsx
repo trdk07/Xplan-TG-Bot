@@ -14,6 +14,7 @@ import {
 import { ActionButton } from "@/app/components/ActionButton";
 import { StatusBadge } from "@/app/components/StatusBadge";
 import type { Member } from "@/lib/notion";
+import { DiscordSummary } from "@/app/admin/components/DiscordSummary";
 
 type Props = {
   members: Member[];
@@ -98,6 +99,10 @@ export function MembersList({
             <div className="review-block important-block">
               <span className="mobile-label">付款審核</span>
               <PaymentReviewSummary member={member} />
+            </div>
+            <div className="review-block important-block">
+              <span className="mobile-label">Discord</span>
+              <DiscordSummary member={member} />
             </div>
             <div className="review-block">
               <span className="mobile-label">交易所</span>

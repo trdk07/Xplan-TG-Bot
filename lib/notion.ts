@@ -7,6 +7,9 @@ export type Member = {
   telegramUserId: string;
   telegramUsername: string;
   email: string;
+  discordId: string;
+  discordVerifiedAt: string | null;
+  discordRole: string | null;
   status: MemberStatus;
   tags: string[];
   exchangeRegistered: boolean;
@@ -34,15 +37,17 @@ export type Member = {
 };
 
 export type MemberPatch = Partial<
-  Omit<Member, "pageId" | "telegramUserId"> & {
-    telegramUserId: string;
-  }
+  // Discord fields are owned by the Discord bot and are read-only here.
+  Omit<Member, "pageId" | "discordId" | "discordVerifiedAt" | "discordRole">
 >;
 
 export const notionProperties = {
   telegramUserId: "Telegram User ID",
   telegramUsername: "Telegram Username",
   email: "email",
+  discordId: "Discord_id",
+  discordVerifiedAt: "Discord Verified At",
+  discordRole: "Discord Role",
   status: "Status",
   tags: "Tags",
   exchangeRegistered: "Exchange Registered",
@@ -170,6 +175,9 @@ export function mapNotionPageToMember(page: NotionPage): Member {
     email:
       textProp(page, notionProperties.email) ||
       firstTextProp(page, legacyProperties.email),
+    discordId: textProp(page, notionProperties.discordId).trim(),
+    discordVerifiedAt: dateProp(page, notionProperties.discordVerifiedAt),
+    discordRole: page.properties[notionProperties.discordRole]?.select?.name?.trim() || null,
     status: statusProp(page),
     tags: multiSelectProp(page, notionProperties.tags),
     exchangeRegistered: checkboxProp(page, notionProperties.exchangeRegistered),
