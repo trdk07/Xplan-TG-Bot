@@ -1,13 +1,67 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   buildNotionProperties,
   mapNotionPageToMember,
   normalizeExchangeUid,
   normalizeTelegramUsername,
   notionProperties,
+  type MemberPatch,
 } from "@/lib/notion";
 
 describe("Notion member mapping", () => {
+  it.each(["探索者", "宇航員", "飛行員"])("reads the recorded Discord role %s", (role) => {
+    const member = mapNotionPageToMember({
+      id: "discord-member",
+      properties: {
+        Discord_id: { rich_text: [{ plain_text: "1524807192434311390" }] },
+        "Discord Verified At": { date: { start: "2026-09-12T08:30:00.000Z" } },
+        "Discord Role": { select: { name: role } },
+        Status: { select: { name: "expired" } },
+        "Discord Credential Hash": { rich_text: [{ plain_text: "private-hash" }] },
+        "Discord Tier Proof": { rich_text: [{ plain_text: "private-proof" }] },
+      },
+    });
+
+    expect(member).toMatchObject({
+      discordId: "1524807192434311390",
+      discordVerifiedAt: "2026-09-12T08:30:00.000Z",
+      discordRole: role,
+    });
+    expect(JSON.stringify(member)).not.toMatch(/private-hash|private-proof/);
+  });
+
+  it.each([
+    {},
+    { Discord_id: { rich_text: [] }, "Discord Verified At": { date: null }, "Discord Role": { select: null } },
+  ])("defaults absent or empty Discord properties without inferring a role", (properties) => {
+    expect(mapNotionPageToMember({
+      id: "no-discord",
+      properties: { ...properties, Status: { select: { name: "partner" } } },
+    })).toMatchObject({ discordId: "", discordVerifiedAt: null, discordRole: null });
+  });
+
+  it("preserves a future role name and joins split Discord ID text", () => {
+    expect(mapNotionPageToMember({
+      id: "future-role",
+      properties: {
+        Discord_id: { rich_text: [{ plain_text: " 152480719" }, { plain_text: "2434311390 " }] },
+        "Discord Role": { select: { name: " 新身分組 " } },
+      },
+    })).toMatchObject({ discordId: "1524807192434311390", discordRole: "新身分組" });
+  });
+
+  it("excludes Discord properties from both typed and runtime membership updates", () => {
+    expectTypeOf<Extract<keyof MemberPatch, "discordId" | "discordVerifiedAt" | "discordRole">>().toEqualTypeOf<never>();
+    // Even an object from untyped input must not write the Discord bot's fields.
+    const patch = {
+      status: "active_paid" as const,
+      discordId: "1524807192434311390",
+      discordVerifiedAt: "2026-09-12T08:30:00.000Z",
+      discordRole: "飛行員",
+    };
+    expect(buildNotionProperties(patch)).toEqual({ Status: { select: { name: "active_paid" } } });
+  });
+
   it("maps Notion page properties into a member model", () => {
     const member = mapNotionPageToMember({
       id: "page-1",

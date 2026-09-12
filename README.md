@@ -109,6 +109,28 @@ npm test
 npm run build
 ```
 
+## Discord records in the admin dashboard
+
+The member list (compact and full) and detail page display Discord verification
+and the role recorded in Notion. The detail page also shows the Discord ID and
+verification time in the dashboard's existing Asia/Taipei date format.
+
+The dashboard reads `Discord_id` (rich text), `Discord Verified At` (date), and
+`Discord Role` (select). An ID with a valid verification date displays `已驗證`;
+both absent displays `無驗證紀錄`; partial or invalid records display
+`驗證資料不完整`. The role is displayed independently, exactly as recorded;
+an empty role displays `尚無身分組紀錄`.
+
+The Discord bot owns these fields. The dashboard does not write them, infer a
+role from membership status, or query Discord. Refresh the page to read updated
+Notion records. No additional credentials or schema migration are needed, and
+credential hashes and tier proofs are not included in the member model.
+
+For browser review with synthetic data, run
+`DISCORD_VISUAL_OUTPUT=output/playwright npm test -- __tests__/discord-admin.test.ts`
+and serve that directory locally. Generated HTML uses the actual admin page
+components and stylesheet; it is for visual inspection, not operating the bot.
+
 ## Cloudflare Workers Deployment
 
 This app deploys to Cloudflare Workers through OpenNext for Cloudflare.

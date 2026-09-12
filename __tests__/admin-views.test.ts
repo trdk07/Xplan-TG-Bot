@@ -41,6 +41,9 @@ function member(overrides: Partial<Member> = {}): Member {
     lastBotMessage: "",
     kickReason: "",
     tradingView: "",
+    discordId: "",
+    discordVerifiedAt: null,
+    discordRole: null,
     ...overrides,
   };
 }
