@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   isInvitationPending,
+  paymentReviewState,
+  renewalReviewState,
   isPaymentIncomplete,
   isTrialExperience,
   matchesAdminView,
@@ -37,6 +39,8 @@ function member(overrides: Partial<Member> = {}): Member {
     finalPnl: "",
     renewalStep: "",
     renewalReminderSentAt: null,
+    renewalReminder3DaySentAt: null,
+    renewalReminderDueAt: null,
     lastBotCheckAt: null,
     lastBotMessage: "",
     kickReason: "",
@@ -96,10 +100,11 @@ describe("admin-views", () => {
     ).toBe(false);
   });
 
-  it("groups trial_active/sent_7day_survey/sent_3day_offer as trial experience", () => {
-    expect(isTrialExperience(member({ status: "trial_active" }))).toBe(true);
-    expect(isTrialExperience(member({ status: "sent_7day_survey" }))).toBe(true);
-    expect(isTrialExperience(member({ status: "active_paid" }))).toBe(false);
+  it("does not classify ambiguous legacy reminders as active trial memberships", () => {
+    expect(isTrialExperience(member({ status: "trial_active" }), now)).toBe(true);
+    expect(isTrialExperience(member({ status: "sent_7day_survey" }), now)).toBe(false);
+    expect(isTrialExperience(member({ status: "trial_active", reviewDueAt: "2026-04-01T00:00:00.000Z" }), now)).toBe(false);
+    expect(isTrialExperience(member({ status: "active_paid" }), now)).toBe(false);
   });
 
   it("matches admin views consistently with the underlying predicates", () => {
@@ -144,5 +149,33 @@ describe("admin-views", () => {
     // partner is excluded from the convertible denominator: 1 paid / 2 convertible = 50%
     expect(renewalConversionRate(members)).toBe(50);
     expect(renewalConversionRate([])).toBe(0);
+  });
+});
+
+
+describe("current renewal review independent of old survey flow", () => {
+  it("shows an expired member's new proof as awaiting review despite prior paidAt", () => {
+    expect(paymentReviewState(member({ status: "expired", renewalStep: "payment_pending", paidAt: "2026-04-01T00:00:00.000Z", paymentUidLast4: "1234", paymentProofFileId: "proof" }))?.label).toBe("待審核");
+  });
+
+  it("does not mistake an expired payment request for a confirmed historical payment", () => {
+    expect(paymentReviewState(member({ status: "payment_pending", renewalStep: "payment_expired", paidAt: "2026-04-01T00:00:00.000Z" }))?.label).toBe("付款期限已過");
+  });
+
+  it("does not display retired questionnaire steps as live tasks", () => {
+    expect(renewalReviewState(member({ status: "renewal_due", renewalStep: "awaiting_pnl" }))?.label).not.toBe("待回覆收益");
+  });
+});
+
+
+describe("membership filters reflect the effective term", () => {
+  const now = new Date("2026-05-01T00:00:00.000Z");
+  it("includes expired members awaiting new payment review in the payment view", () => {
+    expect(matchesAdminView(member({ status: "expired", renewalStep: "payment_pending", paidAt: "2026-03-01T00:00:00.000Z", paymentUidLast4: "1234", paymentProofFileId: "proof" }), "payment_review_ready", now)).toBe(true);
+  });
+  it("classifies a past-due active_paid member as expired before the next job updates Status", () => {
+    const item = member({ status: "active_paid", reviewDueAt: "2026-04-30T00:00:00.000Z" });
+    expect(matchesAdminView(item, "membership_expired", now)).toBe(true);
+    expect(matchesAdminView(item, "paid_active", now)).toBe(false);
   });
 });

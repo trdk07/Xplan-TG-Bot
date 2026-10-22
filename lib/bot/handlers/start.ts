@@ -16,9 +16,12 @@ import {
 } from "@/lib/status";
 import { type TelegramMessage, sendMessage } from "@/lib/telegram";
 import { createInviteForMember, needsMexcUidCollection, refuseAccess } from "@/lib/bot/invite";
-import { renewalKeyboard } from "@/lib/bot/keyboards";
-import { MEXC_UID_MESSAGE, pnlQuestion, renewalOfferQuestion } from "@/lib/bot/messages";
-import { handlePaymentProofMessage } from "@/lib/bot/handlers/payment";
+import { isPaymentPending } from "@/lib/member-state";
+import { normalizeBotMember } from "@/lib/bot/member-policy";
+import { resolveLegacyStatus } from "@/lib/membership-policy";
+import { MEXC_UID_MESSAGE, PAYMENT_PROOF_INSTRUCTIONS, PAYMENT_EXPIRED_MESSAGE, PAYMENT_REVIEW_PENDING_MESSAGE, membershipExpiredMessage } from "@/lib/bot/messages";
+import { rejoinKeyboard } from "@/lib/bot/keyboards";
+import { handlePaymentProofMessage, hasSubmittedPaymentProof } from "@/lib/bot/handlers/payment";
 import { mexcUidFromMessage, userId, usernameFromMessage } from "@/lib/bot/utils";
 
 export async function handleStart(message: TelegramMessage, now: Date) {
@@ -53,6 +56,19 @@ export async function handleStart(message: TelegramMessage, now: Date) {
     return;
   }
 
+  member = await normalizeBotMember(member, now);
+  if (resolveLegacyStatus(member, now).needsReview) {
+    await refuseAccess(message.chat.id, "舊會籍紀錄需要由助理確認，現有 Telegram 群組不受影響。");
+    return;
+  }
+  if (member.status !== "kicked" && member.status !== "denied" && isPaymentPending(member)) {
+    await sendMessage(message.chat.id, hasSubmittedPaymentProof(member) ? PAYMENT_REVIEW_PENDING_MESSAGE : isPast(member.paymentDeadlineAt, now) ? PAYMENT_EXPIRED_MESSAGE : PAYMENT_PROOF_INSTRUCTIONS);
+    return;
+  }
+  if (member.status === "expired") {
+    await sendMessage(message.chat.id, membershipExpiredMessage(member), rejoinKeyboard());
+    return;
+  }
   if (blockedEntryStatuses.has(member.status)) {
     await updateMember(member.pageId, {
       lastBotCheckAt: isoDateTime(now),
@@ -213,42 +229,20 @@ export async function handleMexcUidMessage(
 
 export async function handleUidMessage(message: TelegramMessage, now: Date) {
   if (!message.from) return;
-  const member = await findMemberByTelegramId(userId(message.from.id));
+  const record = await findMemberByTelegramId(userId(message.from.id));
+  const member = record ? await normalizeBotMember(record, now) : null;
   if (!member) {
     await handleStart(message, now);
     return;
   }
 
-  if (member.status === "payment_pending") {
+  if (member.status !== "kicked" && member.status !== "denied" && isPaymentPending(member)) {
     await handlePaymentProofMessage(member, message, now);
     return;
   }
 
   if (needsMexcUidCollection(member)) {
     await handleMexcUidMessage(member, message, now);
-    return;
-  }
-
-  if (
-    member.status === "sent_7day_survey" &&
-    member.renewalStep === "awaiting_pnl"
-  ) {
-    const finalPnl = (message.text || "").trim();
-    if (finalPnl.length < 1) {
-      await sendMessage(message.chat.id, pnlQuestion());
-      return;
-    }
-    await updateMember(member.pageId, {
-      finalPnl,
-      renewalStep: "renewal_offer_sent",
-      lastBotCheckAt: isoDateTime(now),
-      lastBotMessage: "Final P/L captured",
-    });
-    await sendMessage(
-      message.chat.id,
-      renewalOfferQuestion(),
-      renewalKeyboard(),
-    );
     return;
   }
 

@@ -1,4 +1,5 @@
 import type { Member } from "@/lib/notion";
+import { formatDateTime } from "@/lib/dates";
 
 export const RENEWAL_OFFER = [
   "續費方案：",
@@ -15,11 +16,11 @@ export const PAYMENT_PROOF_INSTRUCTIONS =
 export const STALE_STEP_MESSAGE =
   "這個按鈕已不是目前可操作的步驟。若需要協助，請聯絡助理確認。";
 
-export const RENEWAL_EXPIRED_MESSAGE =
-  "這次續費回覆期限已過，系統已停止此續費流程。若需要重新加入或續費，請聯絡助理。";
-
 export const PAYMENT_EXPIRED_MESSAGE =
-  "付款回覆期限已過，系統已停止此付款流程。若已完成轉帳或需要協助，請聯絡助理。";
+  "付款回覆期限已過，系統已停止此付款流程。Telegram 群組仍會保留；若已完成轉帳或需要協助，請聯絡助理。";
+
+export const PAYMENT_REVIEW_PENDING_MESSAGE =
+  "你的完整付款資料已收到，正在等待助理審核，請勿重複申請。Telegram 群組仍會保留。";
 
 export const MEXC_UID_MESSAGE =
   "請回覆你的 MEXC UID。Bot 會確認這個 UID 是否已透過我們的 MEXC 註冊連結完成註冊，並確認入金金額是否達 100 USDT。";
@@ -38,79 +39,23 @@ export function manualPaymentProofRequestMessage() {
   ].join("\n");
 }
 
-export function renewalReminderMessage(member: Member) {
-  if (member.status === "active_paid" || member.status === "sent_7day_survey") {
-    return [
-      "你的訂閱將在 7 天內到期。",
-      "",
-      "到期時 Bot 會再次詢問是否續訂。",
-      "若你已決定續訂，也可點擊下方按鈕提前開始訂閱申請。",
-    ].join("\n");
-  }
-
+export function renewalReminderMessage(member: Member, stage: "7day" | "3day" = "7day") {
+  const days = stage === "3day" ? 3 : 7;
   return [
-    "你的體驗期將在 7 天內到期。",
+    `你的會籍將在 ${days} 天內到期。`,
+    `到期時間：${formatDateTime(member.reviewDueAt)}`,
     "",
-    "訂閱方案：",
-    "3 個月 100U，1 個月 50U。（目前沒有年訂閱方案）",
-    "",
-    "到期時 Bot 會再次詢問是否續訂。",
+    "到期後會籍將標記為已到期，Telegram 群組仍會保留，不會自動移出。",
+    "若你已決定續訂，可點擊下方按鈕開始申請；付款資料由助理人工審核。",
   ].join("\n");
 }
 
-export function sevenDayTrialSurveyMessage() {
+export function membershipExpiredMessage(member: Member) {
   return [
-    "你的 30 天體驗期將在 7 天後到期。",
-    "請確認目前是否已翻倉成功。",
-  ].join("\n");
-}
-
-export function subscriptionInfoMessage() {
-  return [
-    "你的訂閱將在 3 天內到期。",
+    "你的會籍已到期。",
+    `到期時間：${formatDateTime(member.reviewDueAt)}`,
     "",
-    "訂閱方案：",
-    "3 個月 100U，1 個月 50U。（目前沒有年訂閱方案）",
-    "",
-    "可以使用交易所內部轉帳給小夏：",
-    "MEXC - UID：77242747",
-    "",
-    "若你已決定續訂，可點擊下方按鈕提前開始。",
-    "若你暫時不續訂，也請點擊「暫時不續訂」，助理才不用再人工追蹤確認。",
-  ].join("\n");
-}
-
-export function membershipExpiredRenewalMessage() {
-  return [
-    "你的訂閱已到期。",
-    "",
-    RENEWAL_OFFER,
-    "",
-    "請確認是否要訂閱並繼續留在群組。",
-    "若你暫時不續訂，也請點擊「暫時不續訂」，助理才不用再人工追蹤確認。",
-  ].join("\n\n");
-}
-
-export function expiredKickMessage() {
-  return [
-    "你的訂閱已到期，系統已自動將你移出群組。",
-    "",
-    "若你因忙碌遺漏、或已完成轉帳但未及時完成審核，請點擊下方按鈕重新提交憑證申請恢復訂閱。",
-  ].join("\n");
-}
-
-export function graduationMessage() {
-  return "畢業快樂！若日後想重新加入，歡迎隨時聯絡助理。";
-}
-
-export function pnlQuestion() {
-  return "請直接回覆目前的合約收益概略即可，並附上簡單的文字描述現況";
-}
-
-export function renewalOfferQuestion() {
-  return [
-    "收到，感謝你分享目前的操作狀況。",
-    "請確認是否要轉成續費的收費會員方案。",
-    "若你暫時不續留，也請點擊「暫時不續留」，助理才不用再人工追蹤確認。",
+    "Telegram 群組仍會保留，不會自動移出。",
+    "若想恢復訂閱，可點擊下方按鈕提交付款資料，由助理審核。",
   ].join("\n");
 }

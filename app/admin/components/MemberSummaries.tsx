@@ -1,6 +1,7 @@
 import { ImageIcon } from "lucide-react";
 import { formatDateTime } from "@/lib/dates";
 import type { Member } from "@/lib/notion";
+import { getMembershipState } from "@/lib/member-state";
 import {
   isLegacyBitMartMember,
   legacyBitMartReviewNote,
@@ -66,15 +67,17 @@ export function PaymentReviewSummary({ member }: { member: Member }) {
 
 export function RenewalReviewSummary({ member }: { member: Member }) {
   const state = renewalReviewState(member);
-  if (!state) return <span className="subtle">-</span>;
-
   return (
     <div className="payment-review">
-      <span className={`mini-badge ${state.tone}`}>
-        <span className="badge-dot" aria-hidden="true" />
-        {state.label}
-      </span>
-      <span className="subtle small-text">{state.detail}</span>
+      {state ? <>
+        <span className={`mini-badge ${state.tone}`}>
+          <span className="badge-dot" aria-hidden="true" />
+          {state.label}
+        </span>
+        <span className="subtle small-text">{state.detail}</span>
+      </> : <span className="subtle">尚未進入續約</span>}
+      <span className="subtle small-text">7 天續約提醒：{formatDateTime(member.renewalReminderSentAt)}</span>
+      <span className="subtle small-text">3 天續約提醒：{formatDateTime(member.renewalReminder3DaySentAt)}</span>
     </div>
   );
 }
@@ -90,6 +93,24 @@ export function TradingViewSummary({ member }: { member: Member }) {
       <div className="payment-review">
         <span className="compact-text">{member.tradingView}</span>
       </div>
+    </div>
+  );
+}
+
+
+export function MembershipSummary({ member }: { member: Member }) {
+  const state = getMembershipState(member);
+  return <span className={`mini-badge ${state.tone}`}><span className="badge-dot" aria-hidden="true" />{state.label}</span>;
+}
+
+export function TelegramPresenceSummary({ member }: { member: Member }) {
+  return (
+    <div className="payment-review">
+      <span className={`mini-badge ${member.groupJoinedAt ? "success" : "muted"}`}>
+        <span className="badge-dot" aria-hidden="true" />
+        {member.groupJoinedAt ? "曾加入 Telegram" : "尚無 Telegram 入群紀錄"}
+      </span>
+      <span className="subtle small-text">入群紀錄不代表目前仍在群組；會籍到期不移出群組</span>
     </div>
   );
 }

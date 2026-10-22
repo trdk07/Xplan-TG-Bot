@@ -1,12 +1,12 @@
 import type { Member } from "@/lib/notion";
-import { activeGroupStatuses } from "@/lib/status";
+import { hasCurrentMembership } from "@/lib/membership-policy";
 
-export function activeTradingViewIds(members: Member[]): string[] {
+export function activeTradingViewIds(members: Member[], now = new Date()): string[] {
   const seen = new Set<string>();
   const tradingViewIds: string[] = [];
 
   for (const member of members) {
-    if (!activeGroupStatuses.has(member.status)) continue;
+    if (!hasCurrentMembership(member, now)) continue;
 
     const tradingViewId = member.tradingView.trim();
     if (!tradingViewId) continue;

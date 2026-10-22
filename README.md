@@ -67,7 +67,9 @@ Required properties:
 - `Paid At` date
 - `Final P/L` rich text
 - `Renewal Step` select
-- `Renewal Reminder Sent At` date
+- `Renewal Reminder Sent At` date (7-day reminder)
+- `Renewal Reminder 3 Day Sent At` date
+- `Renewal Reminder Due At` date (membership period key)
 - `Last Bot Check At` date
 - `Last Bot Message` rich text
 - `Kick Reason` rich text
@@ -76,14 +78,17 @@ Required properties:
 
 Status options:
 
-`eligible`, `collecting_info`, `invite_sent`, `join_pending`, `trial_active`, `renewal_due`, `payment_pending`, `active_paid`, `partner`, `exempt`, `VIP`, `expired`, `kicked`, `denied`.
+`eligible`, `collecting_info`, `join_pending`, `trial_active`, `payment_pending`, `active_paid`, `partner`, `exempt`, `VIP`, `expired`, `kicked`, `denied`.
 
-`partner`, `exempt`, and `VIP` are non-expiring group access statuses. They can join through the Bot's protected invite flow, are allowed to remain in the group, and are skipped by renewal/payment/deadline jobs.
+Legacy values are read for migration only. See [membership lifecycle and release preparation](docs/membership-lifecycle.md).
 
-Run the schema helper after adding new bot fields:
+`partner`, `exempt`, and `VIP` are non-expiring membership statuses. Telegram is a community funnel: existing participants are not removed for expired or disabled membership. Membership expiration is recorded in Notion for other services to consume.
+
+Prepare Notion fields before releasing the new reminder job (the helper defaults to dry-run and preserves existing options):
 
 ```bash
 npm run notion:ensure-schema
+npm run notion:ensure-schema -- --apply
 ```
 
 The Notion view helper organizes the human-facing database tabs without editing
@@ -169,7 +174,7 @@ curl -H "Authorization: Bearer $PARTNER_API_TOKEN" \
   "https://your-worker.example/api/partners/tradingview-members"
 ```
 
-The endpoint returns only unique, non-empty `TradingView` values for members whose `Status` is currently allowed to remain in the Telegram group: `trial_active`, `renewal_due`, `payment_pending`, `active_paid`, `partner`, `exempt`, or `VIP`.
+The endpoint returns only unique, non-empty `TradingView` values for members whose `Status` grants current membership: `trial_active`, `payment_pending`, `active_paid`, `partner`, `exempt`, or `VIP`. Telegram presence itself is not evidence of an active membership.
 
 ## GitHub Actions Deployment
 
@@ -186,21 +191,9 @@ Runtime application secrets such as `TELEGRAM_BOT_TOKEN`, `NOTION_API_KEY`, and 
 
 Payments are manually reviewed in v1. Members receive exchange internal-transfer instructions, then send a transfer screenshot and UID last four digits to the Bot. The Bot stores the proof metadata on the member record and the admin detail page proxies the Telegram file through an authenticated payment-proof endpoint for screenshot preview. An admin then confirms receipt and uses the dashboard's manual "mark paid" action. A future provider webhook should verify the provider signature, resolve the Notion page from payment metadata, enforce idempotency, then update the member to `active_paid`.
 
-The admin member list includes a `續約狀態` (`Renewal Review`) column for quick triage of the renewal decision flow:
+The admin shows membership state separately from 7-day and 3-day reminder records. Reminders do not overwrite trial/paid status; expiration updates Notion without removing Telegram participants. Questionnaire and P/L collection are no longer part of renewal. Historical membership states remain visible for evidence-based review.
 
-- `即將到期` / `已提醒續約`: active trial members inside the 0–7 day reminder window.
-- `待選翻倉`: expired trial member still needs to choose whether the flip goal succeeded.
-- `待回覆收益`: member selected a trial result and still needs to reply with the final P/L summary.
-- `待選續留`: member needs to choose whether to continue or leave.
-- `已申請續費`: member chose to continue and is in the payment flow.
-- `不續留` / `逾期未完成`: member declined or missed the renewal/payment deadline.
-
-The admin member list also includes a `付款審核` (`Payment Review`) column for payment-proof triage:
-
-- `待付款資料`: member is in `payment_pending` but has not submitted a screenshot or UID last four digits yet.
-- `待補件`: only one of the screenshot or UID last four digits has been submitted.
-- `待審核`: both screenshot and UID last four digits are present and ready for manual review.
-- `已標記付款`: the member has been marked paid or has a `Paid At` timestamp.
+Payment review uses the current payment request, not historical `Paid At`. It can show pending proof/review even while membership is expired; confirming payment activates membership, extends the deadline and resets reminder markers without generating an unnecessary rejoin invitation.
 
 When a screenshot exists, the list and detail pages link to `/api/admin/payment-proof?fileId=...`, which requires admin auth before proxying the Telegram file.
 

@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { CircleDollarSign, Users } from "lucide-react";
-import { statCount } from "@/lib/admin-views";
+import { matchesAdminView } from "@/lib/admin-views";
 import type { Member } from "@/lib/notion";
 
 type Props = {
   members: Member[];
   paymentProofReady: number;
-  renewalWaiting: number;
+  expiredMemberships: number;
   endingSoon: number;
   invitationEmailCount: number;
   totalRevenue: number;
@@ -16,12 +16,15 @@ type Props = {
 export function StatsOverview({
   members,
   paymentProofReady,
-  renewalWaiting,
+  expiredMemberships,
   endingSoon,
   invitationEmailCount,
   totalRevenue,
   paidMembersCount,
 }: Props) {
+  const now = new Date();
+  const viewCount = (view: "paid_active" | "trial_experience" | "payment_pending") =>
+    members.filter((member) => matchesAdminView(member, view, now)).length;
   return (
     <>
       <div className="stats-group">
@@ -31,17 +34,17 @@ export function StatsOverview({
             <span className="subtle">總人數</span>
             <strong>{members.length}</strong>
           </Link>
-          <Link className="stat stat-link" href="/admin?status=active_paid">
+          <Link className="stat stat-link" href="/admin?view=paid_active">
             <span className="subtle">訂閱中</span>
-            <strong>{statCount(members, ["active_paid"])}</strong>
+            <strong>{viewCount("paid_active")}</strong>
           </Link>
           <Link className="stat stat-link" href="/admin?view=trial_experience">
             <span className="subtle">體驗中</span>
-            <strong>{statCount(members, ["trial_active", "sent_7day_survey", "sent_3day_offer"])}</strong>
+            <strong>{viewCount("trial_experience")}</strong>
           </Link>
-          <Link className="stat stat-link" href="/admin?status=payment_pending">
+          <Link className="stat stat-link" href="/admin?view=payment_pending">
             <span className="subtle">待付款</span>
-            <strong>{statCount(members, ["payment_pending"])}</strong>
+            <strong>{viewCount("payment_pending")}</strong>
           </Link>
         </section>
       </div>
@@ -57,11 +60,11 @@ export function StatsOverview({
             <strong>{paymentProofReady}</strong>
           </Link>
           <Link
-            className={`stat stat-link${renewalWaiting > 0 ? " stat-emphasis" : ""}`}
-            href="/admin?status=renewal_due"
+            className={`stat stat-link${expiredMemberships > 0 ? " stat-emphasis" : ""}`}
+            href="/admin?view=membership_expired"
           >
-            <span className="subtle">到期未回</span>
-            <strong>{renewalWaiting}</strong>
+            <span className="subtle">會籍已到期</span>
+            <strong>{expiredMemberships}</strong>
           </Link>
           <Link className="stat stat-link" href="/admin?view=ending_soon">
             <span className="subtle">即將到期</span>

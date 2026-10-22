@@ -13,7 +13,6 @@ import {
 import {
   manualPaymentProofRequestMessage,
   paymentProofRequestKeyboard,
-  resendRenewalDueReminder,
   sendRenewalReminder,
 } from "@/lib/bot";
 import { getAdminPassword, getRuntimeConfig } from "@/lib/config";
@@ -25,7 +24,10 @@ import {
   renewalBaseDate,
 } from "@/lib/dates";
 import {
+  getMembershipState,
   isPaymentFollowupCandidate,
+  isPaymentPending,
+  isPaymentReviewReady,
   isRenewalNoticeCandidate,
 } from "@/lib/member-state";
 import {
@@ -34,10 +36,9 @@ import {
   updateMember,
   updateMemberExistingProperties,
 } from "@/lib/notion";
-import { isMemberStatus } from "@/lib/status";
+import { isMemberStatus, nonExpiringStatuses } from "@/lib/status";
 import {
   createChatInviteLink,
-  kickChatMember,
   revokeChatInviteLink,
   sendMessage,
   unbanChatMember,
@@ -100,63 +101,29 @@ export async function markPaidAction(pageId: string, durationMonths: 1 | 3 = 1) 
       return;
     }
 
-    const wasKicked = Boolean(member.kickReason);
     const baseDate = renewalBaseDate(member.reviewDueAt, now);
     const reviewDueAt = addMonths(baseDate, durationMonths);
     const label = `${durationMonths} month${durationMonths > 1 ? "s" : ""}`;
 
-    if (wasKicked && member.telegramUserId) {
-      // Member was previously kicked — generate invite link so they can rejoin
-      await unbanChatMember(member.telegramUserId);
-      const expiresAt = addDays(now, 1);
-      const invite = await createChatInviteLink({
-        name: `paid-${member.telegramUserId}`.slice(0, 32),
-        expireDate: expiresAt,
-      });
-      await updateMember(pageId, {
-        status: "join_pending",
-        paidAt: isoDateTime(now),
-        subscriptionMonths: durationMonths,
-        reviewDueAt: isoDateTime(reviewDueAt),
-        paymentDeadlineAt: null,
-        renewalStep: "",
-        renewalReminderSentAt: null,
-        kickReason: "",
-        inviteLink: invite.invite_link,
-        inviteExpiresAt: isoDateTime(expiresAt),
-        lastBotCheckAt: isoDateTime(now),
-        lastBotMessage: `Marked paid by ${operator} (${label}), invite sent for rejoin`,
-      });
+    await updateMember(pageId, {
+      status: "active_paid",
+      paidAt: isoDateTime(now),
+      subscriptionMonths: durationMonths,
+      reviewDueAt: isoDateTime(reviewDueAt),
+      paymentDeadlineAt: null,
+      renewalStep: "",
+      renewalReminderSentAt: null,
+      renewalReminder3DaySentAt: null,
+      renewalReminderDueAt: null,
+      kickReason: "",
+      lastBotCheckAt: isoDateTime(now),
+      lastBotMessage: `Marked paid by ${operator} (${label})`,
+    });
+    if (member.telegramUserId) {
       await sendMessage(
         member.telegramUserId,
-        [
-          "你的訂閱已審核通過！",
-          "",
-          `有效期限至 ${formatDateTime(isoDateTime(reviewDueAt))}。`,
-          "",
-          "請點擊下方專屬連結重新加入群組（連結僅可使用一次，並於 24 小時後失效）：",
-          invite.invite_link,
-        ].join("\n"),
+        `訂閱已更新，目前為有效狀態，有效期限至 ${formatDateTime(isoDateTime(reviewDueAt))}。Telegram 群組資格不受會籍到期影響。`,
       );
-    } else {
-      await updateMember(pageId, {
-        status: "active_paid",
-        paidAt: isoDateTime(now),
-        subscriptionMonths: durationMonths,
-        reviewDueAt: isoDateTime(reviewDueAt),
-        paymentDeadlineAt: null,
-        renewalStep: "",
-        renewalReminderSentAt: null,
-        kickReason: "",
-        lastBotCheckAt: isoDateTime(now),
-        lastBotMessage: `Marked paid by ${operator} (${label})`,
-      });
-      if (member.telegramUserId) {
-        await sendMessage(
-          member.telegramUserId,
-          `訂閱已更新，目前為有效狀態，有效期限至 ${formatDateTime(isoDateTime(reviewDueAt))}。`,
-        );
-      }
     }
   });
 }
@@ -180,23 +147,31 @@ export async function requestPaymentProofAction(pageId: string) {
 
       const config = getRuntimeConfig();
       const deadline = addDays(now, config.paymentGraceDays);
+      const membershipIsActive = getMembershipState(member, now).state === "active";
+      const continueCurrentRequest = isPaymentReviewReady(member) || (
+        isPaymentPending(member) && Boolean(member.paymentDeadlineAt)
+        && Date.parse(member.paymentDeadlineAt!) > now.getTime()
+      );
       const updatedProperties = await updateMemberExistingProperties(pageId, {
-        status: "payment_pending",
+        ...(membershipIsActive && !nonExpiringStatuses.has(member.status)
+          ? { status: "payment_pending" as const }
+          : {}),
         renewalStep: "payment_pending",
-        paymentDeadlineAt: isoDateTime(deadline),
-        paymentUidLast4: "",
-        paymentProofFileId: "",
-        paymentProofSubmittedAt: null,
-        paidAt: null,
+        ...(continueCurrentRequest ? {} : {
+          paymentDeadlineAt: isoDateTime(deadline),
+          paymentUidLast4: "",
+          paymentProofFileId: "",
+          paymentProofSubmittedAt: null,
+        }),
         lastBotCheckAt: isoDateTime(now),
         lastBotMessage: `Manual payment proof option sent by ${operator}`,
       });
 
-      if (!updatedProperties.includes("Status")) {
+      if (!updatedProperties.includes("Renewal Step")) {
         await updateMemberExistingProperties(pageId, {
           lastBotCheckAt: isoDateTime(now),
           lastBotMessage:
-            "Manual payment proof option skipped: Notion Status property was not found",
+            "Manual payment proof option skipped: Notion Renewal Step property was not found",
         }).catch(() => []);
         return;
       }
@@ -204,8 +179,10 @@ export async function requestPaymentProofAction(pageId: string) {
       try {
         await sendMessage(
           member.telegramUserId,
-          manualPaymentProofRequestMessage(),
-          paymentProofRequestKeyboard(),
+          continueCurrentRequest
+            ? "你的付款申請仍在處理中。已收到的資料會保留，請補齊尚缺的轉帳截圖或 UID 末四碼；資料已齊全者請等待助理審核。"
+            : manualPaymentProofRequestMessage(),
+          continueCurrentRequest ? undefined : paymentProofRequestKeyboard(),
         );
       } catch (error) {
         await updateMemberExistingProperties(pageId, {
@@ -235,34 +212,26 @@ export async function resendRenewalRemindersAction() {
 
   let sentCount = 0;
   for (const member of members) {
-    if (
-      isRenewalNoticeCandidate(member, now, {
-        allowAlreadyReminded: true,
-      })
-    ) {
-      await sendRenewalReminder(
-        member,
-        now,
-        `Renewal reminder resent manually by ${operator}`,
-      );
-      sentCount += 1;
-      continue;
-    }
-
     if (isPaymentFollowupCandidate(member, now)) {
       await sendMessage(
         member.telegramUserId,
         [
-          "你目前已在續費付款流程中，但付款資料尚未完整。",
-          "",
-          "請上傳轉帳截圖，並回覆 UID 末四碼（4 位數字）。",
-          "如果已完成其中一項，請補上另一項即可。",
+          "你的付款資料尚未完整，已收到的內容會保留。",
+          "請補齊轉帳截圖與 UID 末四碼（4 位數字），已完成的項目不用重傳。",
+          `付款資料截止：${formatDateTime(member.paymentDeadlineAt)}`,
+          `原會籍到期：${formatDateTime(member.reviewDueAt)}；Telegram 群組資格保留。`,
         ].join("\n"),
       );
       await updateMember(member.pageId, {
         lastBotCheckAt: isoDateTime(now),
         lastBotMessage: `Payment follow-up resent manually by ${operator}`,
       });
+      sentCount += 1;
+      continue;
+    }
+    const stage = isRenewalNoticeCandidate(member, now, { stage: "3day", allowAlreadyReminded: true }) ? "3day" : "7day";
+    if (isRenewalNoticeCandidate(member, now, { stage, allowAlreadyReminded: true })) {
+      await sendRenewalReminder(member, now, `Renewal reminder resent manually by ${operator}`, stage);
       sentCount += 1;
     }
   }
@@ -304,18 +273,6 @@ export async function markInvitationEmailSentAction(pageId: string) {
   });
 }
 
-export async function resendRenewalDueReminderAction(pageId: string) {
-  await withAdminAction(pageId, async (operator) => {
-    const member = await getMemberByPageId(pageId);
-    if (!member) throw new Error("Member not found");
-    await resendRenewalDueReminder(
-      member,
-      new Date(),
-      `Renewal due reminder resent manually by ${operator}`,
-    );
-  });
-}
-
 export async function extendTrialAction(pageId: string) {
   await withAdminAction(pageId, async (operator) => {
     const now = new Date();
@@ -330,6 +287,8 @@ export async function extendTrialAction(pageId: string) {
       reviewDueAt: isoDateTime(newReviewDueAt),
       renewalStep: "",
       renewalReminderSentAt: null,
+      renewalReminder3DaySentAt: null,
+      renewalReminderDueAt: null,
       kickReason: "",
       lastBotCheckAt: isoDateTime(now),
       lastBotMessage: `Trial extended by 1 month by ${operator}`,
@@ -349,14 +308,11 @@ export async function kickMemberAction(pageId: string) {
     const member = await getMemberByPageId(pageId);
     if (!member) throw new Error("Member not found");
 
-    if (member.telegramUserId) {
-      await kickChatMember(member.telegramUserId);
-    }
     await updateMember(pageId, {
       status: "kicked",
-      kickReason: "manual_admin_kick",
+      kickReason: "manual_membership_disabled",
       lastBotCheckAt: isoDateTime(new Date()),
-      lastBotMessage: `Kicked manually by ${operator}`,
+      lastBotMessage: `Membership disabled by ${operator}; Telegram membership retained`,
     });
   });
 }
@@ -366,17 +322,21 @@ export async function resendInviteAction(pageId: string) {
     const member = await getMemberByPageId(pageId);
     if (!member) throw new Error("Member not found");
 
-    if (member.telegramUserId) {
-      await unbanChatMember(member.telegramUserId);
+    if (member.status === "denied" || member.status === "kicked") {
+      throw new Error("請先處理已拒絕或停用的會籍，再重新發送入群連結。");
     }
+    if (!member.telegramUserId) throw new Error("此會員尚未綁定 Telegram 帳號。");
+    await unbanChatMember(member.telegramUserId);
 
     const expiresAt = addDays(new Date(), 1);
     const invite = await createChatInviteLink({
       name: `admin-${member.telegramUserId}`.slice(0, 32),
       expireDate: expiresAt,
     });
+    const initialJoin = ["eligible", "collecting_info", "invite_sent", "join_pending"].includes(member.status)
+      && !member.groupJoinedAt && !member.reviewDueAt && !member.paidAt;
     await updateMember(pageId, {
-      status: "join_pending",
+      ...(initialJoin ? { status: "join_pending" as const } : {}),
       inviteLink: invite.invite_link,
       inviteExpiresAt: isoDateTime(expiresAt),
       lastBotCheckAt: isoDateTime(new Date()),

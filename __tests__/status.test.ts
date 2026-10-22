@@ -37,6 +37,6 @@ describe("member status policy", () => {
     expect(memberStatusLabel("partner")).toBe("合作夥伴");
     expect(memberStatusLabel("exempt")).toBe("免費會員");
     expect(memberStatusLabel("VIP")).toBe("VIP");
-    expect(memberStatusLabel("kicked")).toBe("已離開");
+    expect(memberStatusLabel("kicked")).toBe("已停用");
   });
 });

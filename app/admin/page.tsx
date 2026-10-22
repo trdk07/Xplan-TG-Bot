@@ -10,15 +10,15 @@ import { StatsOverview } from "@/app/admin/components/StatsOverview";
 import { TodayInbox } from "@/app/admin/components/TodayInbox";
 import { ActionButton } from "@/app/components/ActionButton";
 import { ActionToast } from "@/app/components/ActionToast";
-import { isAdminView, isInvitationPending, matchesAdminView } from "@/lib/admin-views";
+import { isAdminView, isInvitationPending, isEndingSoon, matchesAdminView } from "@/lib/admin-views";
 import { getDisplayConfig, getMissingConfig } from "@/lib/config";
 import {
-  isPaymentFollowupCandidate,
+  getMembershipState,
+  isPaymentPending,
   isPaymentReviewReady,
-  isRenewalNoticeCandidate,
 } from "@/lib/member-state";
 import { listMembers, memberMatchesQuery, type Member } from "@/lib/notion";
-import { type MemberStatus, memberStatuses } from "@/lib/status";
+import { isMemberStatus } from "@/lib/status";
 import { getAdminOperator, requireAdmin } from "@/lib/auth";
 
 function scalar(value: string | string[] | undefined): string {
@@ -46,9 +46,7 @@ export default async function AdminPage({
   const resentCount = scalar(params.resent);
   const inactive = scalar(params.inactive);
   const density = scalar(params.density) === "full" ? "full" : "compact";
-  const status = memberStatuses.includes(rawStatus as MemberStatus)
-    ? (rawStatus as MemberStatus)
-    : "all";
+  const status = isMemberStatus(rawStatus) ? rawStatus : "all";
   const view = isAdminView(rawView) ? rawView : null;
   const config = getDisplayConfig();
   const missingConfig = getMissingConfig();
@@ -77,29 +75,21 @@ export default async function AdminPage({
       : queryFiltered;
 
   const displayMembers =
-    inactive === "show"
+    inactive === "show" || view || status !== "all"
       ? listedMembers
-      : listedMembers.filter(
-          (m) => !["expired", "kicked", "denied"].includes(m.status),
+      : listedMembers.filter((member) =>
+          isPaymentPending(member) || !["expired", "inactive"].includes(getMembershipState(member, now).state),
         );
   const hiddenCount = listedMembers.length - displayMembers.length;
 
   const paymentProofReady = allMembers.filter((member) =>
     isPaymentReviewReady(member),
   ).length;
-  const renewalWaiting = allMembers.filter(
-    (member) => member.status === "renewal_due",
+  const expiredMemberships = allMembers.filter(
+    (member) => matchesAdminView(member, "membership_expired", now),
   ).length;
 
-  const renewalNoticeTargets = allMembers.filter((member) =>
-    isRenewalNoticeCandidate(member, now, {
-      allowAlreadyReminded: true,
-    }),
-  ).length;
-  const paymentFollowupTargets = allMembers.filter((member) =>
-    isPaymentFollowupCandidate(member, now),
-  ).length;
-  const endingSoon = renewalNoticeTargets + paymentFollowupTargets;
+  const endingSoon = allMembers.filter((member) => isEndingSoon(member, now)).length;
   const paidMembersCount = allMembers.filter((m) => m.paidAt).length;
   const totalRevenue = allMembers.reduce((sum, m) => {
     if (!m.paidAt) return sum;
@@ -125,7 +115,7 @@ export default async function AdminPage({
         <div>
           <h1>Telegram 會員入群 Bot</h1>
           <p className="subtle">
-            Notion-only membership gate and renewal dashboard.
+            Notion 會籍與 Telegram 入群紀錄分開管理；會籍到期不移出群組。
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -149,7 +139,7 @@ export default async function AdminPage({
       <StatsOverview
         members={allMembers}
         paymentProofReady={paymentProofReady}
-        renewalWaiting={renewalWaiting}
+        expiredMemberships={expiredMemberships}
         endingSoon={endingSoon}
         invitationEmailCount={invitationEmailTargets.length}
         totalRevenue={totalRevenue}
@@ -158,7 +148,7 @@ export default async function AdminPage({
 
       {resentCount ? (
         <ActionToast
-          message={`已重新發送最新版續約通知給 ${resentCount} 位 0～7 天內到期的會員。`}
+          message={`已發送續約或付款補件提醒給 ${resentCount} 位會員。`}
         />
       ) : null}
 

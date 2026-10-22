@@ -23,12 +23,14 @@ import {
 import { ActionButton } from "@/app/components/ActionButton";
 import { ConfirmMarkPaidButton } from "@/app/components/ConfirmMarkPaidButton";
 import { StatusBadge } from "@/app/components/StatusBadge";
+import { MembershipSummary, TelegramPresenceSummary } from "@/app/admin/components/MemberSummaries";
+import { isPaymentPending } from "@/lib/member-state";
 import { DiscordDetails } from "@/app/admin/components/DiscordSummary";
 import { isLegacyBitMartMember } from "@/lib/admin-views";
 import { requireAdmin } from "@/lib/auth";
 import { addMonths, formatDateTime, renewalBaseDate } from "@/lib/dates";
 import { getMemberByPageId } from "@/lib/notion";
-import { manualOverrideStatuses, memberStatusLabel } from "@/lib/status";
+import { isMemberStatus, manualOverrideStatuses, memberStatusLabel } from "@/lib/status";
 
 export default async function MemberDetailPage({
   params,
@@ -96,6 +98,10 @@ export default async function MemberDetailPage({
             <DiscordDetails member={member} />
             <div>已送出邀請</div>
             <div>{member.invitationEmailSent ? "yes" : "no"}</div>
+            <div>會籍效期</div>
+            <div><MembershipSummary member={member} /></div>
+            <div>Telegram 入群紀錄</div>
+            <div><TelegramPresenceSummary member={member} /></div>
             <div>Status</div>
             <div>{memberStatusLabel(member.status)}</div>
             <div>Tags</div>
@@ -156,15 +162,17 @@ export default async function MemberDetailPage({
             <div>{formatDateTime(member.paymentProofSubmittedAt)}</div>
             <div>Paid At</div>
             <div>{formatDateTime(member.paidAt)}</div>
-            <div>Final P/L</div>
-            <div>{member.finalPnl || "-"}</div>
-            <div>Renewal Step</div>
-            <div>{member.renewalStep || "-"}</div>
-            <div>Renewal Reminder Sent At</div>
+            <div>付款申請進度</div>
+            <div>{isPaymentPending(member) ? "申請付款中" : member.renewalStep === "payment_expired" ? "付款申請已截止" : "-"}</div>
+            <div>7 天續約提醒</div>
             <div>{formatDateTime(member.renewalReminderSentAt)}</div>
+            <div>3 天續約提醒</div>
+            <div>{formatDateTime(member.renewalReminder3DaySentAt)}</div>
+            <div>提醒對應到期日</div>
+            <div>{formatDateTime(member.renewalReminderDueAt)}</div>
             <div>Last Bot Message</div>
             <div>{member.lastBotMessage || "-"}</div>
-            <div>Kick Reason</div>
+            <div>會籍停用／歷史異動原因</div>
             <div>{member.kickReason || "-"}</div>
             <div>TradingView</div>
             <div>{member.tradingView || "-"}</div>
@@ -193,7 +201,7 @@ export default async function MemberDetailPage({
             </form>
 
             <form action={resendInvite}>
-              <ActionButton icon={<Send />}>重送入群連結</ActionButton>
+              <ActionButton icon={<Send />} disabled={!member.telegramUserId || ["kicked", "denied"].includes(member.status)}>重送入群連結</ActionButton>
             </form>
 
             <div className="actions-divider" role="separator" aria-label="流程操作" />
@@ -225,6 +233,9 @@ export default async function MemberDetailPage({
                   <div className="field">
                     <label htmlFor="status">手動修正 Status</label>
                     <select className="input" id="status" name="status" defaultValue={member.status}>
+                      {!isMemberStatus(member.status) && (
+                        <option value={member.status} disabled>{memberStatusLabel(member.status)}（請確認後選擇新狀態）</option>
+                      )}
                       {member.status === "active_paid" && (
                         <option value="active_paid" disabled>
                           已付款有效（請用上方標記付款按鈕）
@@ -255,8 +266,9 @@ export default async function MemberDetailPage({
 
                 <form action={kick}>
                   <ActionButton icon={<Ban />} danger>
-                    踢出群組
+                    停用會籍
                   </ActionButton>
+                  <p className="field-hint">停用後 Telegram 群組資格會保留；Discord 等付費權益依 Notion 會籍處理。</p>
                 </form>
               </div>
             </details>

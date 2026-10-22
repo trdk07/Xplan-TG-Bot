@@ -1,13 +1,8 @@
 export const memberStatuses = [
   "eligible",
   "collecting_info",
-  "invite_sent",
   "join_pending",
   "trial_active",
-  "sent_7day_survey",
-  "sent_3day_offer",
-  "user_refused",
-  "renewal_due",
   "payment_pending",
   "active_paid",
   "partner",
@@ -18,26 +13,32 @@ export const memberStatuses = [
   "denied",
 ] as const;
 
-export type MemberStatus = (typeof memberStatuses)[number];
+export const legacyMemberStatuses = ["invite_sent", "sent_7day_survey", "sent_3day_offer", "user_refused", "renewal_due"] as const;
+export type CanonicalMemberStatus = (typeof memberStatuses)[number];
+// Legacy values remain readable until records are safely migrated, but cannot be selected for new writes.
+export type MemberStatus = CanonicalMemberStatus | (typeof legacyMemberStatuses)[number];
+export function isReadableMemberStatus(value: unknown): value is MemberStatus {
+  return typeof value === "string" && [...memberStatuses, ...legacyMemberStatuses].includes(value as MemberStatus);
+}
 
 export const memberStatusLabels: Record<MemberStatus, string> = {
   eligible: "可入群",
-  collecting_info: "收集中",
+  collecting_info: "待驗證",
   invite_sent: "連結已發",
-  join_pending: "等待入群",
+  join_pending: "待入群",
   trial_active: "體驗中",
-  sent_7day_survey: "問卷已發",
-  sent_3day_offer: "通知已發",
-  user_refused: "不續訂",
-  renewal_due: "到期未回",
+  sent_7day_survey: "待確認會籍（舊 7 日紀錄）",
+  sent_3day_offer: "待確認會籍（舊 3 日紀錄）",
+  user_refused: "待確認會籍（舊不續訂）",
+  renewal_due: "待確認會籍（舊到期紀錄）",
   payment_pending: "待付款",
   active_paid: "訂閱中",
   partner: "合作夥伴",
   exempt: "免費會員",
   VIP: "VIP",
-  expired: "已離開",
-  kicked: "已離開",
-  denied: "已拒絕",
+  expired: "已到期",
+  kicked: "已停用",
+  denied: "拒絕加入",
 };
 
 export const nonExpiringStatuses = new Set<MemberStatus>([
@@ -48,10 +49,6 @@ export const nonExpiringStatuses = new Set<MemberStatus>([
 
 export const activeGroupStatuses = new Set<MemberStatus>([
   "trial_active",
-  "sent_7day_survey",
-  "sent_3day_offer",
-  "user_refused",
-  "renewal_due",
   "payment_pending",
   "active_paid",
   "partner",
@@ -63,8 +60,6 @@ export const activeGroupStatuses = new Set<MemberStatus>([
 export const normalMembershipStatuses = new Set<MemberStatus>([
   "trial_active",
   "active_paid",
-  "sent_7day_survey",
-  "sent_3day_offer",
 ]);
 
 export const blockedEntryStatuses = new Set<MemberStatus>([
@@ -73,8 +68,8 @@ export const blockedEntryStatuses = new Set<MemberStatus>([
   "denied",
 ]);
 
-export function isMemberStatus(value: string): value is MemberStatus {
-  return memberStatuses.includes(value as MemberStatus);
+export function isMemberStatus(value: string): value is CanonicalMemberStatus {
+  return memberStatuses.includes(value as CanonicalMemberStatus);
 }
 
 // active_paid is intentionally excluded — use the mark-paid buttons instead,

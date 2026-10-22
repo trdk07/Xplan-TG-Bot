@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { isTrialExperience, matchesAdminView } from "@/lib/admin-views";
+import { hasCurrentMembership } from "@/lib/membership-policy";
+import { nonExpiringStatuses } from "@/lib/status";
 import { requireAdmin } from "@/lib/auth";
 import { listMembers, type Member } from "@/lib/notion";
 
@@ -9,15 +12,20 @@ export default async function TradingViewPage() {
 
   const tvMembers = members.filter((m) => m.tradingView);
 
-  const trialStatuses = new Set(["trial_active", "sent_7day_survey", "sent_3day_offer"]);
+  const now = new Date();
 
   const activePaid1Month: Member[] = [];
   const activePaid3Month: Member[] = [];
   const activePaidUnclassified: Member[] = [];
   const trial: Member[] = [];
+  const membershipReview: Member[] = [];
+  const nonExpiring: Member[] = [];
 
   for (const m of tvMembers) {
-    if (m.status === "active_paid") {
+    if (!hasCurrentMembership(m, now)) continue;
+    if (nonExpiringStatuses.has(m.status)) {
+      nonExpiring.push(m);
+    } else if (matchesAdminView(m, "paid_active", now)) {
       if (m.subscriptionMonths === 1) {
         activePaid1Month.push(m);
       } else if (m.subscriptionMonths === 3) {
@@ -25,8 +33,10 @@ export default async function TradingViewPage() {
       } else {
         activePaidUnclassified.push(m);
       }
-    } else if (trialStatuses.has(m.status)) {
+    } else if (isTrialExperience(m, now)) {
       trial.push(m);
+    } else {
+      membershipReview.push(m);
     }
   }
 
@@ -71,6 +81,23 @@ export default async function TradingViewPage() {
           <TradingViewList members={trial} />
         </div>
       </section>
+
+      {nonExpiring.length > 0 ? (
+        <section className="panel">
+          <div className="panel-head"><h2>免續約會籍</h2><span className="subtle">{nonExpiring.length} 位</span></div>
+          <div className="panel-body"><TradingViewList members={nonExpiring} /></div>
+        </section>
+      ) : null}
+
+      {membershipReview.length > 0 ? (
+        <section className="panel">
+          <div className="panel-head"><h2>會籍類型待確認</h2><span className="subtle">{membershipReview.length} 位</span></div>
+          <div className="panel-body">
+            <p className="subtle">會籍尚未到期，保留現有權益；請確認試用或付費類型。</p>
+            <TradingViewList members={membershipReview} />
+          </div>
+        </section>
+      ) : null}
 
       {activePaidUnclassified.length > 0 ? (
         <section className="panel">

@@ -87,6 +87,15 @@ select {
   padding-bottom: 16px;
 }
 
+.topbar > div {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.topbar > div:last-child {
+  flex-wrap: wrap;
+}
+
 .topbar h1 {
   font-size: 24px;
   letter-spacing: 0;

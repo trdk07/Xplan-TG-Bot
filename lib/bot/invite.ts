@@ -1,6 +1,6 @@
-import { addDays, isoDateTime } from "@/lib/dates";
+import { addDays, isPast, isoDateTime } from "@/lib/dates";
 import { type Member, normalizeExchangeUid, updateMember } from "@/lib/notion";
-import { nonExpiringStatuses } from "@/lib/status";
+import { activeGroupStatuses, blockedEntryStatuses, nonExpiringStatuses } from "@/lib/status";
 import { createChatInviteLink, sendMessage, unbanChatMember } from "@/lib/telegram";
 import { teacherContactKeyboard } from "@/lib/bot/keyboards";
 
@@ -38,6 +38,11 @@ export async function createInviteForMember(
   chatId: number,
   now: Date,
 ) {
+  if (blockedEntryStatuses.has(member.status) ||
+      (!nonExpiringStatuses.has(member.status) && isPast(member.reviewDueAt, now))) {
+    await refuseAccess(chatId, "目前會籍需由助理確認，現有 Telegram 群組不受影響。");
+    return;
+  }
   if (member.telegramUserId) {
     await unbanChatMember(member.telegramUserId);
   }
@@ -49,7 +54,7 @@ export async function createInviteForMember(
   });
 
   await updateMember(member.pageId, {
-    status: nonExpiringStatuses.has(member.status)
+    status: activeGroupStatuses.has(member.status)
       ? member.status
       : "join_pending",
     telegramUsername: member.telegramUsername || undefined,

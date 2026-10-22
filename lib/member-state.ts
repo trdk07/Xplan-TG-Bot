@@ -1,11 +1,15 @@
 import { daysUntil, isPast } from "@/lib/dates";
+import { hasCurrentMembership, resolveLegacyStatus } from "@/lib/membership-policy";
 import { type Member } from "@/lib/notion";
+import { nonExpiringStatuses } from "@/lib/status";
 
 export const RENEWAL_REMINDER_DAYS = 7;
+export type RenewalReminderStage = "7day" | "3day";
 
 type RenewalNoticeOptions = {
   allowAlreadyReminded?: boolean;
   requireTelegramUserId?: boolean;
+  stage?: RenewalReminderStage;
 };
 
 export function isRenewalNoticeCandidate(
@@ -13,37 +17,55 @@ export function isRenewalNoticeCandidate(
   now = new Date(),
   options: RenewalNoticeOptions = {},
 ): boolean {
-  const allowAlreadyReminded = options.allowAlreadyReminded ?? false;
-  const requireTelegramUserId = options.requireTelegramUserId ?? true;
-
+  const { allowAlreadyReminded = false, requireTelegramUserId = true, stage = "7day" } = options;
   if (requireTelegramUserId && !member.telegramUserId) return false;
-  if (member.status !== "trial_active" && member.status !== "active_paid") {
-    return false;
-  }
-  if (member.renewalStep) return false;
-  if (!allowAlreadyReminded && member.renewalReminderSentAt) return false;
+  // Sending an expiry reminder needs a valid term, not a guessed trial/paid tier.
+  if (nonExpiringStatuses.has(member.status) || !hasCurrentMembership(member, now)) return false;
 
+  const dueAt = member.reviewDueAt ? Date.parse(member.reviewDueAt) : NaN;
+  if (!Number.isFinite(dueAt) || dueAt <= now.getTime()) return false;
   const days = daysUntil(member.reviewDueAt, now);
-  return days !== null && days >= 0 && days <= RENEWAL_REMINDER_DAYS;
+  if (days === null || days > (stage === "3day" ? 3 : RENEWAL_REMINDER_DAYS)) return false;
+
+  const sameCycle = Boolean(member.renewalReminderDueAt) && Date.parse(member.renewalReminderDueAt!) === dueAt;
+  const reminded = stage === "3day"
+    ? member.renewalReminder3DaySentAt
+    : member.renewalReminderSentAt || member.renewalReminder3DaySentAt;
+  const legacyAlreadySent = !member.renewalReminderDueAt && (
+    member.status === "sent_3day_offer" || (stage === "7day" && member.status === "sent_7day_survey")
+  );
+  return allowAlreadyReminded || (!legacyAlreadySent && (!sameCycle || !reminded));
+}
+
+/** Current payment intent is independent of historical Paid At and membership expiry. */
+export function isPaymentPending(member: Member): boolean {
+  return !["payment_expired", "declined"].includes(member.renewalStep) &&
+    (member.renewalStep === "payment_pending" || member.status === "payment_pending");
 }
 
 export function isPaymentFollowupCandidate(
   member: Member,
   now = new Date(),
 ): boolean {
-  if (!member.telegramUserId) return false;
-  if (member.status !== "payment_pending") return false;
-  if (member.paidAt) return false;
+  if (!member.telegramUserId || !isPaymentPending(member)) return false;
   if (isPast(member.paymentDeadlineAt, now)) return false;
-
   return !member.paymentProofFileId || !member.paymentUidLast4;
 }
 
 export function isPaymentReviewReady(member: Member): boolean {
-  return Boolean(
-    member.status === "payment_pending" &&
-      member.paymentProofFileId &&
-      member.paymentUidLast4 &&
-      !member.paidAt,
-  );
+  return Boolean(isPaymentPending(member) && member.paymentProofFileId && member.paymentUidLast4);
+}
+
+export function getMembershipState(member: Member, now = new Date()) {
+  const resolved = resolveLegacyStatus(member, now);
+  if (resolved.needsReview) return { state: "review", tone: "warning", label: "會籍待確認" } as const;
+  const status = resolved.status;
+  if (status === "kicked" || status === "denied") return { state: "inactive", tone: "danger", label: "會籍已停用" } as const;
+  if (nonExpiringStatuses.has(status)) return { state: "active", tone: "success", label: "會籍有效（免續約）" } as const;
+  if (status === "expired" || isPast(member.reviewDueAt, now)) return { state: "expired", tone: "danger", label: "會籍已到期" } as const;
+  if (["trial_active", "active_paid", "payment_pending"].includes(status)) {
+    if (!member.reviewDueAt || !Number.isFinite(Date.parse(member.reviewDueAt))) return { state: "review", tone: "warning", label: "會籍待確認" } as const;
+    return { state: "active", tone: "success", label: "會籍有效" } as const;
+  }
+  return { state: "pending", tone: "muted", label: "會籍尚未啟用" } as const;
 }

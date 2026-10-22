@@ -149,6 +149,8 @@ describe("Notion member mapping", () => {
       invitationEmailSent: true,
       renewalStep: "",
       renewalReminderSentAt: null,
+    renewalReminder3DaySentAt: null,
+    renewalReminderDueAt: null,
       paymentDeadlineAt: "2026-05-01T00:00:00.000Z",
       paymentUidLast4: "1234",
       paymentProofFileId: "photo-file-id",

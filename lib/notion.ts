@@ -1,6 +1,6 @@
 import { Client } from "@notionhq/client";
 import { getRuntimeConfig } from "@/lib/config";
-import { type MemberStatus, isMemberStatus, memberStatuses } from "@/lib/status";
+import { type MemberStatus, isReadableMemberStatus } from "@/lib/status";
 
 export type Member = {
   pageId: string;
@@ -30,6 +30,9 @@ export type Member = {
   finalPnl: string;
   renewalStep: string;
   renewalReminderSentAt: string | null;
+  renewalReminder3DaySentAt: string | null;
+  renewalReminderDueAt: string | null;
+  reminderFieldsAvailable?: boolean;
   lastBotCheckAt: string | null;
   lastBotMessage: string;
   kickReason: string;
@@ -38,7 +41,7 @@ export type Member = {
 
 export type MemberPatch = Partial<
   // Discord fields are owned by the Discord bot and are read-only here.
-  Omit<Member, "pageId" | "discordId" | "discordVerifiedAt" | "discordRole">
+  Omit<Member, "pageId" | "discordId" | "discordVerifiedAt" | "discordRole" | "reminderFieldsAvailable">
 >;
 
 export const notionProperties = {
@@ -68,6 +71,8 @@ export const notionProperties = {
   finalPnl: "Final P/L",
   renewalStep: "Renewal Step",
   renewalReminderSentAt: "Renewal Reminder Sent At",
+  renewalReminder3DaySentAt: "Renewal Reminder 3 Day Sent At",
+  renewalReminderDueAt: "Renewal Reminder Due At",
   lastBotCheckAt: "Last Bot Check At",
   lastBotMessage: "Last Bot Message",
   kickReason: "Kick Reason",
@@ -150,7 +155,8 @@ function urlProp(page: NotionPage, name: string): string | null {
 
 function statusProp(page: NotionPage): MemberStatus {
   const raw = page.properties[notionProperties.status]?.select?.name;
-  return isMemberStatus(raw) ? raw : "eligible";
+  // Unknown values must not accidentally unlock the initial invite flow.
+  return isReadableMemberStatus(raw) ? raw : "denied";
 }
 
 function selectProp(page: NotionPage, name: string): string {
@@ -204,6 +210,9 @@ export function mapNotionPageToMember(page: NotionPage): Member {
     finalPnl: textProp(page, notionProperties.finalPnl),
     renewalStep: selectProp(page, notionProperties.renewalStep),
     renewalReminderSentAt: dateProp(page, notionProperties.renewalReminderSentAt),
+    renewalReminder3DaySentAt: dateProp(page, notionProperties.renewalReminder3DaySentAt),
+    renewalReminderDueAt: dateProp(page, notionProperties.renewalReminderDueAt),
+    reminderFieldsAvailable: [notionProperties.renewalReminderSentAt, notionProperties.renewalReminder3DaySentAt, notionProperties.renewalReminderDueAt].every(name => page.properties[name]?.type === "date"),
     lastBotCheckAt: dateProp(page, notionProperties.lastBotCheckAt),
     lastBotMessage: textProp(page, notionProperties.lastBotMessage),
     kickReason: textProp(page, notionProperties.kickReason),
@@ -314,6 +323,12 @@ export function buildNotionProperties(patch: MemberPatch): Record<string, any> {
       patch.renewalReminderSentAt,
     );
   }
+  if (patch.renewalReminder3DaySentAt !== undefined) {
+    props[notionProperties.renewalReminder3DaySentAt] = dateValue(patch.renewalReminder3DaySentAt);
+  }
+  if (patch.renewalReminderDueAt !== undefined) {
+    props[notionProperties.renewalReminderDueAt] = dateValue(patch.renewalReminderDueAt);
+  }
   if (patch.lastBotCheckAt !== undefined) {
     props[notionProperties.lastBotCheckAt] = dateValue(patch.lastBotCheckAt);
   }
@@ -349,6 +364,10 @@ export async function updateMember(pageId: string, patch: MemberPatch) {
     });
   } catch (error) {
     const fallbackProperties = await existingNotionProperties(pageId, patch);
+    // A reminder without its durable cycle markers would be sent repeatedly.
+    for (const name of [notionProperties.renewalReminderSentAt, notionProperties.renewalReminder3DaySentAt, notionProperties.renewalReminderDueAt]) {
+      if (name in properties && !(name in fallbackProperties)) throw error;
+    }
     if (Object.keys(fallbackProperties).length === Object.keys(properties).length) {
       throw error;
     }
@@ -475,7 +494,7 @@ export async function listMembers(options?: {
 
   const status = options?.status;
   const statusFiltered =
-    status && status !== "all" && memberStatuses.includes(status)
+    status && status !== "all" && isReadableMemberStatus(status)
       ? members.filter((member) => member.status === status)
       : members;
 
