@@ -13,7 +13,15 @@
     "notion:ensure-views": "node scripts/ensure-notion-views.mjs",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "discord:install": "npm ci --prefix apps/discord-bot",
+    "discord:dev": "npm --prefix apps/discord-bot run dev",
+    "discord:test": "npm --prefix apps/discord-bot test",
+    "discord:typecheck": "npm --prefix apps/discord-bot run typecheck",
+    "discord:build": "npm --prefix apps/discord-bot run build",
+    "discord:test:runtime": "npm --prefix apps/discord-bot run test:runtime",
+    "test:all": "npm test && npm run discord:test",
+    "typecheck:all": "npm run typecheck && npm run discord:typecheck"
   },
   "keywords": [],
   "author": "",

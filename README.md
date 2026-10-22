@@ -1,6 +1,6 @@
-# TG-BOT-bibibi
+# Xplan Telegram / Admin and Discord Bots
 
-Telegram membership gate bot backed by a Notion data source. The app is a Next.js + TypeScript MVP with:
+Two independently built Cloudflare Workers share the same Notion membership data source. The root application is the Next.js + TypeScript Telegram bot and admin dashboard, with:
 
 - Telegram webhook handling for onboarding, join requests, and group member updates.
 - Notion as the only persistent member state.
@@ -8,9 +8,16 @@ Telegram membership gate bot backed by a Notion data source. The app is a Next.j
 - Daily renewal job endpoint at `/api/jobs/daily`.
 - Payment webhook placeholder at `/api/payment/webhook`.
 
+| Location | Application | Cloudflare Worker |
+| --- | --- | --- |
+| Repository root | Telegram bot and `/admin` dashboard | `tg-bot-bibibi` |
+| [`apps/discord-bot`](apps/discord-bot) | Discord verification and membership roles | `xplan-discord-verification` |
+
+Each application keeps its own `package.json`, `package-lock.json`, Wrangler configuration and secrets. Importing Discord into this repository preserves its existing behavior; it does not deploy it or align its membership rules with the newer TG rules. See [Discord integration and current policy differences](docs/discord-integration.md).
+
 ## Environment
 
-Copy `.env.example` to `.env.local` and fill every required value:
+For the TG/admin application, copy `.env.example` to `.env.local` and fill every required value. Discord uses its own local configuration described in the [integration guide](docs/discord-integration.md#configuration-and-secrets).
 
 ```bash
 TELEGRAM_BOT_TOKEN=
@@ -105,7 +112,14 @@ members, TradingView revocation, historical members, and raw application data.
 
 ## Local Development
 
-This project uses Next 16, which requires Node `>=20.19.0`.
+The TG/admin app requires Node `>=20.19.0`; use Node `>=22.18.0` when working on both applications. Install both dependency trees from the repository root:
+
+```bash
+npm ci
+npm run discord:install
+```
+
+Existing root commands continue to target TG/admin:
 
 ```bash
 npm run dev
@@ -113,6 +127,20 @@ npm run typecheck
 npm test
 npm run build
 ```
+
+Discord and combined checks are available from the root:
+
+| Command | Purpose |
+| --- | --- |
+| `npm run discord:dev` | Run the Discord Worker locally |
+| `npm run discord:test` | Run Discord unit tests |
+| `npm run discord:typecheck` | Typecheck Discord |
+| `npm run discord:build` | Build Discord with a Wrangler dry run; no deployment |
+| `npm run discord:test:runtime` | Build and test the Discord Worker with simulated Notion/Discord APIs |
+| `npm run test:all` | Run TG/admin and Discord unit tests |
+| `npm run typecheck:all` | Typecheck both applications |
+
+The Discord runtime check is separate from `test:all`. See the [integration guide](docs/discord-integration.md) for configuration and deployment boundaries.
 
 ## Discord records in the admin dashboard
 
@@ -128,8 +156,9 @@ an empty role displays `尚無身分組紀錄`.
 
 The Discord bot owns these fields. The dashboard does not write them, infer a
 role from membership status, or query Discord. Refresh the page to read updated
-Notion records. No additional credentials or schema migration are needed, and
-credential hashes and tier proofs are not included in the member model.
+Notion records. This display feature needs no additional dashboard credentials
+or schema migration. Credential hashes and tier proofs are not included in the
+admin member model. The Discord Worker has its own credentials.
 
 For browser review with synthetic data, run
 `DISCORD_VISUAL_OUTPUT=output/playwright npm test -- __tests__/discord-admin.test.ts`
@@ -138,7 +167,7 @@ components and stylesheet; it is for visual inspection, not operating the bot.
 
 ## Cloudflare Workers Deployment
 
-This app deploys to Cloudflare Workers through OpenNext for Cloudflare.
+The root TG/admin app deploys to Worker `tg-bot-bibibi` through OpenNext for Cloudflare. These commands do not build or deploy the Discord Worker:
 
 ```bash
 npm run cf:build
@@ -178,7 +207,7 @@ The endpoint returns only unique, non-empty `TradingView` values for members who
 
 ## GitHub Actions Deployment
 
-The repository includes `.github/workflows/deploy-cloudflare.yml`. It runs tests, typechecks, and deploys to Cloudflare Workers whenever `main` is updated. Add these GitHub repository secrets before relying on automatic deployment:
+The repository includes `.github/workflows/deploy-cloudflare.yml`. It runs the TG/admin tests and typecheck, then deploys `tg-bot-bibibi` whenever `main` is updated. Discord checks run separately; there is no automatic Discord deployment in this integration. Add these GitHub repository secrets before relying on the TG/admin automatic deployment:
 
 ```bash
 CLOUDFLARE_API_TOKEN=

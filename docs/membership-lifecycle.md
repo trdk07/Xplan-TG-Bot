@@ -2,7 +2,7 @@
 
 ## Approved behavior
 
-Telegram is a community funnel. Expiration, late payment, membership observations and admin membership disable actions do not ban or kick a Telegram participant. Initial invitation identity/link checks remain in place. Existing Discord code is not merged or called by this change; it continues to consume Notion membership status and dates. The admin displays the Discord bot's recorded fields only.
+Telegram is a community funnel. Expiration, late payment, membership observations and admin membership disable actions do not ban or kick a Telegram participant. Initial invitation identity/link checks remain in place. The existing Discord bot is included as the independent `apps/discord-bot` package and continues to consume Notion membership status and dates; the Telegram/admin application does not call it. The admin displays the Discord bot's recorded fields only. See [Discord integration boundaries](discord-integration.md) for current policy differences and deployment ownership.
 
 Canonical Status options (12): `collecting_info`, `eligible`, `join_pending`, `trial_active`, `payment_pending`, `active_paid`, `partner`, `exempt`, `VIP`, `expired`, `kicked`, `denied`. `kicked` is retained for backwards compatibility with other consumers, but the admin label/action now means disabled membership, not a Telegram ban. VIP is preserved because its business distinction has not been removed.
 
@@ -36,7 +36,7 @@ An old 7-day/3-day reminder is carried forward as already sent for its term. Ori
 1. With the existing service credentials, run `npm run notion:ensure-schema` (dry run), review, then `npm run notion:ensure-schema -- --apply`. It adds missing fields/options; it does not delete old options or rewrite member rows.
 2. Confirm the three reminder fields are dates. The new fields can safely be added before deploying the code.
 3. Run tests, typecheck and `npm run cf:build`. Push the feature branch for owner review. This task does not directly deploy Cloudflare or merge main.
-4. After deployment, inspect legacy records marked for review and assign the correct canonical status with supporting membership/payment evidence. Keep Discord Status mapping compatible until its planned project integration is completed.
+4. After deployment, inspect legacy records marked for review and assign the correct canonical status with supporting membership/payment evidence. The imported Discord bot retains its existing Status mapping; review the documented policy differences before changing shared data or aligning its behavior in a later feature change.
 5. Only after all affected records and consumers have been checked, remove unused old select options from Notion.
 
 Current implementation validation uses synthetic members; no live Telegram messages or Discord role changes are sent by tests. The available Notion connector returned 404 for the target database/data source during this task, so live schema preparation was not performed.

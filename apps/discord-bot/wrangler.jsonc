@@ -1,0 +1,52 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "xplan-discord-verification",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-08",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MEMBER_GATE",
+        "class_name": "NotionMemberGate"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "MemberGate"
+      ]
+    },
+    { "tag": "v2-notion", "new_classes": ["NotionMemberGate"] },
+    { "tag": "v3-remove-sqlite", "deleted_classes": ["MemberGate"] }
+  ],
+  "triggers": {
+    "crons": [
+      "*/10 * * * *"
+    ]
+  },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "invocation_logs": false
+    }
+  },
+  "vars": {
+    "NOTION_DATA_SOURCE_ID": "34f50abc-cc15-803c-bee1-000bfc6404cb",
+    "NOTION_EMAIL_PROPERTY": "Email",
+    "NOTION_DISCORD_ID_PROPERTY": "Discord_id",
+    "DISCORD_GUILD_ID": "1524719558504747039",
+    "DISCORD_VERIFICATION_CHANNEL_ID": "1524855788340776987",
+    "DISCORD_TRIAL_ROLE_ID": "1524805277231222994",
+    "DISCORD_MEMBER_ROLE_ID": "1524806322401448026",
+    "DISCORD_PARTNER_ROLE_ID": "1524807192434311390",
+    "DISCORD_NON_EXPIRING_ROLE_ID": "1524806322401448026",
+    "DISCORD_APPLICATION_ID": "1546535242851029072",
+    "DISCORD_PUBLIC_KEY": "bfd99d117271a5d09dc9900ac058e4b700fa078dc36791a5c5013fbe095dad6c"
+  },
+  "account_id": "5415e1e48d6a0c0aece5cfebfa5e8c01"
+}
