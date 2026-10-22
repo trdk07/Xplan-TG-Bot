@@ -13,7 +13,7 @@ Two independently built Cloudflare Workers share the same Notion membership data
 | Repository root | Telegram bot and `/admin` dashboard | `tg-bot-bibibi` |
 | [`apps/discord-bot`](apps/discord-bot) | Discord verification and membership roles | `xplan-discord-verification` |
 
-Each application keeps its own `package.json`, `package-lock.json`, Wrangler configuration and secrets. Importing Discord into this repository preserves its existing behavior; it does not deploy it or align its membership rules with the newer TG rules. See [Discord integration and current policy differences](docs/discord-integration.md).
+Each application keeps its own `package.json`, `package-lock.json`, Wrangler configuration and secrets. GitHub Actions deploys the two Workers in independent jobs under the same workflow. Discord retains its existing behavior and membership rules. See [Discord integration and current policy differences](docs/discord-integration.md).
 
 ## Environment
 
@@ -207,14 +207,22 @@ The endpoint returns only unique, non-empty `TradingView` values for members who
 
 ## GitHub Actions Deployment
 
-The repository includes `.github/workflows/deploy-cloudflare.yml`. It runs the TG/admin tests and typecheck, then deploys `tg-bot-bibibi` whenever `main` is updated. Discord checks run separately; there is no automatic Discord deployment in this integration. Add these GitHub repository secrets before relying on the TG/admin automatic deployment:
+The repository includes [`.github/workflows/deploy-cloudflare.yml`](.github/workflows/deploy-cloudflare.yml). A push to `main` or a manual `workflow_dispatch` starts two independent jobs:
 
-```bash
-CLOUDFLARE_API_TOKEN=
-CLOUDFLARE_ACCOUNT_ID=
-```
+- TG/admin installs its own dependencies, runs tests and typecheck, then builds and deploys `tg-bot-bibibi` through OpenNext.
+- Discord installs its own dependencies, runs tests, typecheck, a dry-run build and the simulated Worker runtime test, then deploys `xplan-discord-verification`.
 
-Runtime application secrets such as `TELEGRAM_BOT_TOKEN`, `NOTION_API_KEY`, and `ADMIN_PASSWORD` should remain configured in Cloudflare Workers as Wrangler secrets.
+The jobs can succeed or fail independently; this is not an atomic release of both applications. Pull requests are checked without deploying. Merely pushing a feature branch does not trigger this deployment workflow.
+
+| GitHub repository secret | Use |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | TG deployment token; also the fallback Discord deployment token |
+| `CLOUDFLARE_ACCOUNT_ID` | TG deployment account only |
+| `DISCORD_CLOUDFLARE_API_TOKEN` | Optional dedicated Discord token, preferred when present |
+
+Discord reads its unchanged Worker name and `account_id` from `apps/discord-bot/wrangler.jsonc`; it does not use the TG account secret. The selected token must authorize deployment to that configured account. Existing secret names alone do not confirm token scope; the owner may need to add the dedicated Discord token.
+
+Runtime application secrets remain on each existing Cloudflare Worker. The workflow does not bulk-upload secrets, register Discord commands, publish a verification panel, or modify Notion schema. See [Discord deployment configuration](docs/discord-integration.md#automatic-deployment) for details.
 
 ## Payment Boundary
 

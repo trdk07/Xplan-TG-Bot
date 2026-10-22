@@ -12,13 +12,15 @@ The existing Discord verification application is maintained in `apps/discord-bot
 | Wrangler configuration | Root `wrangler.jsonc` | Own `wrangler.jsonc` |
 | Local secrets | Root `.env.local` | `apps/discord-bot/.dev.vars` |
 | Build | Next.js / OpenNext | Wrangler Worker bundle |
-| Deployment from `main` | Existing TG/admin workflow | No automatic deployment added |
+| Deployment from `main` or manual dispatch | TG/admin job in `deploy-cloudflare.yml` | Independent Discord job in the same workflow |
 
 These are independent npm projects. Root forwarding commands run the Discord project's own tools; they do not merge dependencies or deploy both Workers. Root TypeScript checks exclude `apps/discord-bot`, and each app checks its own source.
 
+The imported Discord source, tests and scripts are unchanged. Its lockfile adds four missing optional Sharp platform entries so clean installs also pass npm 11 in Linux CI; every existing locked package version and integrity remains unchanged.
+
 Both applications consume the shared Notion membership record. TG owns its membership and payment workflows. Discord owns verification and managed Discord roles, and writes `Discord_id`, `Discord Verified At`, `Discord Credential Hash`, `Discord Tier Proof` and `Discord Role`. The admin reads only the public verification/role fields; it neither derives a Discord role from Status nor exposes credential hashes or tier proofs. `Discord Role` records the last successful role synchronization result; it is not an input granting permission.
 
-Discord retains its ten-minute scheduled synchronization, `MEMBER_GATE` binding and KV-backed `NotionMemberGate` Durable Object. Preserve the existing Worker identity, binding and migration history when preparing a future deployment.
+Discord retains its ten-minute scheduled synchronization, `MEMBER_GATE` binding and KV-backed `NotionMemberGate` Durable Object. The deployment job uses the existing Worker identity, binding and migration history.
 
 ## Development and checks
 
@@ -47,7 +49,17 @@ For local Discord development, copy [`apps/discord-bot/.dev.vars.example`](../ap
 
 Local secrets do not automatically become Cloudflare secrets. Root `.env.local` is not the Discord configuration. Unlike the isolated runtime test, `discord:dev` can call real Notion and Discord services when supplied real credentials.
 
-This import does not deploy Discord, rotate secrets, register commands, publish a verification panel, or modify Notion schema. A future Discord release must separately verify the target account, Worker, bindings and secrets before deployment. The existing root deployment workflow still publishes TG/admin only.
+Deployments preserve runtime secrets already configured on the existing Discord Worker; the workflow does not bulk-upload local secrets, rotate `AUTH_SECRET`, register commands, publish a verification panel, or modify Notion schema.
+
+## Automatic deployment
+
+[`.github/workflows/deploy-cloudflare.yml`](../.github/workflows/deploy-cloudflare.yml) deploys both applications when `main` receives a push or an operator starts `workflow_dispatch`. Each Worker has an independent job with its own dependency install, tests, typecheck and build. Discord also runs its simulated Worker runtime test before deploying. A failure in one job does not prevent the other job from succeeding; the two deployments are not an atomic release. Pull-request checks and feature-branch pushes do not automatically deploy either Worker.
+
+The TG job uses the existing `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets. The Discord job uses `DISCORD_CLOUDFLARE_API_TOKEN` when present, otherwise falls back to `CLOUDFLARE_API_TOKEN`. Its target Worker name and `account_id` come from the unchanged [`apps/discord-bot/wrangler.jsonc`](../apps/discord-bot/wrangler.jsonc); the TG account secret is not passed to the Discord job.
+
+The selected Discord token must have deployment permission for the account configured in that file. Checking that a GitHub secret exists does not verify its account access or permissions. If the existing shared token lacks that access, the repository owner must add an appropriately authorized `DISCORD_CLOUDFLARE_API_TOKEN`. Discord bot/Notion credentials remain Cloudflare runtime secrets on the existing Worker and are not copied from the TG Worker.
+
+Adding or editing the workflow on a feature branch does not execute a deployment. A successful local build or runtime test also does not establish that a production deployment has occurred.
 
 ## Preserved Discord membership policy
 
