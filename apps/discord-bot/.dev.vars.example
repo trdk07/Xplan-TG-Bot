@@ -1,0 +1,25 @@
+# Copy to .dev.vars for local development. Real secrets must never be committed.
+# Deploy secrets with `npx wrangler secret put NAME`.
+DISCORD_APPLICATION_ID=1546535242851029072
+DISCORD_PUBLIC_KEY=bfd99d117271a5d09dc9900ac058e4b700fa078dc36791a5c5013fbe095dad6c
+DISCORD_BOT_TOKEN=
+DISCORD_GUILD_ID=1524719558504747039
+DISCORD_VERIFICATION_CHANNEL_ID=1524855788340776987
+DISCORD_TRIAL_ROLE_ID=1524805277231222994
+DISCORD_MEMBER_ROLE_ID=1524806322401448026
+DISCORD_PARTNER_ROLE_ID=1524807192434311390
+# Optional: VIP / exempt share MEMBER_ROLE_ID unless this is set.
+DISCORD_NON_EXPIRING_ROLE_ID=1524806322401448026
+# Optional: edit an existing verification panel instead of creating another.
+DISCORD_PANEL_MESSAGE_ID=1546785760957571085
+NOTION_API_KEY=
+NOTION_DATA_SOURCE_ID=34f50abc-cc15-803c-bee1-000bfc6404cb
+NOTION_EMAIL_PROPERTY=Email
+NOTION_DISCORD_ID_PROPERTY=Discord_id
+# Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+AUTH_SECRET=
+# Existing records with missing dates or ambiguous tier: trial or review.
+INCOMPLETE_MEMBER_POLICY=trial
+# Optional explicit member classification for reminder-state first-time bindings.
+# Keys are Notion page UUIDs, values are "trial" or "paid"; never extends eligibility.
+MEMBER_TIER_OVERRIDES={}

@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Member } from "@/lib/notion";
+import { activeTradingViewIds } from "@/lib/partner-tradingview";
 import { GET } from "@/app/api/partners/tradingview-members/route";
 
 const state = {
@@ -19,12 +21,16 @@ const requiredEnv = {
   APP_BASE_URL: "https://app.example",
 };
 
-function member(overrides: Record<string, any> = {}) {
+function member(overrides: Record<string, any> = {}): Member {
   return {
     pageId: "page-1",
     telegramUserId: "1001",
     telegramUsername: "@user",
     email: "user@example.com",
+    discordId: "",
+    discordVerifiedAt: null,
+    discordRole: null,
+    subscriptionMonths: null,
     status: "trial_active",
     tags: [],
     exchangeRegistered: true,
@@ -35,7 +41,7 @@ function member(overrides: Record<string, any> = {}) {
     inviteLink: null,
     inviteExpiresAt: null,
     groupJoinedAt: null,
-    reviewDueAt: null,
+    reviewDueAt: "2099-01-01T00:00:00Z",
     paymentDeadlineAt: null,
     paymentUidLast4: "",
     paymentProofFileId: "",
@@ -44,11 +50,12 @@ function member(overrides: Record<string, any> = {}) {
     finalPnl: "",
     renewalStep: "",
     renewalReminderSentAt: null,
+    renewalReminder3DaySentAt: null,
+    renewalReminderDueAt: null,
     lastBotCheckAt: null,
     lastBotMessage: "",
     kickReason: "",
     tradingView: "tv_user_1",
-    tradingViewAccess: "",
     ...overrides,
   };
 }
@@ -78,7 +85,7 @@ describe("partner TradingView member API", () => {
     });
   });
 
-  it("returns unique TradingView ids for active Telegram group members only", async () => {
+  it("returns unique TradingView ids for current membership, independently of Telegram presence", async () => {
     state.members = [
       member({ status: "trial_active", tradingView: "tv_user_1" }),
       member({ status: "renewal_due", tradingView: "tv_user_2" }),
@@ -112,4 +119,17 @@ describe("partner TradingView member API", () => {
       ],
     });
   });
+  it("preserves a legacy member's remaining generic access without guessing their tier", () => {
+    const now = new Date("2026-10-22T00:00:00Z");
+    const records = [
+      member({status:"sent_7day_survey",tradingView:"legacy_trial"}),
+      member({status:"sent_3day_offer",tradingView:"legacy_paid",paidAt:"2026-01-01T00:00:00Z"}),
+      member({status:"user_refused",tradingView:"legacy_declined"}),
+      member({status:"active_paid",tradingView:"expired_date",reviewDueAt:now.toISOString()}),
+      member({status:"payment_pending",tradingView:"no_due",reviewDueAt:null}),
+      member({status:"invite_sent",tradingView:"never_joined"}),
+    ];
+    expect(activeTradingViewIds(records, now)).toEqual(["legacy_trial", "legacy_paid", "legacy_declined"]);
+  });
+
 });

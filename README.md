@@ -1,6 +1,6 @@
-# TG-BOT-bibibi
+# Xplan Telegram / Admin and Discord Bots
 
-Telegram membership gate bot backed by a Notion data source. The app is a Next.js + TypeScript MVP with:
+Two independently built Cloudflare Workers share the same Notion membership data source. The root application is the Next.js + TypeScript Telegram bot and admin dashboard, with:
 
 - Telegram webhook handling for onboarding, join requests, and group member updates.
 - Notion as the only persistent member state.
@@ -8,9 +8,16 @@ Telegram membership gate bot backed by a Notion data source. The app is a Next.j
 - Daily renewal job endpoint at `/api/jobs/daily`.
 - Payment webhook placeholder at `/api/payment/webhook`.
 
+| Location | Application | Cloudflare Worker |
+| --- | --- | --- |
+| Repository root | Telegram bot and `/admin` dashboard | `tg-bot-bibibi` |
+| [`apps/discord-bot`](apps/discord-bot) | Discord verification and membership roles | `xplan-discord-verification` |
+
+Each application keeps its own `package.json`, `package-lock.json`, Wrangler configuration and secrets. GitHub Actions deploys the two Workers in independent jobs under the same workflow. Discord retains its existing behavior and membership rules. See [Discord integration and current policy differences](docs/discord-integration.md).
+
 ## Environment
 
-Copy `.env.example` to `.env.local` and fill every required value:
+For the TG/admin application, copy `.env.example` to `.env.local` and fill every required value. Discord uses its own local configuration described in the [integration guide](docs/discord-integration.md#configuration-and-secrets).
 
 ```bash
 TELEGRAM_BOT_TOKEN=
@@ -67,7 +74,9 @@ Required properties:
 - `Paid At` date
 - `Final P/L` rich text
 - `Renewal Step` select
-- `Renewal Reminder Sent At` date
+- `Renewal Reminder Sent At` date (7-day reminder)
+- `Renewal Reminder 3 Day Sent At` date
+- `Renewal Reminder Due At` date (membership period key)
 - `Last Bot Check At` date
 - `Last Bot Message` rich text
 - `Kick Reason` rich text
@@ -76,14 +85,17 @@ Required properties:
 
 Status options:
 
-`eligible`, `collecting_info`, `invite_sent`, `join_pending`, `trial_active`, `renewal_due`, `payment_pending`, `active_paid`, `partner`, `exempt`, `VIP`, `expired`, `kicked`, `denied`.
+`eligible`, `collecting_info`, `join_pending`, `trial_active`, `payment_pending`, `active_paid`, `partner`, `exempt`, `VIP`, `expired`, `kicked`, `denied`.
 
-`partner`, `exempt`, and `VIP` are non-expiring group access statuses. They can join through the Bot's protected invite flow, are allowed to remain in the group, and are skipped by renewal/payment/deadline jobs.
+Legacy values are read for migration only. See [membership lifecycle and release preparation](docs/membership-lifecycle.md).
 
-Run the schema helper after adding new bot fields:
+`partner`, `exempt`, and `VIP` are non-expiring membership statuses. Telegram is a community funnel: existing participants are not removed for expired or disabled membership. Membership expiration is recorded in Notion for other services to consume.
+
+Prepare Notion fields before releasing the new reminder job (the helper defaults to dry-run and preserves existing options):
 
 ```bash
 npm run notion:ensure-schema
+npm run notion:ensure-schema -- --apply
 ```
 
 The Notion view helper organizes the human-facing database tabs without editing
@@ -100,7 +112,14 @@ members, TradingView revocation, historical members, and raw application data.
 
 ## Local Development
 
-This project uses Next 16, which requires Node `>=20.19.0`.
+The TG/admin app requires Node `>=20.19.0`; use Node `>=22.18.0` when working on both applications. Install both dependency trees from the repository root:
+
+```bash
+npm ci
+npm run discord:install
+```
+
+Existing root commands continue to target TG/admin:
 
 ```bash
 npm run dev
@@ -109,9 +128,46 @@ npm test
 npm run build
 ```
 
+Discord and combined checks are available from the root:
+
+| Command | Purpose |
+| --- | --- |
+| `npm run discord:dev` | Run the Discord Worker locally |
+| `npm run discord:test` | Run Discord unit tests |
+| `npm run discord:typecheck` | Typecheck Discord |
+| `npm run discord:build` | Build Discord with a Wrangler dry run; no deployment |
+| `npm run discord:test:runtime` | Build and test the Discord Worker with simulated Notion/Discord APIs |
+| `npm run test:all` | Run TG/admin and Discord unit tests |
+| `npm run typecheck:all` | Typecheck both applications |
+
+The Discord runtime check is separate from `test:all`. See the [integration guide](docs/discord-integration.md) for configuration and deployment boundaries.
+
+## Discord records in the admin dashboard
+
+The member list (compact and full) and detail page display Discord verification
+and the role recorded in Notion. The detail page also shows the Discord ID and
+verification time in the dashboard's existing Asia/Taipei date format.
+
+The dashboard reads `Discord_id` (rich text), `Discord Verified At` (date), and
+`Discord Role` (select). An ID with a valid verification date displays `已驗證`;
+both absent displays `無驗證紀錄`; partial or invalid records display
+`驗證資料不完整`. The role is displayed independently, exactly as recorded;
+an empty role displays `尚無身分組紀錄`.
+
+The Discord bot owns these fields. The dashboard does not write them, infer a
+role from membership status, or query Discord. Refresh the page to read updated
+Notion records. This display feature needs no additional dashboard credentials
+or schema migration. Credential hashes and tier proofs are not included in the
+admin member model. The Discord Worker has its own credentials.
+
+For browser review with synthetic data, run
+`DISCORD_VISUAL_OUTPUT=output/playwright npm test -- __tests__/discord-admin.test.ts`
+and serve that directory locally. Generated HTML uses the actual admin page
+components and stylesheet; it is for visual inspection, not operating the bot.
+
 ## Cloudflare Workers Deployment
 
-This app deploys to Cloudflare Workers through OpenNext for Cloudflare.
+The root TG/admin app deploys to Worker `tg-bot-bibibi` through OpenNext for Cloudflare. These commands do not build or deploy the Discord Worker:
 
 ```bash
 npm run cf:build
@@ -147,38 +203,34 @@ curl -H "Authorization: Bearer $PARTNER_API_TOKEN" \
   "https://your-worker.example/api/partners/tradingview-members"
 ```
 
-The endpoint returns only unique, non-empty `TradingView` values for members whose `Status` is currently allowed to remain in the Telegram group: `trial_active`, `renewal_due`, `payment_pending`, `active_paid`, `partner`, `exempt`, or `VIP`.
+The endpoint returns only unique, non-empty `TradingView` values for members whose `Status` grants current membership: `trial_active`, `payment_pending`, `active_paid`, `partner`, `exempt`, or `VIP`. Telegram presence itself is not evidence of an active membership.
 
 ## GitHub Actions Deployment
 
-The repository includes `.github/workflows/deploy-cloudflare.yml`. It runs tests, typechecks, and deploys to Cloudflare Workers whenever `main` is updated. Add these GitHub repository secrets before relying on automatic deployment:
+The repository includes [`.github/workflows/deploy-cloudflare.yml`](.github/workflows/deploy-cloudflare.yml). A push to `main` or a manual `workflow_dispatch` starts two independent jobs:
 
-```bash
-CLOUDFLARE_API_TOKEN=
-CLOUDFLARE_ACCOUNT_ID=
-```
+- TG/admin installs its own dependencies, runs tests and typecheck, then builds and deploys `tg-bot-bibibi` through OpenNext.
+- Discord installs its own dependencies, runs tests, typecheck, a dry-run build and the simulated Worker runtime test, then deploys `xplan-discord-verification`.
 
-Runtime application secrets such as `TELEGRAM_BOT_TOKEN`, `NOTION_API_KEY`, and `ADMIN_PASSWORD` should remain configured in Cloudflare Workers as Wrangler secrets.
+The jobs can succeed or fail independently; this is not an atomic release of both applications. Pull requests are checked without deploying. Merely pushing a feature branch does not trigger this deployment workflow.
+
+| GitHub repository secret | Use |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | TG deployment token; also the fallback Discord deployment token |
+| `CLOUDFLARE_ACCOUNT_ID` | TG deployment account only |
+| `DISCORD_CLOUDFLARE_API_TOKEN` | Optional dedicated Discord token, preferred when present |
+
+Discord reads its unchanged Worker name and `account_id` from `apps/discord-bot/wrangler.jsonc`; it does not use the TG account secret. The selected token must authorize deployment to that configured account. Existing secret names alone do not confirm token scope; the owner may need to add the dedicated Discord token.
+
+Runtime application secrets remain on each existing Cloudflare Worker. The workflow does not bulk-upload secrets, register Discord commands, publish a verification panel, or modify Notion schema. See [Discord deployment configuration](docs/discord-integration.md#automatic-deployment) for details.
 
 ## Payment Boundary
 
 Payments are manually reviewed in v1. Members receive exchange internal-transfer instructions, then send a transfer screenshot and UID last four digits to the Bot. The Bot stores the proof metadata on the member record and the admin detail page proxies the Telegram file through an authenticated payment-proof endpoint for screenshot preview. An admin then confirms receipt and uses the dashboard's manual "mark paid" action. A future provider webhook should verify the provider signature, resolve the Notion page from payment metadata, enforce idempotency, then update the member to `active_paid`.
 
-The admin member list includes a `續約狀態` (`Renewal Review`) column for quick triage of the renewal decision flow:
+The admin shows membership state separately from 7-day and 3-day reminder records. Reminders do not overwrite trial/paid status; expiration updates Notion without removing Telegram participants. Questionnaire and P/L collection are no longer part of renewal. Historical membership states remain visible for evidence-based review.
 
-- `即將到期` / `已提醒續約`: active trial members inside the 0–7 day reminder window.
-- `待選翻倉`: expired trial member still needs to choose whether the flip goal succeeded.
-- `待回覆收益`: member selected a trial result and still needs to reply with the final P/L summary.
-- `待選續留`: member needs to choose whether to continue or leave.
-- `已申請續費`: member chose to continue and is in the payment flow.
-- `不續留` / `逾期未完成`: member declined or missed the renewal/payment deadline.
-
-The admin member list also includes a `付款審核` (`Payment Review`) column for payment-proof triage:
-
-- `待付款資料`: member is in `payment_pending` but has not submitted a screenshot or UID last four digits yet.
-- `待補件`: only one of the screenshot or UID last four digits has been submitted.
-- `待審核`: both screenshot and UID last four digits are present and ready for manual review.
-- `已標記付款`: the member has been marked paid or has a `Paid At` timestamp.
+Payment review uses the current payment request, not historical `Paid At`. It can show pending proof/review even while membership is expired; confirming payment activates membership, extends the deadline and resets reminder markers without generating an unnecessary rejoin invitation.
 
 When a screenshot exists, the list and detail pages link to `/api/admin/payment-proof?fileId=...`, which requires admin auth before proxying the Telegram file.
 

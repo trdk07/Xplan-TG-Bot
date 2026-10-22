@@ -1,7 +1,5 @@
 import type { TelegramMessage } from "@/lib/telegram";
 
-export const FLIP_SUCCESS_TAG = "翻倉成功";
-
 export const exchanges = {
   MEXC: {
     name: "MEXC",
@@ -25,10 +23,6 @@ export function isStartCommand(text: string | undefined): boolean {
   if (!text) return false;
   const [command] = text.trim().split(/\s+/, 1);
   return /^\/start(?:@[A-Za-z0-9_]+)?$/i.test(command || "");
-}
-
-export function addTag(tags: string[], tag: string): string[] {
-  return tags.includes(tag) ? tags : [...tags, tag];
 }
 
 export function mexcUidFromMessage(message: TelegramMessage): string {

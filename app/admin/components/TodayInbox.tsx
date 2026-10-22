@@ -5,7 +5,6 @@ import { BadgeCheck, ImageIcon } from "lucide-react";
 import {
   markPaidAction,
   requestPaymentProofAction,
-  resendRenewalDueReminderAction,
 } from "@/app/admin/actions";
 import { ActionButton } from "@/app/components/ActionButton";
 import { CopyEmailListButton } from "@/app/components/CopyEmailListButton";
@@ -86,13 +85,11 @@ function InboxGroup({
 export function TodayInbox({ members }: { members: Member[] }) {
   const paymentReview = members.filter((member) => isPaymentReviewReady(member));
   const paymentIncomplete = members.filter((member) => isPaymentIncomplete(member));
-  const renewalDue = members.filter((member) => member.status === "renewal_due");
   const invitationPending = members.filter((member) => isInvitationPending(member));
 
   const total =
     paymentReview.length +
     paymentIncomplete.length +
-    renewalDue.length +
     invitationPending.length;
 
   if (!total) {
@@ -176,37 +173,6 @@ export function TodayInbox({ members }: { members: Member[] }) {
                   <form action={requestPaymentProofAction.bind(null, member.pageId)}>
                     <ActionButton icon={<BadgeCheck />} small disabled={!member.telegramUserId}>
                       催件
-                    </ActionButton>
-                  </form>
-                </InboxMemberCard>
-              ))}
-            </div>
-          </InboxGroup>
-        ) : null}
-
-        {renewalDue.length ? (
-          <InboxGroup
-            title="到期未回"
-            tone="warning"
-            count={renewalDue.length}
-            viewHref="/admin?status=renewal_due"
-          >
-            <div className="inbox-cards">
-              {renewalDue.slice(0, INBOX_PREVIEW_LIMIT).map((member) => (
-                <InboxMemberCard
-                  key={member.pageId}
-                  member={member}
-                  detail={
-                    member.renewalStep === "awaiting_trial_result"
-                      ? "等學員按翻倉成功 / 尚未成功"
-                      : member.renewalStep === "awaiting_pnl"
-                        ? "等學員回覆合約收益狀況"
-                        : "等學員選擇續費 / 不續留"
-                  }
-                >
-                  <form action={resendRenewalDueReminderAction.bind(null, member.pageId)}>
-                    <ActionButton icon={<BadgeCheck />} small disabled={!member.telegramUserId}>
-                      重發提醒
                     </ActionButton>
                   </form>
                 </InboxMemberCard>

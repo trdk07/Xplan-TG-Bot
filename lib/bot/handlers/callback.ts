@@ -1,27 +1,13 @@
 import { getRuntimeConfig } from "@/lib/config";
 import { addDays, isPast, isoDateTime } from "@/lib/dates";
+import { isPaymentPending, isRenewalNoticeCandidate } from "@/lib/member-state";
 import { findMemberByTelegramId, updateMember } from "@/lib/notion";
-import {
-  type TelegramCallbackQuery,
-  answerCallbackQuery,
-  editMessageText,
-  sendMessage,
-} from "@/lib/telegram";
+import { type TelegramCallbackQuery, answerCallbackQuery, editMessageText, sendMessage } from "@/lib/telegram";
 import { refuseAccess } from "@/lib/bot/invite";
-import { expirePaymentPendingMember, sendPaymentRequest } from "@/lib/bot/handlers/payment";
-import {
-  PAYMENT_PROOF_INSTRUCTIONS,
-  RENEWAL_OFFER,
-  STALE_STEP_MESSAGE,
-  pnlQuestion,
-} from "@/lib/bot/messages";
-import { addTag, FLIP_SUCCESS_TAG, userId } from "@/lib/bot/utils";
-
-const renewalDecisionStatuses = new Set([
-  "sent_7day_survey",
-  "sent_3day_offer",
-  "renewal_due",
-]);
+import { expirePaymentPendingMember, hasSubmittedPaymentProof, sendPaymentRequest } from "@/lib/bot/handlers/payment";
+import { PAYMENT_PROOF_INSTRUCTIONS, PAYMENT_REVIEW_PENDING_MESSAGE, STALE_STEP_MESSAGE } from "@/lib/bot/messages";
+import { normalizeBotMember } from "@/lib/bot/member-policy";
+import { userId } from "@/lib/bot/utils";
 
 export async function markCallbackSelection(
   query: TelegramCallbackQuery,
@@ -47,21 +33,32 @@ export async function markCallbackSelection(
 
 export async function handleCallback(query: TelegramCallbackQuery, now: Date) {
   if (!query.data) return;
-
-  const member = await findMemberByTelegramId(userId(query.from.id));
-  if (!member) {
+  const record = await findMemberByTelegramId(userId(query.from.id));
+  if (!record) {
     await answerCallbackQuery(query.id, "目前找不到你的會員資料", true);
-    await refuseAccess(
-      query.from.id,
-      "你不在目前的 Notion 名單內，或表單上的 Telegram username 與目前帳號不一致。",
-    );
+    await refuseAccess(query.from.id, "你不在目前的 Notion 名單內，或表單上的 Telegram username 與目前帳號不一致。");
+    return;
+  }
+  // Retired survey buttons never revive the old questionnaire or collect P/L.
+  if (query.data.startsWith("trial_result:")) {
+    await rejectStaleCallback(query);
+    return;
+  }
+  const member = await normalizeBotMember(record, now);
+  if (member.status === "kicked" || member.status === "denied") {
+    await rejectStaleCallback(query);
+    return;
+  }
+
+  if ((query.data === "payment_proof:start" || query.data === "rejoin_apply" || query.data.startsWith("renewal:stay") || query.data.startsWith("renewal:leave")) && hasSubmittedPaymentProof(member)) {
+    await answerCallbackQuery(query.id, "付款資料已收到，等待助理審核");
+    await sendMessage(query.from.id, PAYMENT_REVIEW_PENDING_MESSAGE);
     return;
   }
 
   if (query.data === "payment_proof:start") {
-    if (member.status !== "payment_pending") {
-      await answerCallbackQuery(query.id, "這個按鈕已不是目前可操作的步驟", true);
-      await sendMessage(query.from.id, STALE_STEP_MESSAGE);
+    if (!isPaymentPending(member)) {
+      await rejectStaleCallback(query);
       return;
     }
     if (isPast(member.paymentDeadlineAt, now)) {
@@ -69,135 +66,67 @@ export async function handleCallback(query: TelegramCallbackQuery, now: Date) {
       await expirePaymentPendingMember(member, query.from.id, now);
       return;
     }
-
     await answerCallbackQuery(query.id, "請上傳轉帳截圖，並輸入 UID 末四碼。", true);
-    await markCallbackSelection(
-      query,
-      "我已完成轉帳，補傳付款資料",
-      "請在這個 Bot 對話上傳轉帳截圖，並輸入 UID 末四碼。",
-    );
+    await markCallbackSelection(query, "我已完成轉帳，補傳付款資料", "請在這個 Bot 對話上傳轉帳截圖，並輸入 UID 末四碼。");
     await sendMessage(query.from.id, PAYMENT_PROOF_INSTRUCTIONS);
     return;
   }
 
-  if (
-    query.data === "trial_result:success" ||
-    query.data === "trial_result:not_yet"
-  ) {
-    if (
-      member.status !== "sent_7day_survey" ||
-      member.renewalStep !== "awaiting_trial_result"
-    ) {
-      await answerCallbackQuery(query.id, "這個按鈕已不是目前可操作的步驟", true);
-      await sendMessage(query.from.id, STALE_STEP_MESSAGE);
+  const renewalAction = query.data.match(/^renewal:(stay|leave)(?::(\d+))?$/);
+  if (renewalAction) {
+    const [, choice, period] = renewalAction;
+    if (period && Number(period) !== Date.parse(member.reviewDueAt || "")) {
+      await rejectStaleCallback(query);
       return;
     }
-
-    const selectedLabel =
-      query.data === "trial_result:success" ? "我已經翻倉成功" : "尚未翻倉成功";
-    await answerCallbackQuery(query.id, `已收到：${selectedLabel}`);
-    await markCallbackSelection(query, selectedLabel);
-    await updateMember(member.pageId, {
-      tags:
-        query.data === "trial_result:success"
-          ? addTag(member.tags, FLIP_SUCCESS_TAG)
-          : member.tags,
-      renewalStep: "awaiting_pnl",
-      lastBotCheckAt: isoDateTime(now),
-      lastBotMessage:
-        query.data === "trial_result:success"
-          ? "Trial result marked flip success"
-          : "Trial result marked not yet",
-    });
-    await sendMessage(query.from.id, pnlQuestion());
-    return;
-  }
-
-  if (query.data === "renewal:stay") {
-    if (member.status === "payment_pending") {
-      await answerCallbackQuery(
-        query.id,
-        "你已在付款流程中。完成轉帳後，請直接上傳轉帳截圖與 UID 末四碼。",
-      );
+    if (choice === "stay" && isPaymentPending(member)) {
+      if (isPast(member.paymentDeadlineAt, now)) {
+        await answerCallbackQuery(query.id, "付款回覆期限已過", true);
+        await expirePaymentPendingMember(member, query.from.id, now);
+        return;
+      }
+      await answerCallbackQuery(query.id, "你已在付款流程中，請上傳轉帳截圖與 UID 末四碼。");
       await sendMessage(query.from.id, PAYMENT_PROOF_INSTRUCTIONS);
       return;
     }
-    if (renewalDecisionStatuses.has(member.status)) {
-      await answerCallbackQuery(
-        query.id,
-        "已收到：繼續訂閱。完成轉帳後，請在 Bot 對話上傳轉帳截圖與 UID 末四碼。",
-        true,
-      );
-      await markCallbackSelection(
-        query,
-        "繼續訂閱",
-        "請查看下方付款資訊；完成轉帳後，上傳轉帳截圖與 UID 末四碼。",
-      );
+    if (!isRenewalNoticeCandidate(member, now, { allowAlreadyReminded: true })) {
+      await rejectStaleCallback(query);
+      return;
+    }
+    if (choice === "stay") {
+      await answerCallbackQuery(query.id, "已收到：繼續訂閱。完成轉帳後，請在 Bot 對話上傳轉帳截圖與 UID 末四碼。", true);
+      await markCallbackSelection(query, "繼續訂閱", "請查看下方付款資訊；完成轉帳後，上傳轉帳截圖與 UID 末四碼。");
       await sendPaymentRequest(member, query.from.id, now);
       await sendMessage(query.from.id, PAYMENT_PROOF_INSTRUCTIONS);
       return;
     }
-
-    await answerCallbackQuery(query.id, "這個按鈕已不是目前可操作的步驟", true);
-    await sendMessage(query.from.id, STALE_STEP_MESSAGE);
-    return;
-  }
-
-  if (query.data === "renewal:leave") {
-    if (!renewalDecisionStatuses.has(member.status)) {
-      await answerCallbackQuery(query.id, "這個按鈕已不是目前可操作的步驟", true);
-      await sendMessage(query.from.id, STALE_STEP_MESSAGE);
-      return;
-    }
-
     await answerCallbackQuery(query.id, "已收到：暫時不續訂");
     await markCallbackSelection(query, "暫時不續訂");
     await updateMember(member.pageId, {
-      status: "user_refused",
-      renewalStep: "completed",
+      renewalStep: "declined",
       lastBotCheckAt: isoDateTime(now),
-      lastBotMessage: "User declined renewal, kept until expiry",
+      lastBotMessage: "User declined renewal; membership retained until expiry",
     });
-    await sendMessage(
-      query.from.id,
-      "已收到，你的群組資格將保留到到期日為止，到期後系統會自動移出。",
-    );
+    await sendMessage(query.from.id, "已記錄暫時不續訂。會籍保留到原到期日，Telegram 群組仍會保留，不會自動移出。");
     return;
   }
 
-  if (query.data === "rejoin_apply") {
-    if (member.status !== "expired") {
-      await answerCallbackQuery(query.id, "這個按鈕已不是目前可操作的步驟", true);
-      await sendMessage(query.from.id, STALE_STEP_MESSAGE);
+  if (query.data === "rejoin_apply" && member.status === "expired") {
+    if (isPaymentPending(member) && !isPast(member.paymentDeadlineAt, now)) {
+      await answerCallbackQuery(query.id, "你已在付款流程中，請補上轉帳截圖與 UID 末四碼。");
+      await sendMessage(query.from.id, PAYMENT_PROOF_INSTRUCTIONS);
       return;
     }
-    const config = getRuntimeConfig();
-    const deadline = addDays(now, config.paymentGraceDays);
-    await updateMember(member.pageId, {
-      status: "payment_pending",
-      renewalStep: "payment_pending",
-      paymentDeadlineAt: isoDateTime(deadline),
-      paymentUidLast4: "",
-      paymentProofFileId: "",
-      paymentProofSubmittedAt: null,
-      lastBotCheckAt: isoDateTime(now),
-      lastBotMessage: "Rejoin application submitted",
-    });
-    await answerCallbackQuery(query.id, "已收到補件申請");
-    await sendMessage(
-      query.from.id,
-      [
-        "已收到申請，請依照以下方式完成付款。",
-        "",
-        RENEWAL_OFFER,
-        "",
-        "完成轉帳後，請直接在這個 Bot 對話上傳轉帳截圖，並輸入 UID 末四碼（4 位數字）。",
-      ].join("\n"),
-    );
+    const deadline = addDays(now, getRuntimeConfig().paymentGraceDays);
+    await answerCallbackQuery(query.id, "已收到恢復訂閱申請");
+    await sendPaymentRequest(member, query.from.id, now, deadline);
     await sendMessage(query.from.id, PAYMENT_PROOF_INSTRUCTIONS);
     return;
   }
+  await rejectStaleCallback(query);
+}
 
+async function rejectStaleCallback(query: TelegramCallbackQuery) {
   await answerCallbackQuery(query.id, "這個按鈕已不是目前可操作的步驟", true);
   await sendMessage(query.from.id, STALE_STEP_MESSAGE);
 }

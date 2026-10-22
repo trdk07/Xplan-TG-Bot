@@ -1,18 +1,37 @@
 import { getRuntimeConfig } from "@/lib/config";
 import { addDays, isPast, isoDateTime } from "@/lib/dates";
 import { type Member, updateMember } from "@/lib/notion";
-import { type TelegramMessage, kickChatMember, sendMessage } from "@/lib/telegram";
-import { PAYMENT_EXPIRED_MESSAGE, PAYMENT_PROOF_INSTRUCTIONS } from "@/lib/bot/messages";
+import { nonExpiringStatuses } from "@/lib/status";
+import { isPaymentPending } from "@/lib/member-state";
+import { type TelegramMessage, sendMessage } from "@/lib/telegram";
+import { PAYMENT_EXPIRED_MESSAGE, PAYMENT_PROOF_INSTRUCTIONS, PAYMENT_REVIEW_PENDING_MESSAGE, STALE_STEP_MESSAGE } from "@/lib/bot/messages";
+
+/** Keep complete submissions in the review queue when the submission window closes. */
+export function hasSubmittedPaymentProof(member: Member): boolean {
+  if (!isPaymentPending(member) || !member.paymentProofFileId || !member.paymentUidLast4) return false;
+  if (!member.paymentProofSubmittedAt || !member.paymentDeadlineAt) return true;
+  const submitted = Date.parse(member.paymentProofSubmittedAt);
+  const deadline = Date.parse(member.paymentDeadlineAt);
+  // Legacy records lacking usable submission metadata need manual review, not deletion.
+  return !Number.isFinite(submitted) || !Number.isFinite(deadline) || submitted <= deadline;
+}
 
 export async function expirePaymentPendingMember(
   member: Member,
   chatId: string | number,
   now: Date,
 ) {
-  await kickChatMember(member.telegramUserId);
+  if (member.status === "kicked" || member.status === "denied") {
+    await sendMessage(chatId, STALE_STEP_MESSAGE);
+    return;
+  }
+  if (hasSubmittedPaymentProof(member)) {
+    await sendMessage(chatId, PAYMENT_REVIEW_PENDING_MESSAGE);
+    return;
+  }
   await updateMember(member.pageId, {
-    status: "expired",
-    kickReason: "payment_deadline_missed",
+    ...(!nonExpiringStatuses.has(member.status) && isPast(member.reviewDueAt, now) ? { status: "expired" as const } : {}),
+    renewalStep: "payment_expired",
     lastBotCheckAt: isoDateTime(now),
     lastBotMessage: "Payment proof submitted after deadline",
   });
@@ -25,14 +44,22 @@ export async function sendPaymentRequest(
   now: Date,
   deadline?: Date,
 ) {
+  if (member.status === "kicked" || member.status === "denied") {
+    await sendMessage(chatId, STALE_STEP_MESSAGE);
+    return;
+  }
+  if (hasSubmittedPaymentProof(member)) {
+    await sendMessage(chatId, PAYMENT_REVIEW_PENDING_MESSAGE);
+    return;
+  }
   const config = getRuntimeConfig();
   const actualDeadline =
     deadline ??
-    (member.reviewDueAt
+    (member.reviewDueAt && !isPast(member.reviewDueAt, now)
       ? new Date(member.reviewDueAt)
       : addDays(now, config.paymentGraceDays));
   await updateMember(member.pageId, {
-    status: "payment_pending",
+    status: nonExpiringStatuses.has(member.status) ? member.status : member.status === "expired" || isPast(member.reviewDueAt, now) ? "expired" : "payment_pending",
     renewalStep: "payment_pending",
     paymentDeadlineAt: isoDateTime(actualDeadline),
     paymentUidLast4: "",

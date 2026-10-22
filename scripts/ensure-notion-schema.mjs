@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import { Client } from "@notionhq/client";
 
-const env = { ...process.env, ...readEnv(".env.local") };
+const env = { ...readEnv(".env.local"), ...process.env };
+const shouldApply = process.argv.includes("--apply");
 const notionApiKey = env.NOTION_API_KEY;
 const dataSourceId = env.NOTION_DATA_SOURCE_ID;
 
@@ -19,10 +20,8 @@ const patch = {};
 ensureSelect("Status", [
   { name: "eligible", color: "gray" },
   { name: "collecting_info", color: "yellow" },
-  { name: "invite_sent", color: "blue" },
   { name: "join_pending", color: "orange" },
   { name: "trial_active", color: "green" },
-  { name: "renewal_due", color: "yellow" },
   { name: "payment_pending", color: "purple" },
   { name: "active_paid", color: "green" },
   { name: "partner", color: "blue" },
@@ -37,18 +36,20 @@ ensureEmail("email");
 ensureCheckbox("已送出邀請");
 ensureRichText("Final P/L");
 ensureSelect("Renewal Step", [
-  { name: "awaiting_trial_result", color: "yellow" },
-  { name: "awaiting_pnl", color: "orange" },
-  { name: "renewal_offer_sent", color: "blue" },
   { name: "payment_pending", color: "purple" },
-  { name: "completed", color: "green" },
+  { name: "declined", color: "gray" },
+  { name: "payment_expired", color: "red" },
 ]);
 ensureRichText("Payment UID Last 4");
 ensureRichText("Payment Proof File ID");
 ensureDate("Payment Proof Submitted At");
 ensureDate("Renewal Reminder Sent At");
+ensureDate("Renewal Reminder 3 Day Sent At");
+ensureDate("Renewal Reminder Due At");
 
-if (Object.keys(patch).length) {
+if (!shouldApply) {
+  console.log(JSON.stringify({ mode: "dry-run", properties: patch }, null, 2));
+} else if (Object.keys(patch).length) {
   await notion.dataSources.update({
     data_source_id: dataSourceId,
     properties: patch,
@@ -65,6 +66,7 @@ function ensureRichText(name) {
 }
 
 function ensureDate(name) {
+  if (existing[name] && existing[name].type !== "date") throw new Error(`${name} must be a date property`);
   if (!existing[name]) {
     patch[name] = { date: {} };
   }

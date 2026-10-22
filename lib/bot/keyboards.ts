@@ -12,30 +12,18 @@ export function teacherContactKeyboard() {
   ];
 }
 
-export function renewalKeyboard() {
+export function renewalKeyboard(dueAt?: string | null) {
+  const period = dueAt && Number.isFinite(Date.parse(dueAt)) ? `:${Date.parse(dueAt)}` : "";
   return [
     [
-      { text: "繼續訂閱", callback_data: "renewal:stay" },
-      { text: "暫時不續訂", callback_data: "renewal:leave" },
+      { text: "繼續訂閱", callback_data: `renewal:stay${period}` },
+      { text: "暫時不續訂", callback_data: `renewal:leave${period}` },
     ],
   ];
 }
 
 export function rejoinKeyboard() {
   return [[{ text: "申請恢復訂閱", callback_data: "rejoin_apply" }]];
-}
-
-export function trialResultKeyboard() {
-  return [
-    [
-      { text: "我已經翻倉成功", callback_data: "trial_result:success" },
-      { text: "尚未翻倉成功", callback_data: "trial_result:not_yet" },
-    ],
-  ];
-}
-
-export function earlyRenewalKeyboard() {
-  return [[{ text: "提前開始訂閱", callback_data: "renewal:stay" }]];
 }
 
 export function paymentProofRequestKeyboard() {

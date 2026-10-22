@@ -1,10 +1,13 @@
 import { daysUntil, formatDateTime } from "@/lib/dates";
 import {
+  getMembershipState,
+  isPaymentPending,
   isPaymentFollowupCandidate,
   isPaymentReviewReady,
   isRenewalNoticeCandidate,
 } from "@/lib/member-state";
 import type { Member } from "@/lib/notion";
+import { resolveLegacyStatus } from "@/lib/membership-policy";
 import { nonExpiringStatuses, type MemberStatus } from "@/lib/status";
 
 export function statCount(members: Member[], statuses: MemberStatus[]) {
@@ -57,12 +60,8 @@ export function isInvitationPending(member: Member): boolean {
   );
 }
 
-export function isTrialExperience(member: Member): boolean {
-  return (
-    member.status === "trial_active" ||
-    member.status === "sent_7day_survey" ||
-    member.status === "sent_3day_offer"
-  );
+export function isTrialExperience(member: Member, now = new Date()): boolean {
+  return resolveLegacyStatus(member, now).status === "trial_active" && getMembershipState(member, now).state === "active";
 }
 
 export function isEndingSoon(member: Member, now: Date): boolean {
@@ -85,6 +84,9 @@ export const adminViews = [
   "trial_experience",
   "ending_soon",
   "invitation_pending",
+  "payment_pending",
+  "paid_active",
+  "membership_expired",
 ] as const;
 
 export type AdminView = (typeof adminViews)[number];
@@ -104,11 +106,17 @@ export function matchesAdminView(
     case "payment_incomplete":
       return isPaymentIncomplete(member);
     case "trial_experience":
-      return isTrialExperience(member);
+      return isTrialExperience(member, now);
     case "ending_soon":
       return isEndingSoon(member, now);
     case "invitation_pending":
       return isInvitationPending(member);
+    case "payment_pending":
+      return isPaymentPending(member);
+    case "paid_active":
+      return resolveLegacyStatus(member, now).status === "active_paid" && getMembershipState(member, now).state === "active";
+    case "membership_expired":
+      return getMembershipState(member, now).state === "expired";
   }
 }
 
@@ -126,17 +134,17 @@ export function paymentReviewState(member: Member) {
   const hasProof = Boolean(member.paymentProofFileId);
   const hasUid = Boolean(member.paymentUidLast4);
 
-  if (member.status === "active_paid" || member.paidAt) {
-    return {
-      tone: "success",
-      label: "已標記付款",
-      detail: member.paidAt
-        ? `付款時間：${formatDateTime(member.paidAt)}`
-        : "會籍有效",
-    } as const;
+  if (member.renewalStep === "payment_expired") {
+    return { tone: "warning", label: "付款期限已過", detail: "需重新申請付款；會籍依原到期日判斷" } as const;
   }
-
-  if (member.status !== "payment_pending") {
+  if (!isPaymentPending(member)) {
+    if (member.status === "active_paid" || member.paidAt) {
+      return {
+        tone: "success",
+        label: "已標記付款",
+        detail: member.paidAt ? `上次付款：${formatDateTime(member.paidAt)}` : "會籍有效",
+      } as const;
+    }
     return null;
   }
 
@@ -163,104 +171,35 @@ export function paymentReviewState(member: Member) {
   } as const;
 }
 
-export function renewalReviewState(member: Member) {
-  const days = daysUntil(member.reviewDueAt);
-  const dueText =
-    days === null
-      ? "-"
-      : days < 0
-        ? `已逾期 ${Math.abs(days)} 天`
-        : `剩 ${days} 天`;
+export function renewalReviewState(member: Member, now = new Date()) {
+  const membership = getMembershipState(member, now);
+  if (membership.state === "review") {
+    return { tone: "warning", label: "會籍待確認", detail: "舊狀態或期限資料不足，請助理確認" } as const;
+  }
+  if (membership.state === "expired" || membership.state === "inactive") {
+    return { tone: "danger", label: membership.label, detail: "Telegram 群組資格保留，付費權益依會籍處理" } as const;
+  }
+  if (nonExpiringStatuses.has(member.status)) {
+    return { tone: "success", label: "免續約", detail: "不進入續約到期流程" } as const;
+  }
+  if (isPaymentPending(member)) {
+    return { tone: "warning", label: "已申請續費", detail: "等付款資料或助理審核，會籍仍依原期限" } as const;
+  }
+  if (membership.state !== "active") return null;
 
-  if (member.status === "renewal_due") {
-    if (member.renewalStep === "awaiting_trial_result") {
-      return {
-        tone: "warning",
-        label: "待選翻倉",
-        detail: "等學員按翻倉成功 / 尚未成功",
-      } as const;
-    }
-
-    if (member.renewalStep === "awaiting_pnl") {
-      return {
-        tone: "warning",
-        label: "待回覆收益",
-        detail: "等學員回覆合約收益狀況",
-      } as const;
-    }
-
+  const days = daysUntil(member.reviewDueAt, now);
+  const sameCycle = Boolean(member.renewalReminderDueAt && member.reviewDueAt)
+    && Date.parse(member.renewalReminderDueAt!) === Date.parse(member.reviewDueAt!);
+  if (days !== null && days <= 7) {
     return {
       tone: "warning",
-      label: "待選續留",
-      detail: member.finalPnl
-        ? "已回覆收益，等續留選擇"
-        : "等學員選擇續費 / 不續留",
+      label: sameCycle && (member.renewalReminderSentAt || member.renewalReminder3DaySentAt) ? "已提醒續約" : "即將到期",
+      detail: `剩 ${days} 天；提醒不變更會籍`,
     } as const;
   }
-
-  if (member.status === "payment_pending") {
-    return {
-      tone: "warning",
-      label: "已申請續費",
-      detail: "等付款資料或助理審核",
-    } as const;
-  }
-
-  if (member.status === "active_paid") {
-    return {
-      tone: "success",
-      label: "已續約有效",
-      detail: member.reviewDueAt
-        ? `有效期限：${formatDateTime(member.reviewDueAt)}`
-        : "會籍有效",
-    } as const;
-  }
-
-  if (member.status === "trial_active") {
-    if (days !== null && days >= 0 && days <= 7) {
-      return {
-        tone: "warning",
-        label: member.renewalReminderSentAt ? "已提醒續約" : "即將到期",
-        detail: dueText,
-      } as const;
-    }
-
-    return {
-      tone: "muted",
-      label: "體驗進行中",
-      detail: member.reviewDueAt
-        ? `到期：${formatDateTime(member.reviewDueAt)}`
-        : "尚無到期日",
-    } as const;
-  }
-
-  if (member.kickReason === "user_declined_renewal") {
-    return {
-      tone: "danger",
-      label: "不續留",
-      detail: "學員已選擇暫時不續留",
-    } as const;
-  }
-
-  if (member.status === "expired") {
-    return {
-      tone: "danger",
-      label: "逾期未完成",
-      detail: member.kickReason || "續約或付款期限已過",
-    } as const;
-  }
-
-  if (
-    member.status === "partner" ||
-    member.status === "exempt" ||
-    member.status === "VIP"
-  ) {
-    return {
-      tone: "success",
-      label: "免續約",
-      detail: "不進入續約到期流程",
-    } as const;
-  }
-
-  return null;
+  return {
+    tone: "success",
+    label: resolveLegacyStatus(member, now).status === "trial_active" ? "體驗進行中" : "訂閱有效",
+    detail: `有效期限：${formatDateTime(member.reviewDueAt)}`,
+  } as const;
 }

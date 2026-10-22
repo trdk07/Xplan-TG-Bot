@@ -27,8 +27,8 @@ export function AdminToolPanels({
           <div>
             <strong>重新發送最新版即將到期續約通知</strong>
             <p className="subtle">
-              會發給 0～7 天內到期、尚未進入續費流程的會員；若會員已在付款流程中，
-              只會提醒尚未補齊截圖或 UID 末四碼的人。已付款、待助理審核、已撤銷者會略過。
+              會發給 7 天內到期且會籍仍有效的會員，也會提醒付款資料尚未完整的人補件。
+              通知不變更 Status 或原到期日；會籍到期後仍保留 Telegram 群組資格。
             </p>
           </div>
           <form action={resendRenewalRemindersAction}>

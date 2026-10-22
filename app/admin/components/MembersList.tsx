@@ -6,6 +6,8 @@ import {
 } from "@/app/admin/actions";
 import {
   ExchangeSummary,
+  MembershipSummary,
+  TelegramPresenceSummary,
   DateStack,
   PaymentReviewSummary,
   RenewalReviewSummary,
@@ -14,6 +16,7 @@ import {
 import { ActionButton } from "@/app/components/ActionButton";
 import { StatusBadge } from "@/app/components/StatusBadge";
 import type { Member } from "@/lib/notion";
+import { DiscordSummary } from "@/app/admin/components/DiscordSummary";
 
 type Props = {
   members: Member[];
@@ -43,7 +46,7 @@ export function MembersList({
             className="button secondary"
             href={`/admin?q=${encodeURIComponent(q)}&${filterParam}&inactive=show`}
           >
-            顯示 {hiddenCount} 位歷史會員
+            顯示 {hiddenCount} 位到期／停用會籍
           </Link>
         </div>
       ) : inactive === "show" && members.length > displayMembers.length + hiddenCount ? null : inactive === "show" ? (
@@ -52,7 +55,7 @@ export function MembersList({
             className="button secondary"
             href={`/admin?q=${encodeURIComponent(q)}&${filterParam}`}
           >
-            隱藏歷史會員
+            隱藏到期／停用會籍
           </Link>
         </div>
       ) : null}
@@ -62,7 +65,7 @@ export function MembersList({
             className="button secondary"
             href={`/admin?q=${encodeURIComponent(q)}&${filterParam}`}
           >
-            隱藏歷史會員
+            隱藏到期／停用會籍
           </Link>
         </div>
       ) : null}
@@ -76,6 +79,7 @@ export function MembersList({
             </div>
             <div className="member-status-row">
               <StatusBadge status={member.status} />
+              <MembershipSummary member={member} />
               {member.invitationEmailSent ? (
                 <span className="mini-badge success">
                   <span className="badge-dot" aria-hidden="true" />
@@ -92,12 +96,20 @@ export function MembersList({
 
           <div className="member-review-grid">
             <div className="review-block important-block">
+              <span className="mobile-label">Telegram 入群紀錄</span>
+              <TelegramPresenceSummary member={member} />
+            </div>
+            <div className="review-block important-block">
               <span className="mobile-label">續約狀態</span>
               <RenewalReviewSummary member={member} />
             </div>
             <div className="review-block important-block">
               <span className="mobile-label">付款審核</span>
               <PaymentReviewSummary member={member} />
+            </div>
+            <div className="review-block important-block">
+              <span className="mobile-label">Discord</span>
+              <DiscordSummary member={member} />
             </div>
             <div className="review-block">
               <span className="mobile-label">交易所</span>
@@ -134,8 +146,8 @@ export function MembersList({
               管理
             </Link>
             <form action={kickMemberAction.bind(null, member.pageId)}>
-              <ActionButton icon={<Ban />} danger disabled={!member.telegramUserId}>
-                踢出
+              <ActionButton icon={<Ban />} danger>
+                停用會籍
               </ActionButton>
             </form>
           </div>
