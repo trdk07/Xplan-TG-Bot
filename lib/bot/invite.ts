@@ -1,7 +1,17 @@
+import { v2Enabled } from "@/lib/membership-v2";
+import { createV2Invite } from "@/lib/bot/v2";
 import { addDays, isPast, isoDateTime } from "@/lib/dates";
 import { type Member, normalizeExchangeUid, updateMember } from "@/lib/notion";
-import { activeGroupStatuses, blockedEntryStatuses, nonExpiringStatuses } from "@/lib/status";
-import { createChatInviteLink, sendMessage, unbanChatMember } from "@/lib/telegram";
+import {
+  activeGroupStatuses,
+  blockedEntryStatuses,
+  nonExpiringStatuses,
+} from "@/lib/status";
+import {
+  createChatInviteLink,
+  sendMessage,
+  unbanChatMember,
+} from "@/lib/telegram";
 import { teacherContactKeyboard } from "@/lib/bot/keyboards";
 
 const INVITE_TTL_HOURS = 24;
@@ -19,7 +29,8 @@ export async function refuseAccess(chatId: number, reason: string) {
 
 export function hasVerifiedMexcUid(member: Member): boolean {
   return (
-    member.exchangeRegistered && Boolean(normalizeExchangeUid(member.exchangeUid))
+    member.exchangeRegistered &&
+    Boolean(normalizeExchangeUid(member.exchangeUid))
   );
 }
 
@@ -38,9 +49,15 @@ export async function createInviteForMember(
   chatId: number,
   now: Date,
 ) {
-  if (blockedEntryStatuses.has(member.status) ||
-      (!nonExpiringStatuses.has(member.status) && isPast(member.reviewDueAt, now))) {
-    await refuseAccess(chatId, "目前會籍需由助理確認，現有 Telegram 群組不受影響。");
+  if (v2Enabled()) return createV2Invite(member, chatId, now);
+  if (
+    blockedEntryStatuses.has(member.status) ||
+    (!nonExpiringStatuses.has(member.status) && isPast(member.reviewDueAt, now))
+  ) {
+    await refuseAccess(
+      chatId,
+      "目前會籍需由助理確認，現有 Telegram 群組不受影響。",
+    );
     return;
   }
   if (member.telegramUserId) {

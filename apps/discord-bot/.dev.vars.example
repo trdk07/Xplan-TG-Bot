@@ -23,3 +23,8 @@ INCOMPLETE_MEMBER_POLICY=trial
 # Optional explicit member classification for reminder-state first-time bindings.
 # Keys are Notion page UUIDs, values are "trial" or "paid"; never extends eligibility.
 MEMBER_TIER_OVERRIDES={}
+
+# Opt in only after the additive Notion schema and legacy payment review are complete.
+MEMBERSHIP_POLICY_V2_ENABLED=false
+# Optional Explorer alias; falls back to DISCORD_TRIAL_ROLE_ID.
+DISCORD_EXPLORER_ROLE_ID=1524805277231222994

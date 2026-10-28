@@ -1,6 +1,8 @@
 import { ImageIcon } from "lucide-react";
 import { formatDateTime } from "@/lib/dates";
 import type { Member } from "@/lib/notion";
+import { effectiveMembership, v2Enabled } from "@/lib/membership-v2";
+import { memberStatusLabel } from "@/lib/status";
 import { getMembershipState } from "@/lib/member-state";
 import {
   isLegacyBitMartMember,
@@ -99,6 +101,10 @@ export function TradingViewSummary({ member }: { member: Member }) {
 
 
 export function MembershipSummary({ member }: { member: Member }) {
+  if (v2Enabled()) {
+    const effective = effectiveMembership(member);
+    return <span className={`mini-badge ${effective === "suspended" ? "danger" : "success"}`}><span className="badge-dot" aria-hidden="true" />實際會籍：{memberStatusLabel(effective)}</span>;
+  }
   const state = getMembershipState(member);
   return <span className={`mini-badge ${state.tone}`}><span className="badge-dot" aria-hidden="true" />{state.label}</span>;
 }

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { effectiveMembership, v2Enabled } from "@/lib/membership-v2";
 import { CircleDollarSign, Users } from "lucide-react";
 import { matchesAdminView } from "@/lib/admin-views";
 import type { Member } from "@/lib/notion";
@@ -38,10 +39,10 @@ export function StatsOverview({
             <span className="subtle">訂閱中</span>
             <strong>{viewCount("paid_active")}</strong>
           </Link>
-          <Link className="stat stat-link" href="/admin?view=trial_experience">
+          {v2Enabled() ? <Link className="stat stat-link" href="/admin?status=active_volume"><span className="subtle">交易量會員</span><strong>{members.filter(member => effectiveMembership(member,now) === "active_volume").length}</strong></Link> : <Link className="stat stat-link" href="/admin?view=trial_experience">
             <span className="subtle">體驗中</span>
             <strong>{viewCount("trial_experience")}</strong>
-          </Link>
+          </Link>}
           <Link className="stat stat-link" href="/admin?view=payment_pending">
             <span className="subtle">待付款</span>
             <strong>{viewCount("payment_pending")}</strong>

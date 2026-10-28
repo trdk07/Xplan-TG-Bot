@@ -17,7 +17,8 @@ export class NotionMemberGate extends DurableObject<Env> {
     const config = getConfig(env);
     const notion = new NotionClient(config), discord = new DiscordClient(config);
     this.engine = new GateEngine(new OperationStore(ctx.storage), {
-      findMember: (id, email) => notion.findMember(id, email), getMember: id => notion.getMember(id),
+      findMember: (id, email, exchange) => notion.findMember(id, email, exchange), getMember: id => notion.getMember(id),
+      listGuildMembers: after => discord.listGuildMembers(after), applyDefaultExplorer: id => discord.applyDefaultExplorer(id),
       findBinding: id => notion.findBinding(id), listBoundMembers: () => notion.listBoundMembers(),
       writeBinding: (member, binding) => notion.writeBinding(member, binding),
       writeRole: (member, role) => notion.writeRole(member, role),
@@ -26,11 +27,13 @@ export class NotionMemberGate extends DurableObject<Env> {
   }
   processInteraction(interaction: Interaction) { return this.engine.process(interaction); }
   syncBatch(after: string) { return this.engine.syncBatch(after); }
+  defaultExplorerBatch(after: string) { return this.engine.defaultExplorerBatch(after); }
 }
 export const handler = {
   fetch: httpHandler.fetch,
   async scheduled(_event: ScheduledController, env: Env): Promise<void> {
-    const guildId = getConfig(env).guildId;
+    const config = getConfig(env);
+    const guildId = config.guildId;
     const stub = env.MEMBER_GATE.get(env.MEMBER_GATE.idFromName(`guild:${guildId}`));
     let cursor = "", checked = 0, errors = 0;
     do {
@@ -38,6 +41,18 @@ export const handler = {
       if (!result.next) break; cursor = result.next;
     } while (true);
     console.log("membership_sync_complete", { checked, errors, source: "notion" });
+    if (config.membershipPolicyV2Enabled) {
+      let after = "", assigned = 0, review = 0;
+      const cursors = new Set<string>();
+      do {
+        const result = await stub.defaultExplorerBatch(after);
+        assigned += result.assigned; review += result.review; errors += result.errors;
+        if (!result.next) break;
+        if (cursors.has(result.next)) throw new Error("Discord enumeration cursor repeated");
+        cursors.add(result.next); after = result.next;
+      } while (true);
+      console.log("default_explorer_sync_complete", { assigned, review, errors });
+    }
   },
 } satisfies ExportedHandler<Env>;
 export default handler;

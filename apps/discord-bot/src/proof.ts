@@ -8,7 +8,7 @@ export async function tierProof(secret: string, member: Pick<Member, "pageId" | 
 export async function previousBinding(secret: string, member: Member): Promise<Binding | null> {
   if (!member.discordId || !member.credentialHash || !member.tierProof) return null;
   const tier = member.tierProof.split(":")[0] as Tier;
-  if (!["trial", "paid", "non_expiring", "partner"].includes(tier)
+  if (!["trial", "paid", "non_expiring", "partner", "explorer", "volume"].includes(tier)
     || !sameDigest(member.tierProof, await tierProof(secret, member, member.discordId, member.credentialHash, tier))) return null;
   // Proof uses the shared dates; no duplicate date snapshots are stored in Notion.
   return { discordId: member.discordId, pageId: member.pageId, credentialHash: member.credentialHash,

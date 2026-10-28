@@ -36,6 +36,7 @@
     }
   },
   "vars": {
+    "MEMBERSHIP_POLICY_V2_ENABLED": "false",
     "NOTION_DATA_SOURCE_ID": "34f50abc-cc15-803c-bee1-000bfc6404cb",
     "NOTION_EMAIL_PROPERTY": "Email",
     "NOTION_DISCORD_ID_PROPERTY": "Discord_id",

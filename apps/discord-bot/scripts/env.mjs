@@ -13,4 +13,4 @@ export const requiredNames = [
   "DISCORD_PARTNER_ROLE_ID",
   "NOTION_API_KEY", "NOTION_DATA_SOURCE_ID", "AUTH_SECRET",
 ];
-export function missingNames(env) { return requiredNames.filter((name) => !env[name]?.trim()); }
+export function missingNames(env) { return requiredNames.filter((name) => !(name === "DISCORD_TRIAL_ROLE_ID" ? env.DISCORD_EXPLORER_ROLE_ID || env[name] : env[name])?.trim()); }

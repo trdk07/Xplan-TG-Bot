@@ -21,7 +21,9 @@
     "discord:build": "npm --prefix apps/discord-bot run build",
     "discord:test:runtime": "npm --prefix apps/discord-bot run test:runtime",
     "test:all": "npm test && npm run discord:test",
-    "typecheck:all": "npm run typecheck && npm run discord:typecheck"
+    "typecheck:all": "npm run typecheck && npm run discord:typecheck",
+    "membership:schema": "node scripts/membership-schema.mjs",
+    "membership:migrate": "node --experimental-strip-types scripts/membership-migrate.mjs"
   },
   "keywords": [],
   "author": "",

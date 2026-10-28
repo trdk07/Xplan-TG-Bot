@@ -1,5 +1,7 @@
-export type Tier = "trial" | "paid" | "non_expiring" | "partner";
+export type Exchange = "mexc" | "bitget" | "okx";
+export type Tier = "trial" | "paid" | "non_expiring" | "partner" | "explorer" | "volume";
 export interface Config {
+  membershipPolicyV2Enabled?: boolean;
   applicationId: string;
   publicKey: string;
   botToken: string;
@@ -25,6 +27,11 @@ export interface Member {
   discordRole?: string | null;
   email: string;
   exchangeId: string;
+  exchange?: Exchange | null;
+  admissionVerifiedAt?: string | null;
+  volumeQualified?: boolean;
+  volumeCheckedAt?: string | null;
+  volumeCheckError?: string | null;
   status: string;
   dueAt: string | null;
   paidAt: string | null;
@@ -64,15 +71,20 @@ export interface Interaction {
     components?: Component[];
   };
 }
-export interface Component { type: number; custom_id?: string; value?: string; components?: Component[]; component?: Component }
+export interface Component { type: number; custom_id?: string; value?: string; values?: string[]; components?: Component[]; component?: Component }
 export interface MessageBody {
   content: string;
   components?: unknown[];
   allowed_mentions?: { parse: string[] };
 }
 export type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+export interface GuildMember { discordId: string; roles: string[]; bot: boolean; pending: boolean }
+export interface GuildPage { members: GuildMember[]; next: string | null }
+export type RoleResult = "updated" | "not_in_guild" | "screening_pending";
 export interface Services {
-  findMember(exchangeId: string, email: string): Promise<Member | null>;
+  listGuildMembers?(after: string): Promise<GuildPage>;
+  applyDefaultExplorer?(discordId: string): Promise<RoleResult | "skipped">;
+  findMember(exchangeId: string, email: string, exchange?: Exchange): Promise<Member | null>;
   getMember(pageId: string): Promise<Member>;
   findBinding(discordId: string): Promise<Member | null>;
   listBoundMembers(): Promise<Member[]>;

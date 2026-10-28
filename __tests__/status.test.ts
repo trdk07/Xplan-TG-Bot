@@ -35,7 +35,7 @@ describe("member status policy", () => {
     expect(memberStatusLabel("eligible")).toBe("可入群");
     expect(memberStatusLabel("payment_pending")).toBe("待付款");
     expect(memberStatusLabel("partner")).toBe("合作夥伴");
-    expect(memberStatusLabel("exempt")).toBe("免費會員");
+    expect(memberStatusLabel("exempt")).toBe("免除資格");
     expect(memberStatusLabel("VIP")).toBe("VIP");
     expect(memberStatusLabel("kicked")).toBe("已停用");
   });

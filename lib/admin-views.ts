@@ -1,3 +1,8 @@
+import {
+  v2Enabled,
+  effectiveMembership,
+  currentPaidFacts,
+} from "@/lib/membership-v2";
 import { daysUntil, formatDateTime } from "@/lib/dates";
 import {
   getMembershipState,
@@ -11,7 +16,11 @@ import { resolveLegacyStatus } from "@/lib/membership-policy";
 import { nonExpiringStatuses, type MemberStatus } from "@/lib/status";
 
 export function statCount(members: Member[], statuses: MemberStatus[]) {
-  return members.filter((member) => statuses.includes(member.status)).length;
+  return members.filter((member) =>
+    statuses.includes(
+      v2Enabled() ? effectiveMembership(member) : member.status,
+    ),
+  ).length;
 }
 
 /** The 50U/100U pricing lives here alongside the other revenue helpers — see also AdminToolPanels' plan copy. */
@@ -53,6 +62,13 @@ export function isPaymentIncomplete(member: Member): boolean {
 }
 
 export function isInvitationPending(member: Member): boolean {
+  if (v2Enabled())
+    return (
+      Boolean(member.admissionVerifiedAt) &&
+      member.onboardingStep === "eligible" &&
+      Boolean(member.email) &&
+      !member.invitationEmailSent
+    );
   return (
     member.status === "eligible" &&
     Boolean(member.email) &&
@@ -61,7 +77,11 @@ export function isInvitationPending(member: Member): boolean {
 }
 
 export function isTrialExperience(member: Member, now = new Date()): boolean {
-  return resolveLegacyStatus(member, now).status === "trial_active" && getMembershipState(member, now).state === "active";
+  if (v2Enabled()) return false;
+  return (
+    resolveLegacyStatus(member, now).status === "trial_active" &&
+    getMembershipState(member, now).state === "active"
+  );
 }
 
 export function isEndingSoon(member: Member, now: Date): boolean {
@@ -114,8 +134,22 @@ export function matchesAdminView(
     case "payment_pending":
       return isPaymentPending(member);
     case "paid_active":
-      return resolveLegacyStatus(member, now).status === "active_paid" && getMembershipState(member, now).state === "active";
+      if (v2Enabled())
+        return effectiveMembership(member, now) === "active_paid";
+      return (
+        resolveLegacyStatus(member, now).status === "active_paid" &&
+        getMembershipState(member, now).state === "active"
+      );
     case "membership_expired":
+      if (v2Enabled())
+        return (
+          Boolean(member.paidAt) &&
+          Boolean(member.reviewDueAt) &&
+          Date.parse(member.reviewDueAt!) <= now.getTime() &&
+          !["partner", "exempt", "VIP", "suspended"].includes(
+            effectiveMembership(member, now),
+          )
+        );
       return getMembershipState(member, now).state === "expired";
   }
 }
@@ -135,14 +169,20 @@ export function paymentReviewState(member: Member) {
   const hasUid = Boolean(member.paymentUidLast4);
 
   if (member.renewalStep === "payment_expired") {
-    return { tone: "warning", label: "付款期限已過", detail: "需重新申請付款；會籍依原到期日判斷" } as const;
+    return {
+      tone: "warning",
+      label: "付款期限已過",
+      detail: "需重新申請付款；會籍依原到期日判斷",
+    } as const;
   }
   if (!isPaymentPending(member)) {
     if (member.status === "active_paid" || member.paidAt) {
       return {
         tone: "success",
         label: "已標記付款",
-        detail: member.paidAt ? `上次付款：${formatDateTime(member.paidAt)}` : "會籍有效",
+        detail: member.paidAt
+          ? `上次付款：${formatDateTime(member.paidAt)}`
+          : "會籍有效",
       } as const;
     }
     return null;
@@ -174,32 +214,66 @@ export function paymentReviewState(member: Member) {
 export function renewalReviewState(member: Member, now = new Date()) {
   const membership = getMembershipState(member, now);
   if (membership.state === "review") {
-    return { tone: "warning", label: "會籍待確認", detail: "舊狀態或期限資料不足，請助理確認" } as const;
+    return {
+      tone: "warning",
+      label: "會籍待確認",
+      detail: "舊狀態或期限資料不足，請助理確認",
+    } as const;
   }
   if (membership.state === "expired" || membership.state === "inactive") {
-    return { tone: "danger", label: membership.label, detail: "Telegram 群組資格保留，付費權益依會籍處理" } as const;
+    return {
+      tone: "danger",
+      label: membership.label,
+      detail: "Telegram 群組資格保留，付費權益依會籍處理",
+    } as const;
   }
   if (nonExpiringStatuses.has(member.status)) {
-    return { tone: "success", label: "免續約", detail: "不進入續約到期流程" } as const;
+    return {
+      tone: "success",
+      label: "免續約",
+      detail: "不進入續約到期流程",
+    } as const;
   }
   if (isPaymentPending(member)) {
-    return { tone: "warning", label: "已申請續費", detail: "等付款資料或助理審核，會籍仍依原期限" } as const;
+    return {
+      tone: "warning",
+      label: "已申請續費",
+      detail: "等付款資料或助理審核，會籍仍依原期限",
+    } as const;
   }
+  if (v2Enabled() && !currentPaidFacts(member, now))
+    return {
+      tone: "muted",
+      label:
+        effectiveMembership(member, now) === "active_volume"
+          ? "交易量會員"
+          : "免費資格",
+      detail: "無付費期限；Telegram 群組與 Discord 免費資源保留",
+    } as const;
   if (membership.state !== "active") return null;
 
   const days = daysUntil(member.reviewDueAt, now);
-  const sameCycle = Boolean(member.renewalReminderDueAt && member.reviewDueAt)
-    && Date.parse(member.renewalReminderDueAt!) === Date.parse(member.reviewDueAt!);
+  const sameCycle =
+    Boolean(member.renewalReminderDueAt && member.reviewDueAt) &&
+    Date.parse(member.renewalReminderDueAt!) ===
+      Date.parse(member.reviewDueAt!);
   if (days !== null && days <= 7) {
     return {
       tone: "warning",
-      label: sameCycle && (member.renewalReminderSentAt || member.renewalReminder3DaySentAt) ? "已提醒續約" : "即將到期",
+      label:
+        sameCycle &&
+        (member.renewalReminderSentAt || member.renewalReminder3DaySentAt)
+          ? "已提醒續約"
+          : "即將到期",
       detail: `剩 ${days} 天；提醒不變更會籍`,
     } as const;
   }
   return {
     tone: "success",
-    label: resolveLegacyStatus(member, now).status === "trial_active" ? "體驗進行中" : "訂閱有效",
+    label:
+      resolveLegacyStatus(member, now).status === "trial_active"
+        ? "體驗進行中"
+        : "訂閱有效",
     detail: `有效期限：${formatDateTime(member.reviewDueAt)}`,
   } as const;
 }

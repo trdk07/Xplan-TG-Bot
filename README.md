@@ -235,3 +235,7 @@ Payment review uses the current payment request, not historical `Paid At`. It ca
 When a screenshot exists, the list and detail pages link to `/api/admin/payment-proof?fileId=...`, which requires admin auth before proxying the Telegram file.
 
 The admin dashboard also links to `/admin/applications` for manual MEXC CSV comparison. Paste the MEXC export into that page to compare CSV UIDs against Notion/Tally `Exchange UID` values, review Notion-only and MEXC-only mismatches, and batch-mark matched applicants as `eligible` for the Bot invite flow.
+
+## 會員資格V2（200,000 U）
+
+完整規則、能力驗收開關、D1／Notion預覽、跨專案啟用順序與待設定項目見[會員資格V2](docs/membership-v2.md)。預設維持相容模式；本機測試通過不代表正式交易所自動查核已啟用。

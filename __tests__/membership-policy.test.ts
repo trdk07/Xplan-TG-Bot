@@ -5,8 +5,8 @@ import { mapNotionPageToMember, buildNotionProperties } from "@/lib/notion";
 const now = new Date("2026-10-22T00:00:00Z");
 const base = { status: "sent_7day_survey", paidAt: null, subscriptionMonths: null, groupJoinedAt: "2026-10-01T00:00:00Z", reviewDueAt: "2026-10-31T00:00:00Z" } as any;
 describe("membership lifecycle compatibility", () => {
-  it("offers 12 canonical statuses and no notification statuses for writes", () => {
-    expect(memberStatuses).toHaveLength(12);
+  it("reads legacy and v2 statuses and no notification statuses for writes", () => {
+    expect(memberStatuses).toHaveLength(15);
     for (const status of ["invite_sent", "sent_7day_survey", "sent_3day_offer", "user_refused", "renewal_due"]) expect(isMemberStatus(status)).toBe(false);
     expect(memberStatusLabel("expired")).toBe("已到期");
     expect(memberStatusLabel("kicked")).toBe("已停用");

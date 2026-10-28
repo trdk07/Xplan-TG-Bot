@@ -28,7 +28,7 @@ export function fixture() {
   const storage = new MemoryOperations(), operations = new OperationStore(storage);
   const members = new Map<string, Member>([[member.pageId, { ...member }]]);
   const services: Services = {
-    findMember: vi.fn(async (id, email) => { const matches = [...members.values()].filter(m => !m.archived && m.exchangeId === id && m.email === email); return matches.length === 1 ? { ...matches[0]! } : null; }),
+    findMember: vi.fn(async (id, email, exchange) => { const matches = [...members.values()].filter(m => !m.archived && (!exchange || m.exchange === exchange) && m.exchangeId === id && m.email === email); return matches.length === 1 ? { ...matches[0]! } : null; }),
     getMember: vi.fn(async id => { const found = members.get(id); if (!found) throw new Error("not found"); return { ...found }; }),
     findBinding: vi.fn(async id => { const matches = [...members.values()].filter(m => !m.archived && m.discordId === id); if (matches.length > 1) throw new NotionBindingConflict(); return matches.length ? { ...matches[0]! } : null; }),
     listBoundMembers: vi.fn(async () => [...members.values()].filter(m => !m.archived && m.discordId).map(m => ({ ...m }))),
@@ -36,6 +36,7 @@ export function fixture() {
     writeRole: vi.fn(async (expected, discordRole) => { const m = members.get(expected.pageId)!; if (m.discordId !== expected.discordId) throw new NotionBindingConflict(); members.set(m.pageId, { ...m, discordRole }); }),
     applyRoles: vi.fn(async () => "updated" as const), reply: vi.fn(async () => {}),
   };
+  services.applyDefaultExplorer = vi.fn(async id => services.applyRoles(id, { state: "allow", tier: "explorer", dueAt: null }));
   const change = (update: Partial<Member>) => members.set(member.pageId, { ...members.get(member.pageId)!, ...update });
   return { storage, operations, services, members, change };
 }

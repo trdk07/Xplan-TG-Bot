@@ -14,6 +14,7 @@ import {
   isPaymentIncomplete,
 } from "@/lib/admin-views";
 import { isPaymentReviewReady } from "@/lib/member-state";
+import { v2Enabled } from "@/lib/membership-v2";
 import type { Member } from "@/lib/notion";
 
 const INBOX_PREVIEW_LIMIT = 5;
@@ -99,7 +100,7 @@ export function TodayInbox({ members }: { members: Member[] }) {
           <h2>今日待辦</h2>
         </div>
         <div className="panel-body">
-          <p>今天沒有待辦。所有會員狀態正常。</p>
+          <p>{v2Enabled() ? "目前沒有付款或續費待辦；資格查核異常請查看覆核清單。" : "今天沒有待辦。所有會員狀態正常。"}</p>
           <p className="subtle small-text">下次每日檢查：明早 09:00</p>
         </div>
       </section>
@@ -190,7 +191,7 @@ export function TodayInbox({ members }: { members: Member[] }) {
           >
             <div className="inbox-summary-row">
               <p className="subtle small-text">
-                {invitationPending.length} 位符合 status=eligible 且尚未寄出邀請的會員。
+                {invitationPending.length} 位{v2Enabled() ? "已核實入群資格且尚未寄出邀請的會員。" : "符合 status=eligible 且尚未寄出邀請的會員。"}
               </p>
               <CopyEmailListButton
                 emails={invitationPending.map((member) => member.email).join("\n")}
