@@ -1,8 +1,8 @@
 import { isDiscordId, pageKey } from "./config";
-import { normalizeEmail, normalizeExchangeId } from "./membership";
-import type { BindingWrite, Config, Fetcher, Member } from "./types";
+import { normalizeEmail, normalizeExchange, normalizeExchangeId } from "./membership";
+import type { BindingWrite, Config, Exchange, Fetcher, Member } from "./types";
 type Text = { plain_text?: string; text?: { content?: string } };
-type Property = { type?: string; email?: string | null; select?: { name?: string } | null; date?: { start?: string } | null; rich_text?: Text[]; title?: Text[] };
+type Property = { type?: string; checkbox?: boolean; email?: string | null; select?: { name?: string } | null; date?: { start?: string } | null; rich_text?: Text[]; title?: Text[] };
 interface Page {
   object: string; id: string; archived?: boolean; in_trash?: boolean;
   parent?: { data_source_id?: string; database_id?: string };
@@ -47,6 +47,13 @@ export class NotionClient {
     if (discord?.type !== "rich_text" || !Array.isArray(discord.rich_text)) throw new UpstreamError("notion-discord-id-schema");
     const discordId = discord.rich_text.map((text) => text.plain_text ?? text.text?.content ?? "").join("").trim();
     return {
+      ...(this.config.membershipPolicyV2Enabled ? {
+        exchange: normalizeExchange(properties["Exchange Name"]?.select?.name),
+        admissionVerifiedAt: properties["Admission Verified At"]?.type === "date" ? properties["Admission Verified At"]?.date?.start || null : null,
+        volumeQualified: properties["Volume Qualified"]?.type === "checkbox" && properties["Volume Qualified"]?.checkbox === true,
+        volumeCheckedAt: properties["Volume Checked At"]?.type === "date" ? properties["Volume Checked At"]?.date?.start || null : null,
+        volumeCheckError: (properties["Volume Check Error"]?.rich_text || []).map(t => t.plain_text ?? t.text?.content ?? "").join("") || null,
+      } : {}),
       discordId: discordId || null,
       // A missing/mistyped result column must not prevent expiry revocation.
       discordRole: properties[discordRoleProperty]?.type === "select" ? properties[discordRoleProperty]?.select?.name || null : undefined,
@@ -70,7 +77,7 @@ export class NotionClient {
     let cursor: string | undefined;
     const seenCursors = new Set<string>();
     const params = new URLSearchParams();
-    for (const field of [this.config.notionEmailProperty, this.config.notionDiscordIdProperty, ...Object.values(verificationProperties), discordRoleProperty, "Exchange UID", "Status", "Review Due At", "Paid At", "Payment Deadline At"]) params.append("filter_properties", field);
+    for (const field of [this.config.notionEmailProperty, this.config.notionDiscordIdProperty, ...Object.values(verificationProperties), discordRoleProperty, "Exchange UID", "Status", "Review Due At", "Paid At", "Payment Deadline At", ...(this.config.membershipPolicyV2Enabled ? ["Exchange Name", "Admission Verified At", "Volume Qualified", "Volume Checked At", "Volume Check Error"] : [])]) params.append("filter_properties", field);
     for (let page = 0; page < 20; page++) {
       const response = await this.request(`/data_sources/${this.config.notionDataSourceId}/query?${params}`, {
         page_size: 100, ...(cursor ? { start_cursor: cursor } : {}), filter,
@@ -83,8 +90,14 @@ export class NotionClient {
     }
     throw new UpstreamError("notion-pagination-limit");
   }
-  async findMember(exchangeId: string, email: string): Promise<Member | null> {
-    const members = await this.queryMembers({ property: this.config.notionEmailProperty, email: { is_not_empty: true } });
+  async findMember(exchangeId: string, email: string, exchange?: Exchange): Promise<Member | null> {
+    const members = await this.queryMembers(this.config.membershipPolicyV2Enabled
+      ? { property: "Exchange UID", rich_text: { is_not_empty: true } }
+      : { property: this.config.notionEmailProperty, email: { is_not_empty: true } });
+    if (this.config.membershipPolicyV2Enabled) {
+      const accounts = members.filter(m => !m.archived && Boolean(exchange && m.exchange === exchange) && normalizeExchangeId(m.exchangeId) === normalizeExchangeId(exchangeId));
+      return accounts.length === 1 && normalizeEmail(accounts[0]!.email) === normalizeEmail(email) ? accounts[0]! : null;
+    }
     const matches = members.filter(m => !m.archived && normalizeEmail(m.email) === normalizeEmail(email) && normalizeExchangeId(m.exchangeId) === normalizeExchangeId(exchangeId));
     return matches.length === 1 ? matches[0]! : null;
   }
@@ -110,6 +123,7 @@ export class NotionClient {
     binding = { ...binding, verifiedAt: Math.floor(binding.verifiedAt / 60_000) * 60_000 };
     const check = (current: Member) => {
       if (current.archived || pageKey(current.pageId) !== pageKey(binding.pageId)
+        || (this.config.membershipPolicyV2Enabled && (!expected.exchange || current.exchange !== expected.exchange))
         || normalizeEmail(current.email) !== normalizeEmail(expected.email)
         || normalizeExchangeId(current.exchangeId) !== normalizeExchangeId(expected.exchangeId)
         || (current.discordId && current.discordId !== binding.discordId)) throw new NotionBindingConflict();

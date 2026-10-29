@@ -1,4 +1,8 @@
+import { v2Statuses, v2Enabled } from "@/lib/membership-v2";
 export const memberStatuses = [
+  "free",
+  "active_volume",
+  "suspended",
   "eligible",
   "collecting_info",
   "join_pending",
@@ -13,15 +17,29 @@ export const memberStatuses = [
   "denied",
 ] as const;
 
-export const legacyMemberStatuses = ["invite_sent", "sent_7day_survey", "sent_3day_offer", "user_refused", "renewal_due"] as const;
+export const legacyMemberStatuses = [
+  "invite_sent",
+  "sent_7day_survey",
+  "sent_3day_offer",
+  "user_refused",
+  "renewal_due",
+] as const;
 export type CanonicalMemberStatus = (typeof memberStatuses)[number];
 // Legacy values remain readable until records are safely migrated, but cannot be selected for new writes.
-export type MemberStatus = CanonicalMemberStatus | (typeof legacyMemberStatuses)[number];
+export type MemberStatus =
+  | CanonicalMemberStatus
+  | (typeof legacyMemberStatuses)[number];
 export function isReadableMemberStatus(value: unknown): value is MemberStatus {
-  return typeof value === "string" && [...memberStatuses, ...legacyMemberStatuses].includes(value as MemberStatus);
+  return (
+    typeof value === "string" &&
+    [...memberStatuses, ...legacyMemberStatuses].includes(value as MemberStatus)
+  );
 }
 
 export const memberStatusLabels: Record<MemberStatus, string> = {
+  free: "免費會員",
+  active_volume: "交易量會員",
+  suspended: "會籍停用",
   eligible: "可入群",
   collecting_info: "待驗證",
   invite_sent: "連結已發",
@@ -34,7 +52,7 @@ export const memberStatusLabels: Record<MemberStatus, string> = {
   payment_pending: "待付款",
   active_paid: "訂閱中",
   partner: "合作夥伴",
-  exempt: "免費會員",
+  exempt: "免除資格",
   VIP: "VIP",
   expired: "已到期",
   kicked: "已停用",
@@ -75,7 +93,7 @@ export function isMemberStatus(value: string): value is CanonicalMemberStatus {
 // active_paid is intentionally excluded — use the mark-paid buttons instead,
 // which also update reviewDueAt, paidAt, and notify the member via Bot.
 export const manualOverrideStatuses = memberStatuses.filter(
-  (s) => s !== "active_paid",
+  (s) => s !== "active_paid" && s !== "active_volume",
 );
 
 export function memberStatusLabel(status: MemberStatus): string {
@@ -84,6 +102,8 @@ export function memberStatusLabel(status: MemberStatus): string {
 
 export function badgeTone(status: MemberStatus): "ok" | "warn" | "danger" {
   if (
+    status === "free" ||
+    status === "active_volume" ||
     status === "active_paid" ||
     status === "trial_active" ||
     status === "sent_7day_survey" ||
@@ -92,8 +112,21 @@ export function badgeTone(status: MemberStatus): "ok" | "warn" | "danger" {
   ) {
     return "ok";
   }
-  if (status === "expired" || status === "kicked" || status === "denied") {
+  if (
+    status === "suspended" ||
+    status === "expired" ||
+    status === "kicked" ||
+    status === "denied"
+  ) {
     return "danger";
   }
   return "warn";
+}
+
+export function selectableStatuses() {
+  return v2Enabled()
+    ? v2Statuses.filter((s) => s !== "active_paid" && s !== "active_volume")
+    : manualOverrideStatuses.filter(
+        (s) => !["free", "active_volume", "suspended"].includes(s),
+      );
 }

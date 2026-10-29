@@ -15,6 +15,8 @@ import {
 } from "@/app/admin/components/MemberSummaries";
 import { ActionButton } from "@/app/components/ActionButton";
 import { StatusBadge } from "@/app/components/StatusBadge";
+import { effectiveMembership, v2Enabled } from "@/lib/membership-v2";
+import { QualificationSummary } from "@/app/admin/components/QualificationSummary";
 import type { Member } from "@/lib/notion";
 import { DiscordSummary } from "@/app/admin/components/DiscordSummary";
 
@@ -75,10 +77,10 @@ export function MembersList({
             <div className="member-identity">
               <strong>{member.telegramUserId || "-"}</strong>
               <span className="subtle">{member.telegramUsername || "-"}</span>
-              <span className="email-text">{member.email || "No email"}</span>
+              <span className="email-text">{member.email || "尚無 Email"}</span>
             </div>
             <div className="member-status-row">
-              <StatusBadge status={member.status} />
+              <StatusBadge status={v2Enabled() ? effectiveMembership(member) : member.status} />
               <MembershipSummary member={member} />
               {member.invitationEmailSent ? (
                 <span className="mini-badge success">
@@ -116,17 +118,18 @@ export function MembersList({
               <ExchangeSummary member={member} />
             </div>
             <div className="review-block compact-text">
-              <span className="mobile-label">Exchange UID</span>
+              <span className="mobile-label">交易所 UID</span>
               <span>{member.exchangeUid || "-"}</span>
             </div>
             <div className="review-block compact-text">
-              <span className="mobile-label">Tags</span>
+              <span className="mobile-label">標籤</span>
               <span>{member.tags.length ? member.tags.join(", ") : "-"}</span>
             </div>
+            {v2Enabled() ? <div className="review-block important-block"><span className="mobile-label">入群與交易量證據</span><QualificationSummary member={member} /></div> : null}
             <TradingViewSummary member={member} />
             <div className="member-date-grid">
-              <DateStack label="Joined" value={member.groupJoinedAt} />
-              <DateStack label="Review Due" value={member.reviewDueAt} />
+              <DateStack label="首次入群" value={member.groupJoinedAt} />
+              <DateStack label="會籍到期" value={member.reviewDueAt} />
               <DateStack label="付款期限" value={member.paymentDeadlineAt} />
               <DateStack label="最後檢查" value={member.lastBotCheckAt} />
             </div>

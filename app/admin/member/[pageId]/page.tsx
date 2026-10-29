@@ -11,6 +11,9 @@ import {
 } from "lucide-react";
 import {
   clearInviteAction,
+  recheckQualificationAction,
+  approveHistoricalDepositAction,
+  resetBoundAccountAction,
   extendTrialAction,
   kickMemberAction,
   markPaidAction,
@@ -24,13 +27,16 @@ import { ActionButton } from "@/app/components/ActionButton";
 import { ConfirmMarkPaidButton } from "@/app/components/ConfirmMarkPaidButton";
 import { StatusBadge } from "@/app/components/StatusBadge";
 import { MembershipSummary, TelegramPresenceSummary } from "@/app/admin/components/MemberSummaries";
+import { QualificationDetails } from "@/app/admin/components/QualificationSummary";
+import { effectiveMembership, normalizeExchange, v2Enabled } from "@/lib/membership-v2";
+import { hasTrustedPaidPeriod } from "@/app/admin/payment-policy";
 import { isPaymentPending } from "@/lib/member-state";
 import { DiscordDetails } from "@/app/admin/components/DiscordSummary";
 import { isLegacyBitMartMember } from "@/lib/admin-views";
 import { requireAdmin } from "@/lib/auth";
 import { addMonths, formatDateTime, renewalBaseDate } from "@/lib/dates";
 import { getMemberByPageId } from "@/lib/notion";
-import { isMemberStatus, manualOverrideStatuses, memberStatusLabel } from "@/lib/status";
+import { selectableStatuses, memberStatusLabel } from "@/lib/status";
 
 export default async function MemberDetailPage({
   params,
@@ -45,9 +51,9 @@ export default async function MemberDetailPage({
     return (
       <main className="shell">
         <Link href="/admin" className="button secondary">
-          Back
+          返回
         </Link>
-        <p>Member not found.</p>
+        <p>找不到會員。</p>
       </main>
     );
   }
@@ -65,7 +71,9 @@ export default async function MemberDetailPage({
   const isLegacyBitMart = isLegacyBitMartMember(member);
 
   const now = new Date();
-  const base = renewalBaseDate(member.reviewDueAt, now);
+  const policyV2 = v2Enabled();
+  const manualStatuses = selectableStatuses();
+  const base = policyV2 && !hasTrustedPaidPeriod(member, now) ? now : renewalBaseDate(member.reviewDueAt, now);
   const newDue1 = formatDateTime(addMonths(base, 1).toISOString());
   const newDue3 = formatDateTime(addMonths(base, 3).toISOString());
 
@@ -73,8 +81,8 @@ export default async function MemberDetailPage({
     <main className="shell">
       <header className="topbar">
         <div>
-          <h1>{member.telegramUserId || "Member"}</h1>
-          <p className="subtle">{member.telegramUsername || "No username captured"}</p>
+          <h1>{member.telegramUserId || "會員"}</h1>
+          <p className="subtle">{member.telegramUsername || "尚無使用者名稱"}</p>
         </div>
         <Link href="/admin" className="button secondary">
           <RefreshCw width={16} height={16} aria-hidden="true" />
@@ -85,30 +93,30 @@ export default async function MemberDetailPage({
       <div className="detail-grid">
         <section className="panel">
           <div className="panel-head">
-            <h2>Member Detail</h2>
-            <StatusBadge status={member.status} />
+            <h2>會員資料</h2>
+            <StatusBadge status={policyV2 ? effectiveMembership(member, now) : member.status} />
           </div>
           <div className="kv">
-            <div>Telegram User ID</div>
+            <div>Telegram 帳號 ID</div>
             <div>{member.telegramUserId || "-"}</div>
-            <div>Telegram Username</div>
+            <div>Telegram 使用者名稱</div>
             <div>{member.telegramUsername || "-"}</div>
             <div>Email</div>
             <div>{member.email || "-"}</div>
             <DiscordDetails member={member} />
             <div>已送出邀請</div>
-            <div>{member.invitationEmailSent ? "yes" : "no"}</div>
+            <div>{member.invitationEmailSent ? "是" : "否"}</div>
             <div>會籍效期</div>
             <div><MembershipSummary member={member} /></div>
             <div>Telegram 入群紀錄</div>
             <div><TelegramPresenceSummary member={member} /></div>
-            <div>Status</div>
+            <div>Notion 原始標記</div>
             <div>{memberStatusLabel(member.status)}</div>
-            <div>Tags</div>
+            <div>標籤</div>
             <div>{member.tags.length ? member.tags.join(", ") : "-"}</div>
-            <div>Exchange Registered</div>
-            <div>{member.exchangeRegistered ? "yes" : "no"}</div>
-            <div>Exchange Name</div>
+            <div>推薦關係已驗證</div>
+            <div>{member.exchangeRegistered ? "是" : "否"}</div>
+            <div>交易所</div>
             <div>
               <div>{member.exchangeName || "-"}</div>
               {isLegacyBitMart ? (
@@ -118,23 +126,23 @@ export default async function MemberDetailPage({
                 </div>
               ) : null}
             </div>
-            <div>Exchange UID</div>
+            <div>交易所 UID</div>
             <div>{member.exchangeUid || "-"}</div>
-            <div>UID Submitted At</div>
+            <div>UID 填寫時間</div>
             <div>{formatDateTime(member.uidSubmittedAt)}</div>
-            <div>Invite Link</div>
+            <div>入群邀請連結</div>
             <div>{member.inviteLink || "-"}</div>
-            <div>Invite Expires At</div>
+            <div>邀請連結期限</div>
             <div>{formatDateTime(member.inviteExpiresAt)}</div>
-            <div>Group Joined At</div>
+            <div>Telegram 首次入群時間</div>
             <div>{formatDateTime(member.groupJoinedAt)}</div>
-            <div>Review Due At</div>
+            <div>{policyV2 ? "付費截止欄位（須核實付款）" : "會籍到期日"}</div>
             <div>{formatDateTime(member.reviewDueAt)}</div>
-            <div>Payment Deadline At</div>
+            <div>付款補件期限</div>
             <div>{formatDateTime(member.paymentDeadlineAt)}</div>
-            <div>Payment UID Last 4</div>
+            <div>付款 UID 末四碼</div>
             <div>{member.paymentUidLast4 || "-"}</div>
-            <div>Payment Proof</div>
+            <div>付款證明</div>
             <div>
               {member.paymentProofFileId ? (
                 <a
@@ -148,7 +156,7 @@ export default async function MemberDetailPage({
                     src={`/api/admin/payment-proof?fileId=${encodeURIComponent(
                       member.paymentProofFileId,
                     )}`}
-                    alt="Payment proof screenshot"
+                    alt="付款證明截圖"
                     style={{ maxWidth: "240px", borderRadius: "8px" }}
                   />
                 </a>
@@ -156,11 +164,11 @@ export default async function MemberDetailPage({
                 "-"
               )}
             </div>
-            <div>Payment Proof File ID</div>
+            <div>付款證明檔案 ID</div>
             <div>{member.paymentProofFileId || "-"}</div>
-            <div>Payment Proof Submitted At</div>
+            <div>付款證明送出時間</div>
             <div>{formatDateTime(member.paymentProofSubmittedAt)}</div>
-            <div>Paid At</div>
+            <div>核准付款時間</div>
             <div>{formatDateTime(member.paidAt)}</div>
             <div>付款申請進度</div>
             <div>{isPaymentPending(member) ? "申請付款中" : member.renewalStep === "payment_expired" ? "付款申請已截止" : "-"}</div>
@@ -170,7 +178,7 @@ export default async function MemberDetailPage({
             <div>{formatDateTime(member.renewalReminder3DaySentAt)}</div>
             <div>提醒對應到期日</div>
             <div>{formatDateTime(member.renewalReminderDueAt)}</div>
-            <div>Last Bot Message</div>
+            <div>最後處理紀錄</div>
             <div>{member.lastBotMessage || "-"}</div>
             <div>會籍停用／歷史異動原因</div>
             <div>{member.kickReason || "-"}</div>
@@ -181,7 +189,7 @@ export default async function MemberDetailPage({
 
         <aside className="panel">
           <div className="panel-head">
-            <h3>Actions</h3>
+            <h3>管理操作</h3>
           </div>
           <div className="stack">
             <form action={markPaidOneMonth}>
@@ -200,8 +208,10 @@ export default async function MemberDetailPage({
               />
             </form>
 
+            {policyV2 ? <p className="field-hint">僅在確認收款後核准 1 或 3 個月。已有有效付費期間者從原付費截止日續接；試用或未核實日期不會延長付款期限。特殊或停用會籍的優先規則保留。</p> : null}
+
             <form action={resendInvite}>
-              <ActionButton icon={<Send />} disabled={!member.telegramUserId || ["kicked", "denied"].includes(member.status)}>重送入群連結</ActionButton>
+              <ActionButton icon={<Send />} disabled={!member.telegramUserId || ["suspended", "kicked", "denied"].includes(member.status)}>重送入群連結</ActionButton>
             </form>
 
             <div className="actions-divider" role="separator" aria-label="流程操作" />
@@ -218,7 +228,7 @@ export default async function MemberDetailPage({
               </ActionButton>
             </form>
 
-            {!["active_paid", "partner", "exempt", "VIP"].includes(member.status) && (
+            {!policyV2 && !["active_paid", "partner", "exempt", "VIP"].includes(member.status) && (
               <form action={extendTrial}>
                 <ActionButton icon={<CalendarPlus />} secondary small>
                   延長體驗期一個月
@@ -226,28 +236,44 @@ export default async function MemberDetailPage({
               </form>
             )}
 
+            {policyV2 ? <>
+              <form action={recheckQualificationAction.bind(null,pageId)}><ActionButton icon={<RefreshCw />} secondary>重新檢查資格</ActionButton><p className="field-hint">依已開啟且完成資料範圍核對的交易所服務檢查；查詢失敗不會清除上次成功交易量資格。</p></form>
+              <details className="advanced-actions">
+                <summary>歷史入金人工覆核</summary>
+                <form action={approveHistoricalDepositAction.bind(null,pageId)} className="stack">
+                  <p className="field-hint">僅核准已有推薦關係證據的帳號；不能用此操作補造推薦關係。金額為已證明的歷史累計入金下限，之後提領不撤銷通過紀錄。</p>
+                  <div className="field"><label htmlFor="verifiedDepositUsdt">已核實歷史累計入金（USDT）</label><input className="input" id="verifiedDepositUsdt" name="verifiedDepositUsdt" inputMode="decimal" required defaultValue={member.verifiedDepositUsdt ?? ""} /></div>
+                  <div className="field"><label htmlFor="deposit-reason">覆核理由與證明依據（必填）</label><textarea className="input" id="deposit-reason" name="reason" required maxLength={1000} /></div>
+                  <label><input type="checkbox" name="evidenceComplete" defaultChecked={member.depositEvidenceComplete} /> 已確認歷史入金資料完整</label>
+                  <ActionButton icon={<Save />} secondary>確認歷史入金證據</ActionButton>
+                </form>
+              </details>
+              <details className="advanced-actions">
+                <summary>更換綁定交易所帳號</summary>
+                <form action={resetBoundAccountAction.bind(null,pageId)} className="stack">
+                  <p className="field-hint">更換後清除入群資格、入金與交易量證據，並撤銷舊邀請連結；付費事實與 Telegram 入群紀錄保留。需要 Discord 重新驗證，既有角色寫回保留供審核。</p>
+                  <div className="field"><label htmlFor="bound-exchange">新綁定交易所</label><select className="input" id="bound-exchange" name="exchange" defaultValue={normalizeExchange(member.exchangeName) ?? ""} required><option value="" disabled>請選擇交易所</option><option value="mexc">MEXC</option><option value="bitget">Bitget</option><option value="okx">OKX</option></select></div>
+                  <div className="field"><label htmlFor="bound-uid">新帳號 UID</label><input className="input" id="bound-uid" name="exchangeUid" inputMode="numeric" pattern="[0-9]{1,32}" maxLength={32} defaultValue={member.exchangeUid} required /></div>
+                  <ActionButton icon={<Save />} danger>確認更換並重設資格</ActionButton>
+                </form>
+              </details>
+            </> : null}
+
             <details className="advanced-actions">
               <summary>進階操作</summary>
               <div className="stack">
                 <form action={updateStatus} className="grid">
                   <div className="field">
-                    <label htmlFor="status">手動修正 Status</label>
-                    <select className="input" id="status" name="status" defaultValue={member.status}>
-                      {!isMemberStatus(member.status) && (
-                        <option value={member.status} disabled>{memberStatusLabel(member.status)}（請確認後選擇新狀態）</option>
-                      )}
-                      {member.status === "active_paid" && (
-                        <option value="active_paid" disabled>
-                          已付款有效（請用上方標記付款按鈕）
-                        </option>
-                      )}
-                      {manualOverrideStatuses.map((status) => (
+                    <label htmlFor="status">手動修正會籍標記</label>
+                    <select className="input" id="status" name="status" defaultValue={manualStatuses.some(status => status === member.status) ? member.status : ""}>
+                      {!manualStatuses.some(status => status === member.status) && <option value="" disabled>請選擇手動狀態；目前標記：{memberStatusLabel(member.status)}</option>}
+                      {manualStatuses.map((status) => (
                         <option key={status} value={status}>
                           {memberStatusLabel(status)}
                         </option>
                       ))}
                     </select>
-                    <p className="field-hint">⚠️ 僅修正 Status 欄位，不會更新到期日或通知 Bot。若要標記付款，請用上方按鈕。</p>
+                    <p className="field-hint">僅修正狀態標記，不建立付費或交易量證據；實際權限仍依有效資料判定。若要標記付款，請用上方按鈕。</p>
                   </div>
                   <ActionButton icon={<Save />} danger>更新狀態</ActionButton>
                 </form>
@@ -275,6 +301,7 @@ export default async function MemberDetailPage({
           </div>
         </aside>
       </div>
+      {policyV2 ? <QualificationDetails member={member} /> : null}
     </main>
   );
 }

@@ -1,0 +1,12 @@
+// Copy only this additive binding into wrangler.jsonc AFTER owner provisions D1.
+// Keep the current Worker name, assets, services and cron. Never deploy this example.
+{
+  "d1_databases": [
+    {
+      "binding": "MEMBERSHIP_EVIDENCE_DB",
+      "database_name": "xplan-membership-evidence",
+      "database_id": "REPLACE_WITH_PROVISIONED_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

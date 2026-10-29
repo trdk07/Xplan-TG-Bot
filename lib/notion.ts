@@ -1,8 +1,13 @@
+import {
+  qualificationFields,
+  normalizeExchange,
+  type QualificationFields,
+} from "@/lib/membership-v2";
 import { Client } from "@notionhq/client";
 import { getRuntimeConfig } from "@/lib/config";
 import { type MemberStatus, isReadableMemberStatus } from "@/lib/status";
 
-export type Member = {
+export type Member = QualificationFields & {
   pageId: string;
   telegramUserId: string;
   telegramUsername: string;
@@ -41,7 +46,14 @@ export type Member = {
 
 export type MemberPatch = Partial<
   // Discord fields are owned by the Discord bot and are read-only here.
-  Omit<Member, "pageId" | "discordId" | "discordVerifiedAt" | "discordRole" | "reminderFieldsAvailable">
+  Omit<
+    Member,
+    | "pageId"
+    | "discordId"
+    | "discordVerifiedAt"
+    | "discordRole"
+    | "reminderFieldsAvailable"
+  >
 >;
 
 export const notionProperties = {
@@ -119,7 +131,8 @@ function valueFromTextLikeProp(prop: any): string {
   if (typeof prop.email === "string") return prop.email;
   if (typeof prop.phone_number === "string") return prop.phone_number;
   if (typeof prop.url === "string") return prop.url;
-  if (prop.type === "email" && typeof prop.email === "string") return prop.email;
+  if (prop.type === "email" && typeof prop.email === "string")
+    return prop.email;
   if (Array.isArray(prop.rich_text)) {
     return prop.rich_text.map((item: any) => item.plain_text || "").join("");
   }
@@ -166,13 +179,30 @@ function selectProp(page: NotionPage, name: string): string {
 function multiSelectProp(page: NotionPage, name: string): string[] {
   const prop = page.properties[name];
   if (!Array.isArray(prop?.multi_select)) return [];
-  return prop.multi_select
-    .map((item: any) => item.name || "")
-    .filter(Boolean);
+  return prop.multi_select.map((item: any) => item.name || "").filter(Boolean);
 }
 
 export function mapNotionPageToMember(page: NotionPage): Member {
   return {
+    ...Object.fromEntries(
+      Object.entries(qualificationFields).map(([key, [name, type]]) => {
+        const prop = page.properties[name];
+        const value =
+          type === "date"
+            ? dateProp(page, name)
+            : type === "number"
+              ? (prop?.number ?? null)
+              : type === "checkbox"
+                ? prop?.checkbox === true
+                : type === "select"
+                  ? selectProp(page, name)
+                  : textProp(page, name);
+        return [key, value];
+      }),
+    ),
+    qualificationFieldsAvailable: Object.values(qualificationFields).every(
+      ([name, type]) => page.properties[name]?.type === type,
+    ),
     pageId: page.id,
     telegramUserId: textProp(page, notionProperties.telegramUserId),
     telegramUsername:
@@ -183,13 +213,18 @@ export function mapNotionPageToMember(page: NotionPage): Member {
       firstTextProp(page, legacyProperties.email),
     discordId: textProp(page, notionProperties.discordId).trim(),
     discordVerifiedAt: dateProp(page, notionProperties.discordVerifiedAt),
-    discordRole: page.properties[notionProperties.discordRole]?.select?.name?.trim() || null,
+    discordRole:
+      page.properties[notionProperties.discordRole]?.select?.name?.trim() ||
+      null,
     status: statusProp(page),
     tags: multiSelectProp(page, notionProperties.tags),
     exchangeRegistered: checkboxProp(page, notionProperties.exchangeRegistered),
     exchangeName: selectProp(page, notionProperties.exchangeName),
     exchangeUid: textProp(page, notionProperties.exchangeUid),
-    invitationEmailSent: checkboxProp(page, notionProperties.invitationEmailSent),
+    invitationEmailSent: checkboxProp(
+      page,
+      notionProperties.invitationEmailSent,
+    ),
     uidSubmittedAt: dateProp(page, notionProperties.uidSubmittedAt),
     inviteLink: urlProp(page, notionProperties.inviteLink),
     inviteExpiresAt: dateProp(page, notionProperties.inviteExpiresAt),
@@ -198,7 +233,10 @@ export function mapNotionPageToMember(page: NotionPage): Member {
     paymentDeadlineAt: dateProp(page, notionProperties.paymentDeadlineAt),
     paymentUidLast4: textProp(page, notionProperties.paymentUidLast4),
     paymentProofFileId: textProp(page, notionProperties.paymentProofFileId),
-    paymentProofSubmittedAt: dateProp(page, notionProperties.paymentProofSubmittedAt),
+    paymentProofSubmittedAt: dateProp(
+      page,
+      notionProperties.paymentProofSubmittedAt,
+    ),
     paidAt: dateProp(page, notionProperties.paidAt),
     subscriptionMonths: (() => {
       const n = page.properties[notionProperties.subscriptionMonths]?.number;
@@ -209,10 +247,20 @@ export function mapNotionPageToMember(page: NotionPage): Member {
     })(),
     finalPnl: textProp(page, notionProperties.finalPnl),
     renewalStep: selectProp(page, notionProperties.renewalStep),
-    renewalReminderSentAt: dateProp(page, notionProperties.renewalReminderSentAt),
-    renewalReminder3DaySentAt: dateProp(page, notionProperties.renewalReminder3DaySentAt),
+    renewalReminderSentAt: dateProp(
+      page,
+      notionProperties.renewalReminderSentAt,
+    ),
+    renewalReminder3DaySentAt: dateProp(
+      page,
+      notionProperties.renewalReminder3DaySentAt,
+    ),
     renewalReminderDueAt: dateProp(page, notionProperties.renewalReminderDueAt),
-    reminderFieldsAvailable: [notionProperties.renewalReminderSentAt, notionProperties.renewalReminder3DaySentAt, notionProperties.renewalReminderDueAt].every(name => page.properties[name]?.type === "date"),
+    reminderFieldsAvailable: [
+      notionProperties.renewalReminderSentAt,
+      notionProperties.renewalReminder3DaySentAt,
+      notionProperties.renewalReminderDueAt,
+    ].every((name) => page.properties[name]?.type === "date"),
     lastBotCheckAt: dateProp(page, notionProperties.lastBotCheckAt),
     lastBotMessage: textProp(page, notionProperties.lastBotMessage),
     kickReason: textProp(page, notionProperties.kickReason),
@@ -220,7 +268,9 @@ export function mapNotionPageToMember(page: NotionPage): Member {
   };
 }
 
-export function normalizeTelegramUsername(value: string | null | undefined): string {
+export function normalizeTelegramUsername(
+  value: string | null | undefined,
+): string {
   if (!value) return "";
   return value
     .trim()
@@ -242,7 +292,9 @@ export function buildNotionProperties(patch: MemberPatch): Record<string, any> {
     props[notionProperties.telegramUserId] = richText(patch.telegramUserId);
   }
   if (patch.telegramUsername !== undefined) {
-    props[notionProperties.telegramUsername] = titleText(patch.telegramUsername);
+    props[notionProperties.telegramUsername] = titleText(
+      patch.telegramUsername,
+    );
   }
   if (patch.email !== undefined) {
     props[notionProperties.email] = { email: patch.email || null };
@@ -261,7 +313,9 @@ export function buildNotionProperties(patch: MemberPatch): Record<string, any> {
     };
   }
   if (patch.exchangeName !== undefined) {
-    props[notionProperties.exchangeName] = { select: patch.exchangeName ? { name: patch.exchangeName } : null };
+    props[notionProperties.exchangeName] = {
+      select: patch.exchangeName ? { name: patch.exchangeName } : null,
+    };
   }
   if (patch.exchangeUid !== undefined) {
     props[notionProperties.exchangeUid] = richText(patch.exchangeUid);
@@ -308,7 +362,9 @@ export function buildNotionProperties(patch: MemberPatch): Record<string, any> {
     props[notionProperties.paidAt] = dateValue(patch.paidAt);
   }
   if (patch.subscriptionMonths !== undefined) {
-    props[notionProperties.subscriptionMonths] = { number: patch.subscriptionMonths };
+    props[notionProperties.subscriptionMonths] = {
+      number: patch.subscriptionMonths,
+    };
   }
   if (patch.finalPnl !== undefined) {
     props[notionProperties.finalPnl] = richText(patch.finalPnl);
@@ -324,10 +380,14 @@ export function buildNotionProperties(patch: MemberPatch): Record<string, any> {
     );
   }
   if (patch.renewalReminder3DaySentAt !== undefined) {
-    props[notionProperties.renewalReminder3DaySentAt] = dateValue(patch.renewalReminder3DaySentAt);
+    props[notionProperties.renewalReminder3DaySentAt] = dateValue(
+      patch.renewalReminder3DaySentAt,
+    );
   }
   if (patch.renewalReminderDueAt !== undefined) {
-    props[notionProperties.renewalReminderDueAt] = dateValue(patch.renewalReminderDueAt);
+    props[notionProperties.renewalReminderDueAt] = dateValue(
+      patch.renewalReminderDueAt,
+    );
   }
   if (patch.lastBotCheckAt !== undefined) {
     props[notionProperties.lastBotCheckAt] = dateValue(patch.lastBotCheckAt);
@@ -339,6 +399,18 @@ export function buildNotionProperties(patch: MemberPatch): Record<string, any> {
     props[notionProperties.kickReason] = richText(patch.kickReason);
   }
 
+  for (const [key, [name, type]] of Object.entries(qualificationFields)) {
+    const value = (patch as Record<string, unknown>)[key];
+    if (value === undefined) continue;
+    props[name] =
+      type === "date"
+        ? dateValue(value as string | null)
+        : type === "rich_text"
+          ? richText(value as string)
+          : type === "select"
+            ? { select: value ? { name: value } : null }
+            : { [type]: value };
+  }
   return props;
 }
 
@@ -346,7 +418,9 @@ async function existingNotionProperties(
   pageId: string,
   patch: MemberPatch,
 ): Promise<Record<string, any>> {
-  const page = (await notion().pages.retrieve({ page_id: pageId })) as NotionPage;
+  const page = (await notion().pages.retrieve({
+    page_id: pageId,
+  })) as NotionPage;
   const existingProperties = page.properties || {};
   return Object.fromEntries(
     Object.entries(buildNotionProperties(patch)).filter(([name]) =>
@@ -365,10 +439,17 @@ export async function updateMember(pageId: string, patch: MemberPatch) {
   } catch (error) {
     const fallbackProperties = await existingNotionProperties(pageId, patch);
     // A reminder without its durable cycle markers would be sent repeatedly.
-    for (const name of [notionProperties.renewalReminderSentAt, notionProperties.renewalReminder3DaySentAt, notionProperties.renewalReminderDueAt]) {
+    for (const name of [
+      ...Object.values(qualificationFields).map(([name]) => name),
+      notionProperties.renewalReminderSentAt,
+      notionProperties.renewalReminder3DaySentAt,
+      notionProperties.renewalReminderDueAt,
+    ]) {
       if (name in properties && !(name in fallbackProperties)) throw error;
     }
-    if (Object.keys(fallbackProperties).length === Object.keys(properties).length) {
+    if (
+      Object.keys(fallbackProperties).length === Object.keys(properties).length
+    ) {
       throw error;
     }
     if (!Object.keys(fallbackProperties).length) return;
@@ -394,8 +475,12 @@ export async function updateMemberExistingProperties(
   return Object.keys(properties);
 }
 
-export async function getMemberByPageId(pageId: string): Promise<Member | null> {
-  const page = (await notion().pages.retrieve({ page_id: pageId })) as NotionPage;
+export async function getMemberByPageId(
+  pageId: string,
+): Promise<Member | null> {
+  const page = (await notion().pages.retrieve({
+    page_id: pageId,
+  })) as NotionPage;
   if (!page?.properties) return null;
   return mapNotionPageToMember(page);
 }
@@ -406,13 +491,16 @@ export async function findMemberByTelegramId(
   const config = getRuntimeConfig();
   const response = await notion().dataSources.query({
     data_source_id: config.notionDataSourceId,
-    page_size: 1,
+    page_size: 2,
     filter: {
       property: notionProperties.telegramUserId,
       rich_text: { equals: telegramUserId },
     },
   } as any);
-  const first = (response.results[0] as NotionPage | undefined) || null;
+  const first =
+    response.results.length === 1 && !response.has_more
+      ? (response.results[0] as NotionPage)
+      : null;
   return first ? mapNotionPageToMember(first) : null;
 }
 
@@ -422,30 +510,30 @@ export async function findMemberByTelegramUsername(
   const normalized = normalizeTelegramUsername(telegramUsername);
   if (!normalized) return null;
 
-  const members = await listMembers({ limit: 1000 });
-  return (
-    members.find(
-      (member) => normalizeTelegramUsername(member.telegramUsername) === normalized,
-    ) || null
+  const members = await listMembers();
+  const matches = members.filter(
+    (member) =>
+      normalizeTelegramUsername(member.telegramUsername) === normalized,
   );
+  return matches.length === 1 ? matches[0] : null;
 }
 
 export async function findMemberByExchangeUid(
   exchangeName: string,
   exchangeUid: string,
 ): Promise<Member | null> {
-  const normalizedExchangeName = exchangeName.trim().toLowerCase();
+  const normalizedExchangeName =
+    normalizeExchange(exchangeName) || exchangeName.trim().toLowerCase();
   const normalizedUid = normalizeExchangeUid(exchangeUid);
   if (!normalizedExchangeName || !normalizedUid) return null;
-
-  const members = await listMembers({ limit: 1000 });
-  return (
-    members.find(
-      (member) =>
-        member.exchangeName.trim().toLowerCase() === normalizedExchangeName &&
-        normalizeExchangeUid(member.exchangeUid) === normalizedUid,
-    ) || null
+  const members = await listMembers();
+  const matches = members.filter(
+    (member) =>
+      (normalizeExchange(member.exchangeName) ||
+        member.exchangeName.trim().toLowerCase()) === normalizedExchangeName &&
+      normalizeExchangeUid(member.exchangeUid) === normalizedUid,
   );
+  return matches.length === 1 ? matches[0] : null;
 }
 
 export function memberMatchesQuery(member: Member, query: string): boolean {
@@ -476,6 +564,7 @@ export async function listMembers(options?: {
   const config = getRuntimeConfig();
   const members: Member[] = [];
   let cursor: string | undefined;
+  const cursors = new Set<string>();
 
   do {
     const response = await notion().dataSources.query({
@@ -489,6 +578,12 @@ export async function listMembers(options?: {
         mapNotionPageToMember(page),
       ),
     );
+    if (
+      response.has_more &&
+      (!response.next_cursor || cursors.has(response.next_cursor))
+    )
+      throw new Error("Notion pagination incomplete");
+    if (response.next_cursor) cursors.add(response.next_cursor);
     cursor = response.has_more ? response.next_cursor || undefined : undefined;
   } while (cursor && (!options?.limit || members.length < options.limit));
 

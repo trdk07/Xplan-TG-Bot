@@ -43,7 +43,7 @@ export const httpHandler = {
     if (interaction.guild_id !== env.DISCORD_GUILD_ID || !isDiscordId(interaction.member?.user?.id)) return ephemeral("請在指定的 Discord 伺服器內使用會員驗證。");
     if (!isDiscordId(interaction.id) || typeof interaction.token !== "string" || !interaction.token || interaction.token.length > 1024) return json({ error: "invalid_interaction" }, 400);
     try { getConfig(env); } catch { return ephemeral("會員驗證服務尚未完成設定，請稍後再試或聯絡助理。"); }
-    if ((interaction.type === 2 && interaction.data?.name === "verify") || (interaction.type === 3 && interaction.data?.custom_id === ids.verify)) return json(modal());
+    if ((interaction.type === 2 && interaction.data?.name === "verify") || (interaction.type === 3 && interaction.data?.custom_id === ids.verify)) return json(modal(env.MEMBERSHIP_POLICY_V2_ENABLED === "true"));
     const deferred = (interaction.type === 5 && interaction.data?.custom_id === ids.credentials) || (interaction.type === 3 && interaction.data?.custom_id === ids.sync);
     if (!deferred) return ephemeral("這個操作已不適用，請重新點擊會員驗證入口。");
     // Acknowledge within Discord's three-second window, before Notion/API work.

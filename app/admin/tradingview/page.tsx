@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { effectiveMembership, v2Enabled } from "@/lib/membership-v2";
 import { isTrialExperience, matchesAdminView } from "@/lib/admin-views";
 import { hasCurrentMembership } from "@/lib/membership-policy";
 import { nonExpiringStatuses } from "@/lib/status";
@@ -18,10 +19,22 @@ export default async function TradingViewPage() {
   const activePaid3Month: Member[] = [];
   const activePaidUnclassified: Member[] = [];
   const trial: Member[] = [];
+  const volume: Member[] = [];
+  const policyV2 = v2Enabled();
   const membershipReview: Member[] = [];
   const nonExpiring: Member[] = [];
 
   for (const m of tvMembers) {
+    if (policyV2) {
+      const tier = effectiveMembership(m, now);
+      if (["partner", "exempt", "VIP"].includes(tier)) nonExpiring.push(m);
+      else if (tier === "active_paid") {
+        if (m.subscriptionMonths === 1) activePaid1Month.push(m);
+        else if (m.subscriptionMonths === 3) activePaid3Month.push(m);
+        else activePaidUnclassified.push(m);
+      } else if (tier === "active_volume") volume.push(m);
+      continue;
+    }
     if (!hasCurrentMembership(m, now)) continue;
     if (nonExpiringStatuses.has(m.status)) {
       nonExpiring.push(m);
@@ -72,7 +85,7 @@ export default async function TradingViewPage() {
         </div>
       </section>
 
-      <section className="panel">
+      {policyV2 ? <section className="panel"><div className="panel-head"><h2>交易量會員</h2><span className="subtle">{volume.length} 位</span></div><div className="panel-body"><TradingViewList members={volume} /></div></section> : <section className="panel">
         <div className="panel-head">
           <h2>體驗期</h2>
           <span className="subtle">{trial.length} 位</span>
@@ -80,7 +93,7 @@ export default async function TradingViewPage() {
         <div className="panel-body">
           <TradingViewList members={trial} />
         </div>
-      </section>
+      </section>}
 
       {nonExpiring.length > 0 ? (
         <section className="panel">

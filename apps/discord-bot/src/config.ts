@@ -16,7 +16,7 @@ export function getConfig(env: Variables): Config {
   };
   const applicationId = id("DISCORD_APPLICATION_ID");
   const guildId = id("DISCORD_GUILD_ID");
-  const trialRoleId = id("DISCORD_TRIAL_ROLE_ID");
+  const trialRoleId = env.DISCORD_EXPLORER_ROLE_ID ? id("DISCORD_EXPLORER_ROLE_ID") : id("DISCORD_TRIAL_ROLE_ID");
   const memberRoleId = id("DISCORD_MEMBER_ROLE_ID");
   const partnerRoleId = id("DISCORD_PARTNER_ROLE_ID");
   const nonExpiringRoleId = env.DISCORD_NON_EXPIRING_ROLE_ID ? id("DISCORD_NON_EXPIRING_ROLE_ID") : memberRoleId;
@@ -41,6 +41,7 @@ export function getConfig(env: Variables): Config {
   const incompleteMemberPolicy = env.INCOMPLETE_MEMBER_POLICY || "trial";
   if (incompleteMemberPolicy !== "trial" && incompleteMemberPolicy !== "review") throw new Error("Invalid INCOMPLETE_MEMBER_POLICY");
   return {
+    membershipPolicyV2Enabled: env.MEMBERSHIP_POLICY_V2_ENABLED === "true",
     incompleteMemberPolicy, applicationId, publicKey, guildId, trialRoleId, memberRoleId, partnerRoleId, nonExpiringRoleId, authSecret,
     botToken: required(env, "DISCORD_BOT_TOKEN"),
     notionApiKey: required(env, "NOTION_API_KEY"), notionDataSourceId,

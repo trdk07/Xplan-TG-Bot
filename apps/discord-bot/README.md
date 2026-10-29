@@ -1,5 +1,7 @@
 # Xplan Discord 現有會員驗證
 
+已加入預設關閉的會籍 V2：三交易所身份配對、Notion 付款／交易量獨立事實、免費探索者及安全的成員枚舉。啟用規則、必要欄位與分階段切換見 [MEMBERSHIP-V2.md](MEMBERSHIP-V2.md)。以下原有流程及線上驗收紀錄保留為 V1 歷史參考。
+
 此套件已整合至 Xplan-TG-Bot repository 的 `apps/discord-bot/`，保留獨立 Worker、依賴與既有功能。整合與測試入口見 [同 repository 的開發方式](../../docs/discord-integration.md)。下方與 `DEPLOYMENT.md` 的線上驗收紀錄是原專案的歷史快照；此次匯入未重新部署或確認正式環境。
 
 第一版讓 Notion 既有會員在 Discord 輸入 **Exchange ID＋Email**，直接比對同一筆報名資料及會籍狀態，取得對應身分組。加入 Discord 後可先使用免費資源，由會員自行啟動驗證。

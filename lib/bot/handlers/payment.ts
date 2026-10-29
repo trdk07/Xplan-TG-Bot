@@ -1,27 +1,47 @@
+import { withQualificationLock } from "@/lib/qualification";
+import { v2Enabled } from "@/lib/membership-v2";
 import { getRuntimeConfig } from "@/lib/config";
 import { addDays, isPast, isoDateTime } from "@/lib/dates";
-import { type Member, updateMember } from "@/lib/notion";
+import { type Member, updateMember, getMemberByPageId } from "@/lib/notion";
 import { nonExpiringStatuses } from "@/lib/status";
 import { isPaymentPending } from "@/lib/member-state";
 import { type TelegramMessage, sendMessage } from "@/lib/telegram";
-import { PAYMENT_EXPIRED_MESSAGE, PAYMENT_PROOF_INSTRUCTIONS, PAYMENT_REVIEW_PENDING_MESSAGE, STALE_STEP_MESSAGE } from "@/lib/bot/messages";
+import {
+  PAYMENT_EXPIRED_MESSAGE,
+  PAYMENT_PROOF_INSTRUCTIONS,
+  PAYMENT_REVIEW_PENDING_MESSAGE,
+  STALE_STEP_MESSAGE,
+} from "@/lib/bot/messages";
 
 /** Keep complete submissions in the review queue when the submission window closes. */
 export function hasSubmittedPaymentProof(member: Member): boolean {
-  if (!isPaymentPending(member) || !member.paymentProofFileId || !member.paymentUidLast4) return false;
+  if (
+    !isPaymentPending(member) ||
+    !member.paymentProofFileId ||
+    !member.paymentUidLast4
+  )
+    return false;
   if (!member.paymentProofSubmittedAt || !member.paymentDeadlineAt) return true;
   const submitted = Date.parse(member.paymentProofSubmittedAt);
   const deadline = Date.parse(member.paymentDeadlineAt);
   // Legacy records lacking usable submission metadata need manual review, not deletion.
-  return !Number.isFinite(submitted) || !Number.isFinite(deadline) || submitted <= deadline;
+  return (
+    !Number.isFinite(submitted) ||
+    !Number.isFinite(deadline) ||
+    submitted <= deadline
+  );
 }
 
-export async function expirePaymentPendingMember(
+async function expirePaymentPendingMemberUnlocked(
   member: Member,
   chatId: string | number,
   now: Date,
 ) {
-  if (member.status === "kicked" || member.status === "denied") {
+  if (
+    member.status === "suspended" ||
+    member.status === "kicked" ||
+    member.status === "denied"
+  ) {
     await sendMessage(chatId, STALE_STEP_MESSAGE);
     return;
   }
@@ -30,7 +50,11 @@ export async function expirePaymentPendingMember(
     return;
   }
   await updateMember(member.pageId, {
-    ...(!nonExpiringStatuses.has(member.status) && isPast(member.reviewDueAt, now) ? { status: "expired" as const } : {}),
+    ...(!v2Enabled() &&
+    !nonExpiringStatuses.has(member.status) &&
+    isPast(member.reviewDueAt, now)
+      ? { status: "expired" as const }
+      : {}),
     renewalStep: "payment_expired",
     lastBotCheckAt: isoDateTime(now),
     lastBotMessage: "Payment proof submitted after deadline",
@@ -38,13 +62,17 @@ export async function expirePaymentPendingMember(
   await sendMessage(chatId, PAYMENT_EXPIRED_MESSAGE);
 }
 
-export async function sendPaymentRequest(
+async function sendPaymentRequestUnlocked(
   member: Member,
   chatId: string | number,
   now: Date,
   deadline?: Date,
 ) {
-  if (member.status === "kicked" || member.status === "denied") {
+  if (
+    member.status === "suspended" ||
+    member.status === "kicked" ||
+    member.status === "denied"
+  ) {
     await sendMessage(chatId, STALE_STEP_MESSAGE);
     return;
   }
@@ -59,7 +87,15 @@ export async function sendPaymentRequest(
       ? new Date(member.reviewDueAt)
       : addDays(now, config.paymentGraceDays));
   await updateMember(member.pageId, {
-    status: nonExpiringStatuses.has(member.status) ? member.status : member.status === "expired" || isPast(member.reviewDueAt, now) ? "expired" : "payment_pending",
+    ...(v2Enabled()
+      ? {}
+      : {
+          status: nonExpiringStatuses.has(member.status)
+            ? member.status
+            : member.status === "expired" || isPast(member.reviewDueAt, now)
+              ? ("expired" as const)
+              : ("payment_pending" as const),
+        }),
     renewalStep: "payment_pending",
     paymentDeadlineAt: isoDateTime(actualDeadline),
     paymentUidLast4: "",
@@ -102,13 +138,13 @@ export function paymentUidLast4FromMessage(message: TelegramMessage): string {
   return text.match(/(?:^|\D)(\d{4})(?!\d)/)?.[1] || "";
 }
 
-export async function handlePaymentProofMessage(
+async function handlePaymentProofMessageUnlocked(
   member: Member,
   message: TelegramMessage,
   now: Date,
 ) {
   if (isPast(member.paymentDeadlineAt, now)) {
-    await expirePaymentPendingMember(member, message.chat.id, now);
+    await expirePaymentPendingMemberUnlocked(member, message.chat.id, now);
     return;
   }
 
@@ -165,4 +201,76 @@ export async function handlePaymentProofMessage(
     message.chat.id,
     "已收到你的轉帳截圖與 UID 末四碼，助理確認後會更新你的會籍狀態。",
   );
+}
+
+async function livePaymentMember(pageId: string) {
+  const fresh = await getMemberByPageId(pageId);
+  if (!fresh) throw new Error("Member not found");
+  return fresh;
+}
+export async function sendPaymentRequest(
+  member: Member,
+  chatId: string | number,
+  now: Date,
+  deadline?: Date,
+) {
+  if (!v2Enabled())
+    return sendPaymentRequestUnlocked(member, chatId, now, deadline);
+  return withQualificationLock(member.pageId, async (guard) => {
+    const fresh = await livePaymentMember(member.pageId);
+    if (
+      fresh.reviewDueAt !== member.reviewDueAt ||
+      fresh.paidAt !== member.paidAt
+    ) {
+      await sendMessage(chatId, STALE_STEP_MESSAGE);
+      return;
+    }
+    if (hasSubmittedPaymentProof(fresh)) {
+      await sendMessage(chatId, PAYMENT_REVIEW_PENDING_MESSAGE);
+      return;
+    }
+    if (isPaymentPending(fresh) && !isPast(fresh.paymentDeadlineAt, now)) {
+      await sendMessage(chatId, PAYMENT_PROOF_INSTRUCTIONS);
+      return;
+    }
+    await guard();
+    return sendPaymentRequestUnlocked(fresh, chatId, now, deadline);
+  });
+}
+export async function expirePaymentPendingMember(
+  member: Member,
+  chatId: string | number,
+  now: Date,
+) {
+  if (!v2Enabled())
+    return expirePaymentPendingMemberUnlocked(member, chatId, now);
+  return withQualificationLock(member.pageId, async (guard) => {
+    const fresh = await livePaymentMember(member.pageId);
+    if (!isPaymentPending(fresh) || !isPast(fresh.paymentDeadlineAt, now)) {
+      await sendMessage(chatId, STALE_STEP_MESSAGE);
+      return;
+    }
+    await guard();
+    return expirePaymentPendingMemberUnlocked(fresh, chatId, now);
+  });
+}
+export async function handlePaymentProofMessage(
+  member: Member,
+  message: TelegramMessage,
+  now: Date,
+) {
+  if (!v2Enabled())
+    return handlePaymentProofMessageUnlocked(member, message, now);
+  return withQualificationLock(member.pageId, async (guard) => {
+    const fresh = await livePaymentMember(member.pageId);
+    if (
+      ["suspended", "kicked", "denied"].includes(fresh.status) ||
+      !isPaymentPending(fresh)
+    ) {
+      await sendMessage(message.chat.id, STALE_STEP_MESSAGE);
+      return;
+    }
+    await guard();
+    return handlePaymentProofMessageUnlocked(fresh, message, now);
+  });
 }

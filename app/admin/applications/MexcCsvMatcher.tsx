@@ -1,5 +1,6 @@
 "use client";
 
+import { normalizeExchange } from "@/lib/membership-v2";
 import { useMemo, useState } from "react";
 import { batchMarkEligibleAction } from "@/app/admin/actions";
 
@@ -12,6 +13,7 @@ type ReviewMember = {
   exchangeName: string;
   exchangeUid: string;
   invitationEmailSent: boolean;
+  onboardingStep?: string;
 };
 
 type ParsedCsv = {
@@ -92,7 +94,8 @@ function parseMexcCsv(text: string): ParsedCsv {
   };
 }
 
-function isReviewCandidate(member: ReviewMember) {
+function isReviewCandidate(member: ReviewMember, policyV2 = false) {
+  if (policyV2) return !["suspended","kicked","denied"].includes(member.status) && ["collecting_info","eligible","needs_review"].includes(member.onboardingStep ?? "collecting_info");
   return ["eligible", "collecting_info", "invite_sent", "denied"].includes(
     member.status,
   );
@@ -109,33 +112,34 @@ function MemberSummaryCard({ member }: { member: ReviewMember }) {
   );
 }
 
-export function MexcCsvMatcher({ members }: { members: ReviewMember[] }) {
+export function MexcCsvMatcher({ members, policyV2 = false }: { members: ReviewMember[]; policyV2?: boolean }) {
+  const sourceMembers = useMemo(() => policyV2 ? members.filter(member => normalizeExchange(member.exchangeName) === "mexc") : members, [members, policyV2]);
   const [csvText, setCsvText] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const parsed = useMemo(() => parseMexcCsv(csvText), [csvText]);
   const uidSet = useMemo(() => new Set(parsed.uids), [parsed.uids]);
   const membersByUid = useMemo(() => {
     const map = new Map<string, ReviewMember[]>();
-    for (const member of members) {
+    for (const member of sourceMembers) {
       const uid = normalizeUid(member.exchangeUid);
       if (!uid) continue;
       map.set(uid, [...(map.get(uid) || []), member]);
     }
     return map;
-  }, [members]);
+  }, [sourceMembers]);
 
-  const matchedMembers = members.filter((member) =>
+  const matchedMembers = sourceMembers.filter((member) =>
     uidSet.has(normalizeUid(member.exchangeUid)),
   );
-  const approvableMatches = matchedMembers.filter(isReviewCandidate);
-  const unmatchedNotionMembers = members.filter(
+  const approvableMatches = matchedMembers.filter(member => isReviewCandidate(member, policyV2));
+  const unmatchedNotionMembers = sourceMembers.filter(
     (member) =>
-      isReviewCandidate(member) &&
+      isReviewCandidate(member, policyV2) &&
       member.exchangeUid &&
       !uidSet.has(normalizeUid(member.exchangeUid)),
   );
-  const missingUidMembers = members.filter(
-    (member) => isReviewCandidate(member) && !member.exchangeUid,
+  const missingUidMembers = sourceMembers.filter(
+    (member) => isReviewCandidate(member, policyV2) && !member.exchangeUid,
   );
   const mexcOnlyUids = parsed.uids.filter((uid) => !membersByUid.has(uid));
 
@@ -189,12 +193,12 @@ export function MexcCsvMatcher({ members }: { members: ReviewMember[] }) {
 
       <div className="action-row wrap-row">
         <button className="button secondary" onClick={selectAllMatches} type="button">
-          全選可核准匹配
+          {policyV2 ? "全選待覆核匹配" : "全選可核准匹配"}
         </button>
         <form action={batchMarkEligibleAction}>
           <input name="pageIds" type="hidden" value={JSON.stringify(selected)} />
           <button className="button" disabled={!selected.length} type="submit">
-            批次標記可入群（{selected.length}）
+            {policyV2 ? "列入人工資格覆核" : "批次標記可入群"}（{selected.length}）
           </button>
         </form>
       </div>
@@ -202,7 +206,7 @@ export function MexcCsvMatcher({ members }: { members: ReviewMember[] }) {
       <section className="panel nested-panel">
         <div className="panel-head">
           <h3>UID 已匹配 Notion / MEXC</h3>
-          <span className="subtle">勾選後可批次改為可入群</span>
+          <span className="subtle">{policyV2 ? "僅列入人工覆核，不核准資格" : "勾選後可批次改為可入群"}</span>
         </div>
         <div className="table-wrap">
           <table>
@@ -223,7 +227,7 @@ export function MexcCsvMatcher({ members }: { members: ReviewMember[] }) {
                   <td>
                     <input
                       checked={selected.includes(member.pageId)}
-                      disabled={!isReviewCandidate(member)}
+                      disabled={!isReviewCandidate(member, policyV2)}
                       onChange={() => toggle(member.pageId)}
                       type="checkbox"
                     />

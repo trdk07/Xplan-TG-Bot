@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { LogOut, Users } from "lucide-react";
+import { effectiveMembership, v2Enabled } from "@/lib/membership-v2";
+import { QualificationReviewQueue } from "@/app/admin/components/QualificationSummary";
 import { logoutAction } from "@/app/admin/actions";
 import { AdminToolPanels } from "@/app/admin/components/AdminToolPanels";
 import { MemberSearchForm } from "@/app/admin/components/MemberSearchForm";
@@ -71,7 +73,7 @@ export default async function AdminPage({
   const listedMembers = view
     ? queryFiltered.filter((member) => matchesAdminView(member, view, now))
     : status !== "all"
-      ? queryFiltered.filter((member) => member.status === status)
+      ? queryFiltered.filter((member) => (v2Enabled() ? effectiveMembership(member,now) : member.status) === status)
       : queryFiltered;
 
   const displayMembers =
@@ -134,6 +136,7 @@ export default async function AdminPage({
         </div>
       </header>
 
+      {v2Enabled() ? <QualificationReviewQueue members={allMembers} /> : null}
       <TodayInbox members={allMembers} />
 
       <StatsOverview
@@ -148,7 +151,7 @@ export default async function AdminPage({
 
       {resentCount ? (
         <ActionToast
-          message={`已發送續約或付款補件提醒給 ${resentCount} 位會員。`}
+          message={v2Enabled() ? `已處理 ${resentCount} 位會員續約提醒；相同到期日與階段不會重複發送。` : `已發送續約或付款補件提醒給 ${resentCount} 位會員。`}
         />
       ) : null}
 
@@ -163,13 +166,13 @@ export default async function AdminPage({
       <section className="panel">
         <div className="panel-head">
           <h2>
-            <Users width={16} height={16} aria-hidden="true" /> Members
+            <Users width={16} height={16} aria-hidden="true" /> 會員列表
           </h2>
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
             <Link className="subtle small-text" href={densityToggleHref as Route}>
               {density === "full" ? "精簡檢視" : "完整檢視"}
             </Link>
-            <span className="subtle">{loadError || "Synced from Notion"}</span>
+            <span className="subtle">{loadError || "資料來源：Notion"}</span>
           </div>
         </div>
 

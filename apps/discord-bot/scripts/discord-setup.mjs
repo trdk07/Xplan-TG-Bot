@@ -3,7 +3,7 @@ import { loadEnv, missingNames } from "./env.mjs";
 
 const permission = { administrator: 8n, manageRoles: 1n << 28n, view: 1n << 10n, send: 1n << 11n, history: 1n << 16n };
 const invitePermissions = permission.manageRoles | permission.view | permission.send | permission.history;
-export const command = { name: "verify", type: 1, description: "以 Exchange ID 和 Email 驗證現有 Xplan 會員" };
+export const command = { name: "verify", type: 1, description: "以交易所、UID 和 Email 驗證現有 Xplan 會員" };
 export const panel = {
   content: "**Xplan 現有會員驗證**\n\n已經報名的會員，請點「驗證現有會員」，輸入報名時填寫的 Exchange ID 和 Email。完成後會依目前會籍取得試用或正式會員身分組。\n\nTG 與 Discord 共用同一份會籍及到期日。已綁定者可點「更新身分組」。\n你也可以先使用免費資源，隨時再回來驗證。",
   allowed_mentions: { parse: [] },
@@ -17,8 +17,11 @@ async function main() {
   const mode = process.argv[2] || "--plan";
   if (!["--plan", "--check", "--apply"].includes(mode) || process.argv.length > 3) throw new Error("用法：npm run discord:setup -- [--plan|--check|--apply]");
   const env = loadEnv();
+  const selectedPanel = env.MEMBERSHIP_POLICY_V2_ENABLED === "true" ? { ...panel,
+    content: "**Xplan 現有會員驗證**\n\n已經報名的會員，請點「驗證現有會員」，選擇報名的交易所，再輸入 UID 和 Email。完成後依 Notion 會籍取得探索者、宇航員或飛行員身分組。\n\n一般成員完成伺服器規則確認後，每 10 分鐘自動取得探索者。付費或交易量達標者為宇航員，合作夥伴為飛行員。已綁定者可點「更新身分組」。",
+  } : panel;
   if (mode === "--plan") {
-    console.log(JSON.stringify({ command, panel }, null, 2));
+    console.log(JSON.stringify({ command, panel: selectedPanel }, null, 2));
     console.log("預覽完成，未連線 Discord。");
     const missing = missingNames(env);
     if (missing.length) console.log(`尚缺設定名稱：${missing.join(", ")}`);
@@ -51,6 +54,7 @@ async function main() {
     api("/oauth2/applications/@me"), api("/users/@me"),
     api(`/guilds/${config.guildId}/roles`), api(`/channels/${channelId}`),
   ]);
+  if (config.membershipPolicyV2Enabled && !(application.flags & (1 << 14 | 1 << 15))) throw new Error("V2 成員枚舉需要 Server Members Intent；請先在 Developer Portal 啟用並核對應用程式權限。");
   if (application.id !== config.applicationId || !bot.bot) throw new Error("Token 與 Application ID 不一致，或不是 Bot Token");
   if (channel.guild_id !== config.guildId || channel.type !== 0) throw new Error("驗證入口必須是指定伺服器內的文字頻道");
   const self = await api(`/guilds/${config.guildId}/members/${bot.id}`);
@@ -92,8 +96,8 @@ async function main() {
   // POST upserts this command by name; do not bulk-overwrite other guild commands.
   await api(`/applications/${config.applicationId}/guilds/${config.guildId}/commands`, "POST", command);
   const published = existingPanel
-    ? await api(`/channels/${channelId}/messages/${existingPanel.id}`, "PATCH", panel)
-    : await api(`/channels/${channelId}/messages`, "POST", panel);
+    ? await api(`/channels/${channelId}/messages/${existingPanel.id}`, "PATCH", selectedPanel)
+    : await api(`/channels/${channelId}/messages`, "POST", selectedPanel);
   console.log(`已設定 /verify 和驗證入口。請保留 DISCORD_PANEL_MESSAGE_ID=${published.id}`);
   console.log(`入口：https://discord.com/channels/${config.guildId}/${channelId}/${published.id}`);
 }
