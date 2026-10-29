@@ -19,5 +19,13 @@
   },
   "triggers": {
     "crons": ["0 1 * * *"]
-  }
+  },
+  "d1_databases": [
+    {
+      "binding": "MEMBERSHIP_EVIDENCE_DB",
+      "database_name": "xplan-membership-evidence",
+      "database_id": "628c793d-f59f-40f0-b753-0ec095b2f155",
+      "migrations_dir": "migrations"
+    }
+  ]
 }
