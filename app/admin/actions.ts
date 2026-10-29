@@ -1,5 +1,12 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
+import {
+  DiscordAdminError,
+  requestDiscordAdmin,
+  type DiscordAdminState,
+} from "@/lib/discord-admin";
+import type { AdminRequest } from "@/shared/discord-admin-protocol";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -704,4 +711,85 @@ export async function resetBoundAccountAction(
       await updateMember(pageId, patch);
     });
   });
+}
+
+async function discordAdminAction(
+  pageId: string,
+  discordId: string,
+  verifiedAt: string | null,
+  action: AdminRequest["action"],
+  formData: FormData,
+): Promise<DiscordAdminState> {
+  return withAdminAction(pageId, async (operator) => {
+    if (action === "unlink" && formData.get("confirmUnlink") !== "yes")
+      return { kind: "error", message: "請先確認解除 DC 綁定。" };
+    try {
+      return await withV2MemberMutation(pageId, async (guard) => {
+        try {
+          const member = await getMemberByPageId(pageId);
+          const date = (value: string | null) =>
+            value ? Date.parse(value) : null;
+          if (
+            !member ||
+            !discordId ||
+            member.discordId !== discordId ||
+            date(member.discordVerifiedAt) !== date(verifiedAt)
+          )
+            throw new DiscordAdminError(
+              "綁定資料已變更，請重新整理會員頁面後確認。",
+            );
+          await guard();
+          const result = await requestDiscordAdmin({
+            action,
+            requestId: randomUUID(),
+            pageId: member.pageId,
+            discordId,
+            verifiedAt: date(member.discordVerifiedAt),
+            operator,
+          });
+          await guard();
+          await updateMemberExistingProperties(pageId, {
+            lastBotCheckAt: new Date().toISOString(),
+            lastBotMessage: `DC ${action} handled by ${operator}: ${result.message}`,
+          });
+          return { kind: "success", message: result.message };
+        } catch (error) {
+          const message =
+            error instanceof DiscordAdminError
+              ? error.message
+              : "DC 操作尚未確認完成，請重新整理會員頁面查看結果。";
+          await guard();
+          await updateMemberExistingProperties(pageId, {
+            lastBotCheckAt: new Date().toISOString(),
+            lastBotMessage: `DC ${action} unconfirmed by ${operator}: ${message}`,
+          });
+          return { kind: "error", message };
+        }
+      });
+    } catch {
+      return {
+        kind: "error",
+        message:
+          "會員資料目前正在處理，或操作紀錄尚未確認；請重新整理查看結果後再試。",
+      };
+    }
+  });
+}
+export async function syncDiscordRoleAction(
+  pageId: string,
+  discordId: string,
+  verifiedAt: string | null,
+  _previous: DiscordAdminState,
+  formData: FormData,
+): Promise<DiscordAdminState> {
+  return discordAdminAction(pageId, discordId, verifiedAt, "sync", formData);
+}
+export async function unlinkDiscordAction(
+  pageId: string,
+  discordId: string,
+  verifiedAt: string | null,
+  _previous: DiscordAdminState,
+  formData: FormData,
+): Promise<DiscordAdminState> {
+  return discordAdminAction(pageId, discordId, verifiedAt, "unlink", formData);
 }

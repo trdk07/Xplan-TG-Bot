@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { DiscordAdminControls } from "@/app/admin/components/DiscordAdminControls";
+import { isDiscordAdminConfigured } from "@/lib/discord-admin";
 import {
   Ban,
   CalendarPlus,
@@ -259,6 +261,7 @@ export default async function MemberDetailPage({
               </details>
             </> : null}
 
+            <DiscordAdminControls pageId={pageId} discordId={member.discordId} verifiedAt={member.discordVerifiedAt} configured={isDiscordAdminConfigured()} />
             <details className="advanced-actions">
               <summary>進階操作</summary>
               <div className="stack">

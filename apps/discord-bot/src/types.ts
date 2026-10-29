@@ -90,6 +90,7 @@ export interface Services {
   listBoundMembers(): Promise<Member[]>;
   writeBinding(member: Member, binding: BindingWrite): Promise<Member>;
   writeRole(member: Member, role: string | null): Promise<void>;
+  clearBinding(member: Member): Promise<void>;
   applyRoles(discordId: string, decision: Decision): Promise<"updated" | "not_in_guild" | "screening_pending">;
   reply(interaction: Interaction, message: MessageBody): Promise<void>;
 }

@@ -1,7 +1,9 @@
+import type { AdminRequest, AdminResult, AdminFailure } from "../../../shared/discord-admin-protocol";
 import { DurableObject } from "cloudflare:workers";
 import { getConfig } from "./config";
 import { DiscordClient } from "./discord";
-import { GateEngine } from "./engine";
+import { NotionBindingConflict, UpstreamError } from "./notion";
+import { GateEngine, safeError } from "./engine";
 import { httpHandler } from "./http";
 import { NotionClient } from "./notion";
 import { OperationStore } from "./store";
@@ -22,8 +24,25 @@ export class NotionMemberGate extends DurableObject<Env> {
       findBinding: id => notion.findBinding(id), listBoundMembers: () => notion.listBoundMembers(),
       writeBinding: (member, binding) => notion.writeBinding(member, binding),
       writeRole: (member, role) => notion.writeRole(member, role),
+      clearBinding: member => notion.clearBinding(member),
       applyRoles: (id, decision) => discord.applyRoles(id, decision), reply: (interaction, message) => discord.reply(interaction, message),
     }, config);
+  }
+  async admin(request: AdminRequest): Promise<AdminResult | AdminFailure> {
+    // Custom Error prototypes do not cross the DO RPC boundary. Return a safe DTO.
+    try {
+      return await this.engine.admin(request);
+    } catch (error) {
+      console.error("admin_operation_failed", safeError(error));
+      if (
+        error instanceof NotionBindingConflict ||
+        (error instanceof Error && error.message === "admin_request_conflict")
+      )
+        return { error: "binding_changed" };
+      if (error instanceof UpstreamError && error.status === 429)
+        return { error: "rate_limited" };
+      return { error: "operation_incomplete" };
+    }
   }
   processInteraction(interaction: Interaction) { return this.engine.process(interaction); }
   syncBatch(after: string) { return this.engine.syncBatch(after); }

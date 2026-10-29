@@ -1,5 +1,8 @@
 // Real workerd/DO execution; all Notion and Discord requests are synthetic and intercepted.
 import assert from "node:assert/strict";
+import { createHmac, randomUUID } from "node:crypto";
+const adminSecret = "synthetic-admin-secret-longer-than-thirty-two-chars";
+let clearWriteFails = false, clearResponseLost = false, clearWrites = 0;
 import { setTimeout as delay } from "node:timers/promises";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 const keys = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
@@ -36,7 +39,7 @@ const mf = new Miniflare(convertV4MiniflareOptions({ cf: false, modules: true,
   durableObjects: { MEMBER_GATE: { className: "NotionMemberGate", useSQLite: false } },
   bindings: { DISCORD_APPLICATION_ID: applicationId, DISCORD_PUBLIC_KEY: publicKey, DISCORD_GUILD_ID: guildId,
     DISCORD_EXPLORER_ROLE_ID: explorer, DISCORD_MEMBER_ROLE_ID: astronaut, DISCORD_PARTNER_ROLE_ID: pilot, DISCORD_BOT_TOKEN: "synthetic",
-    NOTION_API_KEY: "synthetic", NOTION_DATA_SOURCE_ID: sourceId, AUTH_SECRET: "synthetic-test-only-secret-longer-than-32-chars", MEMBERSHIP_POLICY_V2_ENABLED: "true" },
+    NOTION_API_KEY: "synthetic", NOTION_DATA_SOURCE_ID: sourceId, AUTH_SECRET: "synthetic-test-only-secret-longer-than-32-chars", MEMBERSHIP_POLICY_V2_ENABLED: "true", ADMIN_API_SECRET: adminSecret },
   outboundService: async request => {
     const url = new URL(request.url), method = request.method;
     if (url.host === "api.notion.com") {
@@ -48,7 +51,13 @@ const mf = new Miniflare(convertV4MiniflareOptions({ cf: false, modules: true,
       }
       if (method === "PATCH" && url.pathname === `/v1/pages/${pageId}`) {
         const { properties } = await request.json();
-        if (Object.hasOwn(properties, "Discord Role")) {
+        if (Object.keys(properties).length === 5 && Object.hasOwn(properties, "Discord_id")) {
+          assert.deepEqual(Object.keys(properties).sort(), ["Discord_id", "Discord Credential Hash", "Discord Tier Proof", "Discord Verified At", "Discord Role"].sort());
+          assert.deepEqual(guild.get(userId).roles, ["foreign", explorer]);
+          if (clearWriteFails) return new Response(null, {status:503});
+          discordId = hash = proof = verified = role = null; clearWrites++;
+          if (clearResponseLost) { clearResponseLost = false; return new Response(null,{status:503}); }
+        } else if (Object.hasOwn(properties, "Discord Role")) {
           assert.deepEqual(Object.keys(properties), ["Discord Role"]);
           const label = properties["Discord Role"].select?.name || null;
           const expected = { "探索者": explorer, "宇航員": astronaut, "飛行員": pilot }[label];
@@ -124,6 +133,27 @@ try {
   assert.deepEqual(guild.get("111111111111111113").roles, []); assert.deepEqual(guild.get("111111111111111114").roles, []);
   assert.deepEqual(guild.get("111111111111111115").roles, [astronaut, "foreign"]);
   assert.equal((await object.defaultExplorerBatch("")).assigned, 0);
-  discordId = null; await object.syncBatch(""); assert.deepEqual(guild.get(userId).roles, ["foreign", astronaut]);
-  console.log("V2 runtime smoke passed: signed exchange/UID/Email → paid → expired paid with stale qualified volume → Explorer despite metadata outage → suspended priority → partner/VIP → role writeback retry → Notion outage preservation → idempotence → default Explorer/bot/screening/unbound premium safeguards. Synthetic APIs only; KV-backed DO preserved.");
+  const adminValue = action => ({action,requestId:randomUUID(),pageId,discordId:userId,verifiedAt:Date.parse(verified),operator:"Rick"});
+  const adminCall = async value => {
+    const body = JSON.stringify(value), timestamp = String(Math.floor(Date.now()/1000));
+    return mf.dispatchFetch("https://synthetic.test/internal/admin/member",{method:"POST",body,headers:{"Content-Type":"application/json","X-Xplan-Admin-Timestamp":timestamp,"X-Xplan-Admin-Signature":createHmac("sha256",adminSecret).update(`${timestamp}\nPOST\n/internal/admin/member\n${body}`).digest("hex")}});
+  };
+  status = "active_paid"; due = "2035-01-01"; await check(astronaut);
+  assert.equal((await adminCall({...adminValue("sync"),verifiedAt:Date.parse(verified)+60000})).status,409);
+  guild.get(userId).roles = ["foreign",pilot];
+  assert.equal((await adminCall(adminValue("sync"))).status,200);
+  assert.deepEqual(guild.get(userId).roles,["foreign",astronaut]);
+  const unlink = adminValue("unlink"); clearWriteFails = true;
+  assert.equal((await adminCall(unlink)).status,502); assert.equal(discordId,userId);
+  assert.equal((await object.syncBatch("")).errors,1);
+  assert.deepEqual(guild.get(userId).roles,["foreign",explorer]);
+  clearWriteFails = false; assert.equal((await object.syncBatch("")).errors,0);
+  assert.equal(discordId,null); assert.equal(hash,null); assert.equal(proof,null); assert.equal(verified,null); assert.equal(role,null);
+  assert.equal((await adminCall(unlink)).status,200); assert.equal(clearWrites,1);
+  await dispatch("xplan:credentials"); assert.equal(discordId,userId);
+  clearResponseLost = true;
+  assert.equal((await adminCall(adminValue("unlink"))).status,502);
+  assert.equal(discordId,null); assert.equal((await object.syncBatch("")).errors,0); assert.equal(clearWrites,2);
+  discordId = null; await object.syncBatch(""); assert.deepEqual(guild.get(userId).roles, ["foreign", explorer]);
+  console.log("V2 runtime smoke passed: signed exchange/UID/Email → paid → expired paid with stale qualified volume → Explorer despite metadata outage → suspended priority → partner/VIP → role writeback retry → Notion outage preservation → idempotence → default Explorer/bot/screening/unbound premium safeguards. Signed admin immediate sync / unlink → durable failure recovery → no premium regrant → unknown clear acknowledgement / replay safe. Synthetic APIs only; KV-backed DO preserved.");
 } finally { await mf.dispose(); }

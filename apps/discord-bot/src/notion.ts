@@ -147,6 +147,51 @@ export class NotionClient {
     if (!matches(updated)) throw new UpstreamError("notion-write-unconfirmed");
     return updated;
   }
+  async clearBinding(expected: Member): Promise<void> {
+    const current = await this.getMember(expected.pageId);
+    const check = (m: Member) => {
+      if (
+        m.archived ||
+        pageKey(m.pageId) !== pageKey(expected.pageId) ||
+        m.discordId !== expected.discordId ||
+        m.verifiedAt !== expected.verifiedAt ||
+        m.credentialHash !== expected.credentialHash ||
+        m.tierProof !== expected.tierProof ||
+        normalizeExchangeId(m.exchangeId) !==
+          normalizeExchangeId(expected.exchangeId) ||
+        normalizeEmail(m.email) !== normalizeEmail(expected.email) ||
+        m.exchange !== expected.exchange
+      )
+        throw new NotionBindingConflict();
+    };
+    check(current);
+    if (current.discordRole === undefined)
+      throw new UpstreamError("notion-role-schema");
+    const updated = this.member(
+      (await this.request(
+        `/pages/${current.pageId}`,
+        {
+          properties: {
+            [this.config.notionDiscordIdProperty]: { rich_text: [] },
+            [verificationProperties.credentialHash]: { rich_text: [] },
+            [verificationProperties.tierProof]: { rich_text: [] },
+            [verificationProperties.verifiedAt]: { date: null },
+            [discordRoleProperty]: { select: null },
+          },
+        },
+        "PATCH",
+      )) as Page,
+    );
+    if (
+      pageKey(updated.pageId) !== pageKey(current.pageId) ||
+      updated.discordId ||
+      updated.credentialHash ||
+      updated.tierProof ||
+      updated.verifiedAt !== null ||
+      updated.discordRole !== null
+    )
+      throw new UpstreamError("notion-clear-unconfirmed");
+  }
   async writeRole(expected: Member, role: string | null): Promise<void> {
     if (role !== null && !["探索者", "宇航員", "飛行員"].includes(role)) throw new UpstreamError("notion-role-value");
     const check = (current: Member) => {

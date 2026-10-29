@@ -34,6 +34,17 @@ export function fixture() {
     listBoundMembers: vi.fn(async () => [...members.values()].filter(m => !m.archived && m.discordId).map(m => ({ ...m }))),
     writeBinding: vi.fn(async (expected, binding) => { const m = members.get(expected.pageId)!; if (m.discordId && m.discordId !== binding.discordId) throw new NotionBindingConflict(); const updated = { ...m, ...binding }; members.set(m.pageId, updated); return { ...updated }; }),
     writeRole: vi.fn(async (expected, discordRole) => { const m = members.get(expected.pageId)!; if (m.discordId !== expected.discordId) throw new NotionBindingConflict(); members.set(m.pageId, { ...m, discordRole }); }),
+    clearBinding: vi.fn(async (expected) => {
+      const current = members.get(expected.pageId)!;
+      members.set(current.pageId, {
+        ...current,
+        discordId: null,
+        credentialHash: null,
+        tierProof: null,
+        verifiedAt: null,
+        discordRole: null,
+      });
+    }),
     applyRoles: vi.fn(async () => "updated" as const), reply: vi.fn(async () => {}),
   };
   services.applyDefaultExplorer = vi.fn(async id => services.applyRoles(id, { state: "allow", tier: "explorer", dueAt: null }));
