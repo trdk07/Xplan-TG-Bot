@@ -1,3 +1,5 @@
+import { parseAdminRequest, type AdminRequest, type AdminResult } from "../../../shared/discord-admin-protocol";
+import type { PendingUnlink } from "./store";
 import { isDiscordId, pageKey } from "./config";
 import { digest, sameDigest } from "./crypto";
 import { decisionMessage, evaluateMember, normalizeEmail, normalizeExchange, normalizeExchangeId, roleLabel, validEmail } from "./membership";
@@ -14,6 +16,119 @@ export class GateEngine {
     const next = this.queue.catch(() => undefined).then(fn);
     this.queue = next;
     return next;
+  }
+  admin(input: AdminRequest): Promise<AdminResult> {
+    return this.locked(async () => {
+      const request = parseAdminRequest(input);
+      if (!request) throw new NotionBindingConflict();
+      const cached = await this.operations.adminResult(request);
+      if (cached) return cached;
+      if (
+        !(await this.operations.rateLimit(
+          "guild:admin",
+          30,
+          60_000,
+          this.now(),
+        ))
+      )
+        throw new UpstreamError("admin-rate-limit", 429);
+      const member = await this.services.getMember(request.pageId);
+      if (
+        member.archived ||
+        member.discordId !== request.discordId ||
+        member.verifiedAt !== request.verifiedAt
+      )
+        throw new NotionBindingConflict();
+      const bound = await this.services.findBinding(request.discordId);
+      if (!bound || pageKey(bound.pageId) !== pageKey(member.pageId))
+        throw new NotionBindingConflict();
+      const pending = (await this.operations.pendingUnlinks()).find(
+        (p) =>
+          p.request.discordId === request.discordId ||
+          pageKey(p.request.pageId) === pageKey(request.pageId),
+      );
+      let result: AdminResult;
+      if (pending) {
+        if (!this.sameUnlinkTarget(member, pending.member))
+          throw new NotionBindingConflict();
+        const resumed = await this.resumeUnlink(pending);
+        result = { action: request.action, message: resumed.message };
+      } else if (request.action === "sync") {
+        result = {
+          action: "sync",
+          message: await this.synchronize(request.discordId),
+        };
+      } else {
+        const intent: PendingUnlink = {
+          request,
+          member,
+          createdAt: this.now(),
+        };
+        await this.operations.beginUnlink(intent);
+        return this.resumeUnlink(intent);
+      }
+      await this.operations.completeAdmin(request, result);
+      return result;
+    });
+  }
+  private sameUnlinkTarget(current: Member, expected: Member) {
+    return (
+      !current.archived &&
+      pageKey(current.pageId) === pageKey(expected.pageId) &&
+      current.discordId === expected.discordId &&
+      current.verifiedAt === expected.verifiedAt &&
+      current.credentialHash === expected.credentialHash &&
+      current.tierProof === expected.tierProof &&
+      current.exchange === expected.exchange &&
+      normalizeExchangeId(current.exchangeId) ===
+        normalizeExchangeId(expected.exchangeId) &&
+      normalizeEmail(current.email) === normalizeEmail(expected.email)
+    );
+  }
+  private async resumeUnlink(intent: PendingUnlink): Promise<AdminResult> {
+    const { request, member: expected } = intent;
+    const finish = async () => {
+      const result: AdminResult = {
+        action: "unlink",
+        message:
+          "已解除 DC 綁定並清除驗證紀錄。社群資格與付費／交易量資料保留；如需會員角色，請重新驗證。",
+      };
+      await this.operations.clearPending(request.discordId);
+      await this.operations.forgetRole(request.discordId);
+      await this.operations.completeAdmin(request, result);
+      await this.operations.finishUnlink(request.discordId);
+      return result;
+    };
+    const cached = await this.operations.adminResult(request);
+    if (cached) {
+      await this.operations.finishUnlink(request.discordId);
+      return cached;
+    }
+    const current = await this.services.getMember(request.pageId);
+    // A previous clear may have committed before its response was lost.
+    if (
+      !current.archived &&
+      !current.discordId &&
+      !current.credentialHash &&
+      !current.tierProof &&
+      current.verifiedAt === null &&
+      current.discordRole === null
+    )
+      return finish();
+    if (!this.sameUnlinkTarget(current, expected))
+      throw new NotionBindingConflict();
+    const bound = await this.services.findBinding(request.discordId);
+    if (!bound || pageKey(bound.pageId) !== pageKey(current.pageId))
+      throw new NotionBindingConflict();
+    const result = await this.services.applyRoles(request.discordId, {
+      state: "allow",
+      tier: "explorer",
+      dueAt: null,
+    });
+    if (result === "screening_pending")
+      throw new UpstreamError("discord-screening-pending", 409);
+    await this.services.clearBinding(current);
+    return finish();
   }
   async process(interaction: Interaction): Promise<void> {
     const message = await this.locked(async () => {
@@ -54,6 +169,7 @@ export class GateEngine {
     const exchange = normalizeExchange(rawExchange);
     if (this.config.membershipPolicyV2Enabled && !exchange) return withSync("請選擇報名時填寫的交易所。");
     if (!isDiscordId(discordId) || !exchangeId || exchangeId.length > 100 || !validEmail(email)) return withSync("請填寫完整的 Exchange ID 和報名 Email。");
+    if ((await this.operations.pendingUnlinks()).some(p => p.request.discordId === discordId)) return withSync("此帳號正在解除綁定，請待處理完成後重新驗證。");
     const now = this.now();
     const accountAllowed = await this.operations.rateLimit(`verify:${discordId}`, 5, 15 * 60_000, now);
     const guildAllowed = await this.operations.rateLimit("guild:verify", 300, 15 * 60_000, now);
@@ -61,6 +177,7 @@ export class GateEngine {
     const found = await this.services.findMember(exchangeId, email, ...(this.config.membershipPolicyV2Enabled ? [exchange!] : []));
     const invalid = () => withSync("Exchange ID 與 Email 無法配對到唯一的會員資料，請確認報名資料或聯絡助理。");
     if (!found) return invalid();
+    if ((await this.operations.pendingUnlinks()).some(p => pageKey(p.request.pageId) === pageKey(found.pageId))) return withSync("這份會員資料正在解除綁定，請稍後重新驗證。");
     let member = await this.services.getMember(found.pageId);
     const hash = await this.credentialHash(discordId, exchangeId, email, exchange);
     if (!sameDigest(hash, await this.credentialHash(discordId, member.exchangeId, member.email, member.exchange))) return invalid();
@@ -150,6 +267,10 @@ export class GateEngine {
     return decisionMessage(decision);
   }
   private async synchronize(discordId: string): Promise<string> {
+    // Pending administrative revocation must never enter legacy binding fallback:
+    // a changed identity is an operator conflict, not permission to strip roles.
+    const unlink = (await this.operations.pendingUnlinks()).find(p => p.request.discordId === discordId);
+    if (unlink) return (await this.resumeUnlink(unlink)).message;
     try {
       const pending = (await this.operations.pending()).find(p => p.discordId === discordId);
       if (pending) {
@@ -172,7 +293,7 @@ export class GateEngine {
     return this.locked(async () => {
       await this.operations.cleanup(this.now());
       const members = await this.services.listBoundMembers(); // Fail closed on incomplete/failed enumeration.
-      const ids = [...new Set([...members.map(m => m.discordId), ...(await this.operations.pending()).map(p => p.discordId), ...await this.operations.roleTargets()])]
+      const ids = [...new Set([...members.map(m => m.discordId), ...(await this.operations.pending()).map(p => p.discordId), ...await this.operations.roleTargets(), ...(await this.operations.pendingUnlinks()).map(p => p.request.discordId)])]
         .filter((id): id is string => isDiscordId(id) && id > after).sort().slice(0, 5);
       let errors = 0;
       for (const id of ids) {

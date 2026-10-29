@@ -14,7 +14,7 @@
     "deploy": "wrangler deploy",
     "discord:setup": "node scripts/discord-setup.mjs",
     "check:config": "node scripts/check-config.mjs",
-    "test:runtime": "npm run build && node scripts/runtime-smoke.mjs && node scripts/runtime-v2-smoke.mjs"
+    "test:runtime": "npm run build && node scripts/runtime-smoke.mjs && node scripts/runtime-v2-smoke.mjs && node scripts/admin-client-smoke.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260908.1",

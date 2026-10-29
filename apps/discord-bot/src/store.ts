@@ -1,3 +1,6 @@
+import type { AdminRequest, AdminResult } from "../../../shared/discord-admin-protocol";
+import type { Member } from "./types";
+export type PendingUnlink = { request: AdminRequest; member: Member; createdAt: number };
 import type { BindingWrite } from "./types";
 export interface OperationStorage {
   get<T>(key: string): Promise<T | undefined>;
@@ -8,6 +11,36 @@ export interface OperationStorage {
 // KV-backed operational state only. Guild-wide GateEngine serialization protects updates.
 export class OperationStore {
   constructor(private storage: OperationStorage) {}
+  async adminResult(request: AdminRequest): Promise<AdminResult | null> {
+    const old = await this.storage.get<{
+      request: AdminRequest;
+      result: AdminResult;
+    }>(`admin:${request.requestId}`);
+    if (!old) return null;
+    if (JSON.stringify(old.request) !== JSON.stringify(request))
+      throw new Error("admin_request_conflict");
+    return old.result;
+  }
+  async completeAdmin(request: AdminRequest, result: AdminResult) {
+    await this.storage.put(`admin:${request.requestId}`, {
+      request,
+      result,
+      completedAt: Date.now(),
+    });
+  }
+  async beginUnlink(value: PendingUnlink) {
+    await this.storage.put(`unlink:${value.request.discordId}`, value);
+  }
+  async pendingUnlinks(): Promise<PendingUnlink[]> {
+    return [
+      ...(
+        await this.storage.list<PendingUnlink>({ prefix: "unlink:" })
+      ).values(),
+    ];
+  }
+  async finishUnlink(discordId: string) {
+    await this.storage.delete(`unlink:${discordId}`);
+  }
   async cleanup(now: number) {
     for (const [key, value] of await this.storage.list<{ until: number }>({ prefix: "ttl:" })) {
       if (value.until <= now) await this.storage.delete(key);

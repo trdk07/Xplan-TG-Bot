@@ -1,3 +1,5 @@
+import { ADMIN_PATH, parseAdminRequest, parseAdminResult, verifyAdminRequest, type AdminRequest, type AdminResult, type AdminFailure } from "../../../shared/discord-admin-protocol";
+import { NotionBindingConflict, UpstreamError } from "./notion";
 import { getConfig, isDiscordId } from "./config";
 import { verifyDiscordSignature } from "./crypto";
 import { safeError } from "./engine";
@@ -5,7 +7,7 @@ import { ids, modal } from "./messages";
 import type { Interaction } from "./types";
 export type HttpEnv = Record<string, unknown> & { MEMBER_GATE: {
   idFromName(name: string): unknown;
-  get(id: unknown): { processInteraction(interaction: Interaction): Promise<void> };
+  get(id: unknown): { processInteraction(interaction: Interaction): Promise<void>; admin?(request: AdminRequest): Promise<AdminResult | AdminFailure> };
 } };
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
 const ephemeral = (content: string) => json({ type: 4, data: { flags: 64, content, allowed_mentions: { parse: [] } } });
@@ -28,6 +30,60 @@ export const httpHandler = {
   async fetch(request: Request, env: HttpEnv, ctx: ExecutionContext): Promise<Response> {
     const path = new URL(request.url).pathname;
     if (request.method === "GET" && path === "/healthz") return json({ ok: true, service: "xplan-discord-verification", membershipStore: "notion" });
+    if (path === ADMIN_PATH) {
+      const secret = env.ADMIN_API_SECRET;
+      if (typeof secret !== "string" || secret.length < 32)
+        return json({ error: "not_found" }, 404);
+      if (request.method !== "POST")
+        return json({ error: "method_not_allowed" }, 405);
+      const body = await boundedBody(request);
+      if (body === null) return json({ error: "payload_too_large" }, 413);
+      if (
+        !(await verifyAdminRequest(
+          secret,
+          request.headers.get("X-Xplan-Admin-Timestamp") || "",
+          request.headers.get("X-Xplan-Admin-Signature") || "",
+          body,
+        ))
+      )
+        return json({ error: "unauthorized" }, 401);
+      let value: unknown;
+      try {
+        value = JSON.parse(body);
+      } catch {
+        return json({ error: "invalid_request" }, 400);
+      }
+      const operation = parseAdminRequest(value);
+      if (!operation) return json({ error: "invalid_request" }, 400);
+      try {
+        const config = getConfig(env);
+        const stub = env.MEMBER_GATE.get(
+          env.MEMBER_GATE.idFromName(`guild:${config.guildId}`),
+        );
+        if (!stub.admin) return json({ error: "not_configured" }, 503);
+        const result = await stub.admin(operation);
+        if ("error" in result)
+          return json(
+            { error: result.error },
+            result.error === "binding_changed"
+              ? 409
+              : result.error === "rate_limited"
+                ? 429
+                : 502,
+          );
+        const success = parseAdminResult(result);
+        return success
+          ? json(success)
+          : json({ error: "operation_incomplete" }, 502);
+      } catch (error) {
+        console.error("admin_operation_failed", safeError(error));
+        if (error instanceof NotionBindingConflict)
+          return json({ error: "binding_changed" }, 409);
+        if (error instanceof UpstreamError && error.status === 429)
+          return json({ error: "rate_limited" }, 429);
+        return json({ error: "operation_incomplete" }, 502);
+      }
+    }
     if (path !== "/interactions") return json({ error: "not_found" }, 404);
     if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
     const signature = request.headers.get("X-Signature-Ed25519") || "";
