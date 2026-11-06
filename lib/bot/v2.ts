@@ -19,6 +19,20 @@ import {
   answerCallbackQuery,
 } from "@/lib/telegram";
 import { teacherContactKeyboard } from "@/lib/bot/keyboards";
+import {
+  ADMISSION_NEEDS_REVIEW_MESSAGE,
+  ADMISSION_NOT_MET_MESSAGE,
+  ALREADY_JOINED_INTRO,
+  EXCHANGE_SELECTION_MESSAGE,
+  JOIN_APPROVED_INTRO,
+  UID_MISMATCH_MESSAGE,
+  V2_WELCOME_RULES,
+  admissionPassedMessage,
+  discordGuideMessage,
+  exchangeSelectionKeyboard,
+  rulesAckKeyboard,
+  uidRequestMessage,
+} from "@/lib/bot/v2-messages";
 
 const special = (member: Member) =>
   ["partner", "exempt", "VIP"].includes(member.status);
@@ -56,10 +70,7 @@ export async function createV2Invite(
     lastBotCheckAt: now.toISOString(),
     lastBotMessage: "Verified community invitation sent; no trial created",
   });
-  await sendMessage(
-    chatId,
-    `資格已確認，這是你的專屬入群連結，請勿轉傳：\n${invite.invite_link}\nTelegram 群組與 Discord 免費資源沒有試用期限。`,
-  );
+  await sendMessage(chatId, admissionPassedMessage(invite.invite_link));
 }
 export async function handleV2Start(
   member: Member,
@@ -76,7 +87,7 @@ export async function handleV2Start(
   if (member.groupJoinedAt) {
     await sendMessage(
       message.chat.id,
-      `你已有 Telegram 入群紀錄，社群資格不受付費到期影響。${process.env.DISCORD_INVITE_URL ? `\nDiscord：${process.env.DISCORD_INVITE_URL}` : "\nDiscord 邀請連結請向助理索取。"}`,
+      discordGuideMessage(member, ALREADY_JOINED_INTRO),
     );
     return;
   }
@@ -103,17 +114,41 @@ export async function handleV2Start(
     );
     return;
   }
+  await sendMessage(message.chat.id, V2_WELCOME_RULES, rulesAckKeyboard());
+}
+/** Second guided step: the member acknowledged the rules, so ask for the exchange. */
+export async function handleV2RulesAck(
+  query: TelegramCallbackQuery,
+  member: Member,
+  now: Date,
+) {
+  if (blocked(member)) {
+    await answerCallbackQuery(query.id, "會員權益已停用，請聯絡助理。", true);
+    return;
+  }
+  await answerCallbackQuery(query.id, "請選擇報名時註冊的交易所");
+  if (member.groupJoinedAt) {
+    await sendMessage(
+      query.from.id,
+      discordGuideMessage(member, ALREADY_JOINED_INTRO),
+    );
+    return;
+  }
+  if (member.admissionVerifiedAt || special(member)) {
+    await createV2Invite(member, query.from.id, now);
+    return;
+  }
+  if (!normalizeExchange(member.exchangeName)) {
+    await refuse(
+      query.from.id,
+      "報名資料缺少有效交易所，請由助理核對綁定帳號。",
+    );
+    return;
+  }
   await sendMessage(
-    message.chat.id,
-    "請確認報名時註冊的交易所，再回覆該交易所的 UID。會確認推薦關係與歷史累積入金100 USDT；之後提領不影響已通過的資格。",
-    [
-      [
-        ...(["mexc", "bitget", "okx"] as const).map((key) => ({
-          text: exchangeLabel(key),
-          callback_data: `exchange:confirm:${key}`,
-        })),
-      ],
-    ],
+    query.from.id,
+    EXCHANGE_SELECTION_MESSAGE,
+    exchangeSelectionKeyboard(),
   );
 }
 export async function handleV2Exchange(
@@ -131,10 +166,7 @@ export async function handleV2Exchange(
     return;
   }
   await answerCallbackQuery(query.id, "請回覆你的交易所 UID");
-  await sendMessage(
-    query.from.id,
-    `已確認 ${exchangeLabel(expected!)}，請回覆報名時填寫的 UID（只填數字）。`,
-  );
+  await sendMessage(query.from.id, uidRequestMessage(exchangeLabel(expected!)));
 }
 export async function handleV2Uid(
   member: Member,
@@ -147,10 +179,7 @@ export async function handleV2Uid(
   }
   const uid = (message.text || "").trim();
   if (!/^\d{1,32}$/.test(uid) || uid !== member.exchangeUid) {
-    await refuse(
-      message.chat.id,
-      "UID 必須與報名時綁定的交易所帳號一致，請核對後再輸入。",
-    );
+    await refuse(message.chat.id, UID_MISMATCH_MESSAGE);
     return;
   }
   const updated = await recheckQualifications(member.pageId, now);
@@ -161,8 +190,8 @@ export async function handleV2Uid(
   await refuse(
     message.chat.id,
     updated.onboardingStep === "needs_review"
-      ? "目前資料不足或查詢暫不可用，已列入助理覆核；不會因為舊資料查不到就判定不合格。"
-      : "尚未符合推薦關係或歷史累積入金100 USDT，請確認後再試。",
+      ? ADMISSION_NEEDS_REVIEW_MESSAGE
+      : ADMISSION_NOT_MET_MESSAGE,
   );
 }
 export async function handleV2Join(
@@ -198,7 +227,7 @@ export async function handleV2Join(
     () =>
       sendMessage(
         request.user_chat_id,
-        `入群申請已通過！Telegram 群組及 Discord 免費資源會持續保留。\n${process.env.DISCORD_INVITE_URL ? `歡迎加入 Discord 並進行身分驗證：\n${process.env.DISCORD_INVITE_URL}` : "Discord 邀請連結尚未設定，請聯絡助理索取。"}`,
+        discordGuideMessage(member, JOIN_APPROVED_INTRO),
       ),
   );
   if (result === "held")

@@ -1,5 +1,6 @@
 import { v2Enabled } from "@/lib/membership-v2";
-import { handleV2Exchange } from "@/lib/bot/v2";
+import { handleV2Exchange, handleV2RulesAck } from "@/lib/bot/v2";
+import { RULES_ACK_CALLBACK } from "@/lib/bot/v2-messages";
 import { getRuntimeConfig } from "@/lib/config";
 import { addDays, isPast, isoDateTime } from "@/lib/dates";
 import { isPaymentPending, isRenewalNoticeCandidate } from "@/lib/member-state";
@@ -56,6 +57,10 @@ export async function handleCallback(query: TelegramCallbackQuery, now: Date) {
       "你不在目前的 Notion 名單內，或表單上的 Telegram username 與目前帳號不一致。",
     );
     return;
+  }
+  if (v2Enabled() && query.data === RULES_ACK_CALLBACK) {
+    await markCallbackSelection(query, "我了解，開始驗證");
+    return handleV2RulesAck(query, record, now);
   }
   if (v2Enabled() && query.data.startsWith("exchange:confirm:"))
     return handleV2Exchange(query, record);
