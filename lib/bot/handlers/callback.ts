@@ -1,5 +1,6 @@
 import { v2Enabled } from "@/lib/membership-v2";
-import { handleV2Exchange } from "@/lib/bot/v2";
+import { handleV2Exchange, handleV2RulesAck } from "@/lib/bot/v2";
+import { RULES_ACK_CALLBACK } from "@/lib/bot/v2-messages";
 import { getRuntimeConfig } from "@/lib/config";
 import { addDays, isPast, isoDateTime } from "@/lib/dates";
 import { isPaymentPending, isRenewalNoticeCandidate } from "@/lib/member-state";
@@ -10,7 +11,7 @@ import {
   editMessageText,
   sendMessage,
 } from "@/lib/telegram";
-import { refuseAccess } from "@/lib/bot/invite";
+import { refuseUnknownApplicant } from "@/lib/bot/invite";
 import {
   expirePaymentPendingMember,
   hasSubmittedPaymentProof,
@@ -51,11 +52,15 @@ export async function handleCallback(query: TelegramCallbackQuery, now: Date) {
   const record = await findMemberByTelegramId(userId(query.from.id));
   if (!record) {
     await answerCallbackQuery(query.id, "目前找不到你的會員資料", true);
-    await refuseAccess(
+    await refuseUnknownApplicant(
       query.from.id,
-      "你不在目前的 Notion 名單內，或表單上的 Telegram username 與目前帳號不一致。",
+      query.from.username ? `@${query.from.username}` : "",
     );
     return;
+  }
+  if (v2Enabled() && query.data === RULES_ACK_CALLBACK) {
+    await markCallbackSelection(query, "我了解，開始驗證");
+    return handleV2RulesAck(query, record, now);
   }
   if (v2Enabled() && query.data.startsWith("exchange:confirm:"))
     return handleV2Exchange(query, record);

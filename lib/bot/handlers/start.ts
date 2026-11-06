@@ -21,6 +21,7 @@ import {
   createInviteForMember,
   needsMexcUidCollection,
   refuseAccess,
+  refuseUnknownApplicant,
 } from "@/lib/bot/invite";
 import { isPaymentPending } from "@/lib/member-state";
 import { normalizeBotMember } from "@/lib/bot/member-policy";
@@ -68,10 +69,7 @@ export async function handleStart(message: TelegramMessage, now: Date) {
   }
 
   if (!member) {
-    await refuseAccess(
-      message.chat.id,
-      "你不在目前的 Notion 名單內，或表單上的 Telegram username 與目前帳號不一致。",
-    );
+    await refuseUnknownApplicant(message.chat.id, usernameFromMessage(message));
     return;
   }
 

@@ -13,6 +13,10 @@ import {
   unbanChatMember,
 } from "@/lib/telegram";
 import { teacherContactKeyboard } from "@/lib/bot/keyboards";
+import { escapeHtml } from "@/lib/bot/v2-messages";
+
+export const DEFAULT_APPLICATION_FORM_URL =
+  "https://x-plan-sage.vercel.app/apply";
 
 const INVITE_TTL_HOURS = 24;
 
@@ -25,6 +29,44 @@ export async function refuseAccess(chatId: number, reason: string) {
     ].join("\n\n"),
     teacherContactKeyboard(),
   );
+}
+
+/**
+ * Applicants who did not arrive from the website (or whose form username differs)
+ * have no Notion record. Offer the application form again when it is configured.
+ */
+export function unknownApplicantMessage(username: string) {
+  const formUrl =
+    process.env.APPLICATION_FORM_URL || DEFAULT_APPLICATION_FORM_URL;
+  const safeUsername = escapeHtml(username);
+  return {
+    text: [
+      "目前找不到你的報名資料。",
+      "",
+      "可能原因：",
+      "・還沒有填寫報名表單",
+      "・表單上的 Telegram username 和目前這個帳號不一樣",
+      "",
+      "請點下方「填寫報名表單」完成報名，送出後稍等一下，再回到這裡重新按 /start。",
+      safeUsername
+        ? `表單的 Telegram username 請填：<b>${safeUsername}</b>`
+        : "你目前沒有設定 Telegram username，請先到 Telegram「設定 → 使用者名稱」設定一個，再填到表單裡。",
+      "",
+      "如果你已經填過、只是資料填錯，請不要重複填寫，直接聯絡小夏協助更正。",
+    ].join("\n"),
+    keyboard: [
+      [{ text: "填寫報名表單", url: formUrl }],
+      ...teacherContactKeyboard(),
+    ],
+  };
+}
+
+export async function refuseUnknownApplicant(
+  chatId: number | string,
+  username: string,
+) {
+  const { text, keyboard } = unknownApplicantMessage(username);
+  await sendMessage(chatId, text, keyboard);
 }
 
 export function hasVerifiedMexcUid(member: Member): boolean {

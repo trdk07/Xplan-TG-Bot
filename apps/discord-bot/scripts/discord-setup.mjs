@@ -18,7 +18,7 @@ async function main() {
   if (!["--plan", "--check", "--apply"].includes(mode) || process.argv.length > 3) throw new Error("用法：npm run discord:setup -- [--plan|--check|--apply]");
   const env = loadEnv();
   const selectedPanel = env.MEMBERSHIP_POLICY_V2_ENABLED === "true" ? { ...panel,
-    content: "**Xplan 現有會員驗證**\n\n已經報名的會員，請點「驗證現有會員」，選擇報名的交易所，再輸入 UID 和 Email。完成後依 Notion 會籍取得探索者、宇航員或飛行員身分組。\n\n一般成員完成伺服器規則確認後，每 10 分鐘自動取得探索者。付費或交易量達標者為宇航員，合作夥伴為飛行員。已綁定者可點「更新身分組」。",
+    content: "**Xplan 會員身分組**\n\n🆓 **免費成員不需要驗證**\n完成伺服器規則確認後，約 10 分鐘內會自動取得「探索者」，即可使用免費資源。\n\n🚀 **升級成「宇航員」才需要驗證**\n已付費，或同一個交易所帳號近 30 天現貨＋合約交易量達 200,000 USDT 的會員，請點「驗證現有會員」，選擇報名的交易所，再輸入 UID 和 Email。資料需與報名時相同，Telegram Bot 在你入群後的訊息中已列出。合作夥伴為「飛行員」。\n\n驗證後每 10 分鐘自動同步身分組；付費或交易量有變動時，也可以點「更新身分組」。",
   } : panel;
   if (mode === "--plan") {
     console.log(JSON.stringify({ command, panel: selectedPanel }, null, 2));

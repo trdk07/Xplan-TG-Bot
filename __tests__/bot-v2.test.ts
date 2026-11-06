@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   revoke: vi.fn(),
   invite: vi.fn(),
   unban: vi.fn(),
+  answer: vi.fn(),
   recheck: vi.fn(),
 }));
 vi.mock("@/lib/notion", () => ({
@@ -21,6 +22,7 @@ vi.mock("@/lib/telegram", () => ({
   revokeChatInviteLink: mocks.revoke,
   createChatInviteLink: mocks.invite,
   unbanChatMember: mocks.unban,
+  answerCallbackQuery: mocks.answer,
 }));
 vi.mock("@/lib/qualification", () => ({
   recheckQualifications: mocks.recheck,
@@ -36,8 +38,17 @@ vi.mock("@/lib/evidence-store", () => ({
     },
   }),
 }));
-import { handleV2Uid } from "@/lib/bot/v2";
-import { createInviteForMember as createV2Invite } from "@/lib/bot/invite";
+import {
+  handleV2Exchange,
+  handleV2RulesAck,
+  handleV2Start,
+  handleV2Uid,
+} from "@/lib/bot/v2";
+import { RULES_ACK_CALLBACK, discordGuideMessage } from "@/lib/bot/v2-messages";
+import {
+  createInviteForMember as createV2Invite,
+  unknownApplicantMessage,
+} from "@/lib/bot/invite";
 import { handleJoinRequest as handleV2Join } from "@/lib/bot/handlers/membership";
 const now = new Date("2026-10-28T01:00:00Z");
 const member = {
@@ -94,6 +105,81 @@ it("approves identity-bound admission and sends Discord link without a trial dea
 it("does not query an account different from the registration record", async () => {
   await handleV2Uid(member, { chat: { id: 123 }, text: "999999" } as any, now);
   expect(mocks.recheck).not.toHaveBeenCalled();
+});
+
+it("shows the admission rules before asking for an exchange", async () => {
+  await handleV2Start(
+    { ...member, admissionVerifiedAt: null, inviteLink: null },
+    { chat: { id: 123 } } as any,
+    now,
+  );
+  const [, text, keyboard] = mocks.send.mock.calls[0];
+  expect(text).toContain("100 USDT");
+  expect(text).toContain("提領或轉走都不影響資格");
+  expect(text).toContain("200,000 USDT");
+  expect(keyboard[0][0]).toMatchObject({ callback_data: RULES_ACK_CALLBACK });
+});
+it("asks for the exchange only after the rules are acknowledged", async () => {
+  await handleV2RulesAck(
+    { id: "q", from: { id: 123 } } as any,
+    { ...member, admissionVerifiedAt: null, inviteLink: null },
+    now,
+  );
+  const [, text, keyboard] = mocks.send.mock.calls[0];
+  expect(text).toContain("步驟 1／2");
+  expect(keyboard[0].map((b: any) => b.callback_data)).toEqual([
+    "exchange:confirm:mexc",
+    "exchange:confirm:bitget",
+    "exchange:confirm:okx",
+  ]);
+  expect(mocks.invite).not.toHaveBeenCalled();
+});
+it("does not restart onboarding for a blocked member", async () => {
+  await handleV2RulesAck(
+    { id: "q", from: { id: 123 } } as any,
+    { ...member, status: "suspended" },
+    now,
+  );
+  expect(mocks.answer).toHaveBeenCalledWith("q", expect.any(String), true);
+  expect(mocks.send).not.toHaveBeenCalled();
+});
+it("explains where to find the UID after the exchange is confirmed", async () => {
+  await handleV2Exchange(
+    { id: "q", from: { id: 123 }, data: "exchange:confirm:bitget" } as any,
+    member,
+  );
+  expect(mocks.send).toHaveBeenCalledWith(
+    123,
+    expect.stringContaining("UID 在哪裡"),
+  );
+});
+it("tells the member which details the Discord form will ask for", () => {
+  const text = discordGuideMessage(
+    { ...member, email: "a&b@example.com" },
+    "intro",
+  );
+  expect(text).toContain("discord.gg/example");
+  expect(text).toContain("探索者");
+  expect(text).toContain("交易所：Bitget");
+  expect(text).toContain("UID：001234");
+  expect(text).toContain("Email：a&amp;b@example.com");
+});
+
+it("offers the application form again to applicants missing from Notion", () => {
+  const { text, keyboard } = unknownApplicantMessage("@new_user");
+  expect(text).toContain("<b>@new_user</b>");
+  expect(text).toContain("不要重複填寫");
+  expect(keyboard[0][0]).toEqual({
+    text: "填寫報名表單",
+    url: "https://x-plan-sage.vercel.app/apply",
+  });
+  expect(keyboard[1][0].text).toBe("聯絡小夏");
+});
+it("asks applicants without a Telegram username to set one first", () => {
+  vi.stubEnv("APPLICATION_FORM_URL", "https://example.com/form");
+  const { text, keyboard } = unknownApplicantMessage("");
+  expect(text).toContain("設定 → 使用者名稱");
+  expect(keyboard[0][0].url).toBe("https://example.com/form");
 });
 
 afterEach(() => vi.unstubAllEnvs());
