@@ -11,7 +11,7 @@ import {
   editMessageText,
   sendMessage,
 } from "@/lib/telegram";
-import { refuseAccess } from "@/lib/bot/invite";
+import { refuseUnknownApplicant } from "@/lib/bot/invite";
 import {
   expirePaymentPendingMember,
   hasSubmittedPaymentProof,
@@ -52,9 +52,9 @@ export async function handleCallback(query: TelegramCallbackQuery, now: Date) {
   const record = await findMemberByTelegramId(userId(query.from.id));
   if (!record) {
     await answerCallbackQuery(query.id, "目前找不到你的會員資料", true);
-    await refuseAccess(
+    await refuseUnknownApplicant(
       query.from.id,
-      "你不在目前的 Notion 名單內，或表單上的 Telegram username 與目前帳號不一致。",
+      query.from.username ? `@${query.from.username}` : "",
     );
     return;
   }

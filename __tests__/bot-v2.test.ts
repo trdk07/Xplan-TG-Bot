@@ -45,7 +45,10 @@ import {
   handleV2Uid,
 } from "@/lib/bot/v2";
 import { RULES_ACK_CALLBACK, discordGuideMessage } from "@/lib/bot/v2-messages";
-import { createInviteForMember as createV2Invite } from "@/lib/bot/invite";
+import {
+  createInviteForMember as createV2Invite,
+  unknownApplicantMessage,
+} from "@/lib/bot/invite";
 import { handleJoinRequest as handleV2Join } from "@/lib/bot/handlers/membership";
 const now = new Date("2026-10-28T01:00:00Z");
 const member = {
@@ -160,6 +163,23 @@ it("tells the member which details the Discord form will ask for", () => {
   expect(text).toContain("交易所：Bitget");
   expect(text).toContain("UID：001234");
   expect(text).toContain("Email：a&amp;b@example.com");
+});
+
+it("offers the application form again to applicants missing from Notion", () => {
+  const { text, keyboard } = unknownApplicantMessage("@new_user");
+  expect(text).toContain("<b>@new_user</b>");
+  expect(text).toContain("不要重複填寫");
+  expect(keyboard[0][0]).toEqual({
+    text: "填寫報名表單",
+    url: "https://x-plan-sage.vercel.app/apply",
+  });
+  expect(keyboard[1][0].text).toBe("聯絡小夏");
+});
+it("asks applicants without a Telegram username to set one first", () => {
+  vi.stubEnv("APPLICATION_FORM_URL", "https://example.com/form");
+  const { text, keyboard } = unknownApplicantMessage("");
+  expect(text).toContain("設定 → 使用者名稱");
+  expect(keyboard[0][0].url).toBe("https://example.com/form");
 });
 
 afterEach(() => vi.unstubAllEnvs());
