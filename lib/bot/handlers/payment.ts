@@ -1,5 +1,9 @@
 import { withQualificationLock } from "@/lib/qualification";
-import { v2Enabled } from "@/lib/membership-v2";
+import { currentPaidFacts, v2Enabled } from "@/lib/membership-v2";
+import {
+  paymentRequestMessage,
+  sendUsdtQrCode,
+} from "@/lib/bot/payment-info";
 import { getRuntimeConfig } from "@/lib/config";
 import { addDays, isPast, isoDateTime } from "@/lib/dates";
 import { type Member, updateMember, getMemberByPageId } from "@/lib/notion";
@@ -104,23 +108,23 @@ async function sendPaymentRequestUnlocked(
     lastBotCheckAt: isoDateTime(now),
     lastBotMessage: "Payment request sent",
   });
-  await sendMessage(
-    chatId,
-    [
-      "已收到你的續費申請，請依照以下方式完成付款。",
-      "",
-      "續費方案：",
-      "收費方式：",
-      "3個月100U，一個月50U。（目前沒有年訂閱方案）",
-      "",
-      "可以使用交易所內部轉帳給小夏：",
-      "MEXC - UID：77242747",
-      "",
-      "完成轉帳後，請直接在這個 Bot 對話上傳轉帳截圖，並在同一則訊息的文字說明或下一則訊息輸入 UID 末四碼（4 位數字）。",
-      "你可以傳：截圖 + caption：UID 末四碼 1234；或先傳截圖，再傳 1234。",
-      "兩項都收到後，助理確認後會更新你的會籍狀態。",
-    ].join("\n"),
-  );
+  await sendPaymentInfo(member, chatId, now, isoDateTime(actualDeadline));
+}
+
+/** Text with every payment method, followed by the USDT QR code image. */
+export async function sendPaymentInfo(
+  member: Member,
+  chatId: string | number,
+  now: Date,
+  deadline?: string | null,
+) {
+  const renewal = v2Enabled()
+    ? currentPaidFacts(member, now)
+    : member.status === "active_paid" ||
+      member.status === "payment_pending" ||
+      Boolean(member.paidAt);
+  await sendMessage(chatId, paymentRequestMessage({ renewal, deadline }));
+  await sendUsdtQrCode(chatId);
 }
 
 export function proofFileIdFromMessage(message: TelegramMessage): string {
@@ -230,7 +234,8 @@ export async function sendPaymentRequest(
       return;
     }
     if (isPaymentPending(fresh) && !isPast(fresh.paymentDeadlineAt, now)) {
-      await sendMessage(chatId, PAYMENT_PROOF_INSTRUCTIONS);
+      // Re-show the payment details without resetting the open request.
+      await sendPaymentInfo(fresh, chatId, now, fresh.paymentDeadlineAt);
       return;
     }
     await guard();

@@ -1,13 +1,12 @@
 import type { Member } from "@/lib/notion";
 import { formatDateTime } from "@/lib/dates";
+import { PAYMENT_METHODS, PAYMENT_PLANS } from "@/lib/bot/payment-info";
 
 export const RENEWAL_OFFER = [
-  "續費方案：",
-  "收費方式：",
-  "3個月100U，一個月50U。（目前沒有年訂閱方案）",
+  "💳 <b>付費方案</b>",
+  PAYMENT_PLANS,
   "",
-  "可以使用交易所內部轉帳給小夏：",
-  "MEXC - UID：77242747",
+  PAYMENT_METHODS,
 ].join("\n");
 
 export const PAYMENT_PROOF_INSTRUCTIONS =

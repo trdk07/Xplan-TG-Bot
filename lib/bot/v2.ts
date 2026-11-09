@@ -28,6 +28,7 @@ import {
   UID_MISMATCH_MESSAGE,
   V2_WELCOME_RULES,
   admissionPassedMessage,
+  discordGuideKeyboard,
   discordGuideMessage,
   exchangeSelectionKeyboard,
   rulesAckKeyboard,
@@ -88,6 +89,7 @@ export async function handleV2Start(
     await sendMessage(
       message.chat.id,
       discordGuideMessage(member, ALREADY_JOINED_INTRO),
+      discordGuideKeyboard(),
     );
     return;
   }
@@ -131,6 +133,7 @@ export async function handleV2RulesAck(
     await sendMessage(
       query.from.id,
       discordGuideMessage(member, ALREADY_JOINED_INTRO),
+      discordGuideKeyboard(),
     );
     return;
   }
@@ -228,6 +231,7 @@ export async function handleV2Join(
       sendMessage(
         request.user_chat_id,
         discordGuideMessage(member, JOIN_APPROVED_INTRO),
+        discordGuideKeyboard(),
       ),
   );
   if (result === "held")

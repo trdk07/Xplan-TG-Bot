@@ -100,6 +100,7 @@ it("approves identity-bound admission and sends Discord link without a trial dea
   expect(mocks.send).toHaveBeenCalledWith(
     123,
     expect.stringContaining("discord.gg/example"),
+    [[{ text: "我要付費升級", callback_data: "payment:upgrade" }]],
   );
 });
 it("does not query an account different from the registration record", async () => {
@@ -118,6 +119,7 @@ it("shows the admission rules before asking for an exchange", async () => {
   expect(text).toContain("提領或轉走都不影響資格");
   expect(text).toContain("200,000 USDT");
   expect(keyboard[0][0]).toMatchObject({ callback_data: RULES_ACK_CALLBACK });
+  expect(keyboard[1][0]).toMatchObject({ callback_data: "payment:upgrade" });
 });
 it("asks for the exchange only after the rules are acknowledged", async () => {
   await handleV2RulesAck(

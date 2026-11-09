@@ -17,6 +17,7 @@ import {
   setAdminCookie,
   type Operator,
 } from "@/lib/auth";
+import { sendUsdtQrCode } from "@/lib/bot/payment-info";
 import {
   manualPaymentProofRequestMessage,
   paymentProofRequestKeyboard,
@@ -216,7 +217,7 @@ export async function markPaidAction(
         await sendMessage(
           member.telegramUserId,
           policyV2
-            ? `付款已核准（${durationMonths} 個月），付費期限至 ${formatDateTime(isoDateTime(reviewDueAt))}。目前會籍：${memberStatusLabel(approvedStatus)}。Telegram 群組資格不受會籍到期影響。`
+            ? `付款已核准（${durationMonths} 個月），付費期限至 ${formatDateTime(isoDateTime(reviewDueAt))}。目前會籍：${memberStatusLabel(approvedStatus)}。Telegram 群組資格不受會籍到期影響。\nDiscord 已驗證者會在 10 分鐘內自動更新為「宇航員」；尚未驗證請到驗證頻道點「驗證現有會員」。`
             : `訂閱已更新，目前為有效狀態，有效期限至 ${formatDateTime(isoDateTime(reviewDueAt))}。Telegram 群組資格不受會籍到期影響。`,
         );
       }
@@ -288,6 +289,8 @@ export async function requestPaymentProofAction(pageId: string) {
               : manualPaymentProofRequestMessage(),
             continueCurrentRequest ? undefined : paymentProofRequestKeyboard(),
           );
+          if (!continueCurrentRequest)
+            await sendUsdtQrCode(member.telegramUserId);
         } catch (error) {
           await updateMemberExistingProperties(pageId, {
             lastBotCheckAt: isoDateTime(now),

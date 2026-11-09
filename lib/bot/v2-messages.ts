@@ -5,6 +5,16 @@ import { exchangeLabel, normalizeExchange } from "@/lib/membership-v2";
 /** Guided V2 onboarding copy. Messages are sent with Telegram parse_mode=HTML. */
 
 export const RULES_ACK_CALLBACK = "onboarding:rules_ack";
+export const PAYMENT_UPGRADE_CALLBACK = "payment:upgrade";
+
+/** The same paid-upgrade entry point is offered wherever the member reads the rules or the Discord guide. */
+export function paymentUpgradeButton(): InlineKeyboardButton[] {
+  return [{ text: "我要付費升級", callback_data: PAYMENT_UPGRADE_CALLBACK }];
+}
+
+export function discordGuideKeyboard(): InlineKeyboardButton[][] {
+  return [paymentUpgradeButton()];
+}
 
 export function escapeHtml(value: string) {
   return value
@@ -26,13 +36,16 @@ export const V2_WELCOME_RULES = [
   "🚀 <b>想升級成「宇航員」？</b>",
   "・付費訂閱，或",
   "・同一個交易所帳號近 30 天現貨＋合約交易量達 200,000 USDT。",
-  "升級後在 Discord 完成驗證，身分組會自動同步。",
+  "想付費可以隨時點下方「我要付費升級」。升級後在 Discord 完成驗證，身分組會自動同步。",
   "",
   "看完請點下方「我了解，開始驗證」。",
 ].join("\n");
 
 export function rulesAckKeyboard(): InlineKeyboardButton[][] {
-  return [[{ text: "我了解，開始驗證", callback_data: RULES_ACK_CALLBACK }]];
+  return [
+    [{ text: "我了解，開始驗證", callback_data: RULES_ACK_CALLBACK }],
+    paymentUpgradeButton(),
+  ];
 }
 
 export const EXCHANGE_SELECTION_MESSAGE = [
@@ -116,6 +129,7 @@ export function discordGuideMessage(member: Member, intro: string) {
     "1. 點上方連結加入伺服器，完成伺服器規則確認。",
     "2. 約 10 分鐘內會自動取得「探索者」，免費資源不需要驗證就能使用。",
     "3. 已付費或交易量達標的會員，到驗證頻道點「驗證現有會員」，選擇交易所並輸入 UID 和 Email，即可取得「宇航員」。",
+    "想付費升級，可以點下方「我要付費升級」。",
     "",
     "📝 <b>請記下你的驗證資料（Discord 驗證要用）</b>",
     `・交易所：${escapeHtml(exchangeName)}`,

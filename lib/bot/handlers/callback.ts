@@ -1,10 +1,18 @@
 import { v2Enabled } from "@/lib/membership-v2";
 import { handleV2Exchange, handleV2RulesAck } from "@/lib/bot/v2";
-import { RULES_ACK_CALLBACK } from "@/lib/bot/v2-messages";
+import {
+  PAYMENT_UPGRADE_CALLBACK,
+  RULES_ACK_CALLBACK,
+} from "@/lib/bot/v2-messages";
+import { nonExpiringStatuses } from "@/lib/status";
 import { getRuntimeConfig } from "@/lib/config";
 import { addDays, isPast, isoDateTime } from "@/lib/dates";
 import { isPaymentPending, isRenewalNoticeCandidate } from "@/lib/member-state";
-import { findMemberByTelegramId, updateMember } from "@/lib/notion";
+import {
+  type Member,
+  findMemberByTelegramId,
+  updateMember,
+} from "@/lib/notion";
 import {
   type TelegramCallbackQuery,
   answerCallbackQuery,
@@ -62,6 +70,8 @@ export async function handleCallback(query: TelegramCallbackQuery, now: Date) {
     await markCallbackSelection(query, "我了解，開始驗證");
     return handleV2RulesAck(query, record, now);
   }
+  if (v2Enabled() && query.data === PAYMENT_UPGRADE_CALLBACK)
+    return handlePaymentUpgrade(query, record, now);
   if (v2Enabled() && query.data.startsWith("exchange:confirm:"))
     return handleV2Exchange(query, record);
   // Retired survey buttons never revive the old questionnaire or collect P/L.
@@ -190,6 +200,29 @@ export async function handleCallback(query: TelegramCallbackQuery, now: Date) {
     return;
   }
   await rejectStaleCallback(query);
+}
+
+/** Self-service paid upgrade for any non-blocked member; review stays manual. */
+async function handlePaymentUpgrade(
+  query: TelegramCallbackQuery,
+  member: Member,
+  now: Date,
+) {
+  if (["suspended", "kicked", "denied"].includes(member.status)) {
+    await rejectStaleCallback(query);
+    return;
+  }
+  if (nonExpiringStatuses.has(member.status)) {
+    await answerCallbackQuery(
+      query.id,
+      "你目前的會員資格不受付費期限限制，不需要付費。",
+      true,
+    );
+    return;
+  }
+  await answerCallbackQuery(query.id, "已開啟付費申請，請查看付款說明");
+  // Payment-pending, under-review and renewal cases are handled inside.
+  await sendPaymentRequest(member, query.from.id, now);
 }
 
 async function rejectStaleCallback(query: TelegramCallbackQuery) {

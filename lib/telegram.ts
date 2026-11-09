@@ -125,6 +125,21 @@ export async function sendMessage(
   });
 }
 
+export async function sendPhoto(
+  chatId: string | number,
+  photoUrl: string,
+  caption?: string,
+  keyboard?: InlineKeyboardButton[][],
+) {
+  return telegramApi("sendPhoto", {
+    chat_id: chatId,
+    photo: photoUrl,
+    caption,
+    parse_mode: "HTML",
+    reply_markup: keyboard ? { inline_keyboard: keyboard } : undefined,
+  });
+}
+
 export async function editMessageText(
   chatId: string | number,
   messageId: number,
