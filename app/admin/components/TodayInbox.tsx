@@ -14,7 +14,7 @@ import {
   isPaymentIncomplete,
 } from "@/lib/admin-views";
 import { isPaymentReviewReady } from "@/lib/member-state";
-import { v2Enabled } from "@/lib/membership-v2";
+import { effectiveMembership, v2Enabled } from "@/lib/membership-v2";
 import type { Member } from "@/lib/notion";
 
 const INBOX_PREVIEW_LIMIT = 5;
@@ -44,7 +44,7 @@ function InboxMemberCard({
       <div className="inbox-card-body">
         <div className="inbox-card-head">
           <strong>{label}</strong>
-          <StatusBadge status={member.status} />
+          <StatusBadge status={v2Enabled() ? effectiveMembership(member) : member.status} />
         </div>
         <p className="subtle small-text">{detail}</p>
       </div>

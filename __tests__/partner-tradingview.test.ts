@@ -62,6 +62,7 @@ function member(overrides: Record<string, any> = {}): Member {
 
 describe("partner TradingView member API", () => {
   beforeEach(() => {
+    vi.stubEnv("MEMBERSHIP_POLICY_V2_ENABLED", "false");
     vi.stubEnv("PARTNER_API_TOKEN", "partner-secret");
     for (const [key, value] of Object.entries(requiredEnv)) {
       vi.stubEnv(key, value);
@@ -70,6 +71,7 @@ describe("partner TradingView member API", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllEnvs();
   });
 
@@ -130,6 +132,46 @@ describe("partner TradingView member API", () => {
       member({status:"invite_sent",tradingView:"never_joined"}),
     ];
     expect(activeTradingViewIds(records, now)).toEqual(["legacy_trial", "legacy_paid", "legacy_declined"]);
+  });
+
+  it("returns only effective premium tiers in v2, excluding free and expired paid memberships", async () => {
+    vi.stubEnv("MEMBERSHIP_POLICY_V2_ENABLED", "true");
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-09T00:00:00Z"));
+    const paid = {
+      paidAt: "2026-11-01T00:00:00Z",
+      reviewDueAt: "2026-12-01T00:00:00Z",
+    };
+    const volume = {
+      volumeQualified: true,
+      admissionVerifiedAt: "2026-10-01T00:00:00Z",
+      volumeCheckedAt: "2026-11-08T00:00:00Z",
+    };
+    state.members = [
+      member({ status: "free", tradingView: "tv_free" }),
+      member({ status: "active_paid", ...paid, reviewDueAt: "2026-11-09T00:00:00Z", tradingView: "tv_expired_paid" }),
+      member({ status: "active_paid", ...paid, tradingView: "tv_paid" }),
+      member({ status: "active_volume", ...volume, tradingView: "tv_volume" }),
+      member({ status: "active_volume", ...volume, admissionVerifiedAt: null, tradingView: "tv_unverified_volume" }),
+      member({ status: "partner", tradingView: "tv_partner" }),
+      member({ status: "exempt", tradingView: "tv_exempt" }),
+      member({ status: "VIP", tradingView: "tv_vip" }),
+      member({ status: "suspended", ...paid, ...volume, tradingView: "tv_suspended" }),
+      member({ status: "trial_active", ...paid, ...volume, tradingView: "tv_legacy_trial" }),
+    ];
+
+    const response = await GET(
+      new Request("https://app.example/api/partners/tradingview-members", {
+        headers: { authorization: "Bearer partner-secret" },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      count: 5,
+      tradingViewIds: ["tv_paid", "tv_volume", "tv_partner", "tv_exempt", "tv_vip"],
+    });
   });
 
 });
