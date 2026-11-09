@@ -41,10 +41,10 @@ export const PAYMENT_METHODS = [
 
 export const PAYMENT_PROOF_STEPS = [
   "<b>完成轉帳後</b>",
-  "請在這個對話上傳轉帳截圖，並在圖片說明或下一則訊息輸入 4 位數字的 UID 末四碼：",
+  "請在這個對話上傳<b>轉帳截圖</b>，並在圖片說明或下一則訊息輸入 4 位數字的 UID 末四碼：",
   "・站內轉帳：你轉出帳號的 UID 末四碼",
   "・鏈上轉帳：你報名綁定的交易所 UID 末四碼",
-  "兩項都收到後，由助理審核並更新會籍。",
+  "⚠️ <b>一定要上傳轉帳截圖</b>，沒有截圖無法對帳。截圖和 UID 末四碼兩項都收到後，才會送給助理審核。",
 ].join("\n");
 
 export function paymentRequestMessage(options: {

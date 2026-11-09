@@ -178,7 +178,10 @@ async function handlePaymentProofMessageUnlocked(
       ...patch,
       lastBotMessage: "Payment UID last 4 captured; awaiting screenshot",
     });
-    await sendMessage(message.chat.id, "已收到 UID 末四碼，請再上傳轉帳截圖。");
+    await sendMessage(
+      message.chat.id,
+      "已收到 UID 末四碼，請再上傳轉帳截圖。沒有截圖無法對帳，付款申請也不會送出審核。",
+    );
     return;
   }
 

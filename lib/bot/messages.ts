@@ -10,7 +10,7 @@ export const RENEWAL_OFFER = [
 ].join("\n");
 
 export const PAYMENT_PROOF_INSTRUCTIONS =
-  "下一步：請上傳轉帳截圖，並在這個 Bot 對話輸入 UID 末四碼（4 位數字）。可以把 UID 末四碼寫在圖片說明，或下一則訊息傳 4 位數字。";
+  "下一步：請上傳轉帳截圖，並在這個 Bot 對話輸入 UID 末四碼（4 位數字）。可以把 UID 末四碼寫在圖片說明，或下一則訊息傳 4 位數字。一定要有轉帳截圖，沒有截圖無法對帳。";
 
 export const STALE_STEP_MESSAGE =
   "這個按鈕已不是目前可操作的步驟。若需要協助，請聯絡助理確認。";
