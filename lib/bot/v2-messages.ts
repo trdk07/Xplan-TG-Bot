@@ -15,11 +15,14 @@ export function applicationFormUrl() {
 }
 
 export function registrationGuideButton(): InlineKeyboardButton[] {
-  return [{ text: "查看交易所註冊方式", url: applicationFormUrl() }];
+  return [{ text: "前往報名頁（註冊＋填表）", url: applicationFormUrl() }];
 }
 
 const REGISTRATION_GUIDE_NOTE =
-  "還不知道怎麼註冊？點下方「查看交易所註冊方式」，報名頁有各交易所的推薦註冊方式；已經填過報名表的人不需要重填。";
+  "還沒用推薦連結註冊？點下方「前往報名頁（註冊＋填表）」，頁面上有三家交易所的推薦註冊連結，照著步驟完成註冊並填寫報名表。只註冊沒填表，系統會找不到你的資料。";
+
+const RETRY_REGISTRATION_NOTE =
+  "請點下方「前往報名頁（註冊＋填表）」，照著頁面步驟用推薦連結註冊並填寫報名表。如果換了新的交易所帳號，也要重新填表，系統才查得到你的新 UID。";
 export const PAYMENT_UPGRADE_CALLBACK = "payment:upgrade";
 
 /** The same paid-upgrade entry point is offered wherever the member reads the rules or the Discord guide. */
@@ -122,8 +125,8 @@ export const ADMISSION_NOT_MET_MESSAGE = [
   "・這個 UID 不是透過我們的推薦連結註冊",
   "・該帳號的歷史累積入金尚未達 100 USDT",
   "",
-  REGISTRATION_GUIDE_NOTE,
-  "確認後可以再回覆一次 UID。若確定已符合條件仍無法通過，請聯絡小夏。",
+  RETRY_REGISTRATION_NOTE,
+  "完成後回到這裡按 /start 重新驗證。若確定已符合條件仍無法通過，請聯絡小夏。",
 ].join("\n");
 
 function discordLink() {

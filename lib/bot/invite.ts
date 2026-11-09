@@ -43,15 +43,15 @@ export function unknownApplicantMessage(username: string) {
       "・還沒有填寫報名表單",
       "・表單上的 Telegram username 和目前這個帳號不一樣",
       "",
-      "請點下方「填寫報名表單」完成報名，送出後稍等一下，再回到這裡重新按 /start。",
+      "請點下方「前往報名頁（註冊＋填表）」，照著頁面步驟用推薦連結註冊交易所並填寫報名表，送出後稍等一下，再回到這裡重新按 /start。",
       safeUsername
         ? `表單的 Telegram username 請填：<b>${safeUsername}</b>`
         : "你目前沒有設定 Telegram username，請先到 Telegram「設定 → 使用者名稱」設定一個，再填到表單裡。",
       "",
-      "如果你已經填過、只是資料填錯，請不要重複填寫，直接聯絡小夏協助更正。",
+      "資料填錯可以回報名頁重新填寫；不確定怎麼處理，請聯絡小夏。",
     ].join("\n"),
     keyboard: [
-      [{ text: "填寫報名表單", url: formUrl }],
+      [{ text: "前往報名頁（註冊＋填表）", url: formUrl }],
       ...teacherContactKeyboard(),
     ],
   };

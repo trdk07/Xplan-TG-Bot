@@ -121,7 +121,7 @@ it("shows the admission rules before asking for an exchange", async () => {
   expect(keyboard[0][0]).toMatchObject({ callback_data: RULES_ACK_CALLBACK });
   expect(keyboard[1][0]).toMatchObject({ callback_data: "payment:upgrade" });
   expect(keyboard[2][0]).toEqual({
-    text: "查看交易所註冊方式",
+    text: "前往報名頁（註冊＋填表）",
     url: "https://x-plan-sage.vercel.app/apply",
   });
 });
@@ -174,9 +174,9 @@ it("tells the member which details the Discord form will ask for", () => {
 it("offers the application form again to applicants missing from Notion", () => {
   const { text, keyboard } = unknownApplicantMessage("@new_user");
   expect(text).toContain("<b>@new_user</b>");
-  expect(text).toContain("不要重複填寫");
+  expect(text).toContain("重新填寫");
   expect(keyboard[0][0]).toEqual({
-    text: "填寫報名表單",
+    text: "前往報名頁（註冊＋填表）",
     url: "https://x-plan-sage.vercel.app/apply",
   });
   expect(keyboard[1][0].text).toBe("聯絡小夏");
@@ -192,7 +192,7 @@ it("points members who failed admission to the registration guide", async () => 
   mocks.recheck.mockResolvedValue({ ...member, admissionVerifiedAt: null, onboardingStep: "collecting_info" });
   await handleV2Uid({ ...member, admissionVerifiedAt: null }, { chat: { id: 123 }, text: "001234" } as any, now);
   const [, text, keyboard] = mocks.send.mock.calls.at(-1)!;
-  expect(text).toContain("查看交易所註冊方式");
+  expect(text).toContain("重新填表");
   expect(keyboard[0][0].url).toBe("https://x-plan-sage.vercel.app/apply");
   expect(keyboard[1][0].text).toBe("聯絡小夏");
 });
