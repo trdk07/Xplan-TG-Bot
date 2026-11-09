@@ -16,6 +16,7 @@ import {
   type TelegramMessage,
   type TelegramChatJoinRequest,
   type TelegramCallbackQuery,
+  type InlineKeyboardButton,
   answerCallbackQuery,
 } from "@/lib/telegram";
 import { teacherContactKeyboard } from "@/lib/bot/keyboards";
@@ -29,6 +30,7 @@ import {
   V2_WELCOME_RULES,
   admissionPassedMessage,
   discordGuideKeyboard,
+  registrationGuideButton,
   discordGuideMessage,
   exchangeSelectionKeyboard,
   rulesAckKeyboard,
@@ -39,8 +41,12 @@ const special = (member: Member) =>
   ["partner", "exempt", "VIP"].includes(member.status);
 const blocked = (member: Member) =>
   ["suspended", "kicked", "denied"].includes(member.status);
-async function refuse(chatId: number | string, text: string) {
-  await sendMessage(chatId, text, teacherContactKeyboard());
+async function refuse(
+  chatId: number | string,
+  text: string,
+  extraButtons: InlineKeyboardButton[][] = [],
+) {
+  await sendMessage(chatId, text, [...extraButtons, ...teacherContactKeyboard()]);
 }
 export async function createV2Invite(
   member: Member,
@@ -195,6 +201,9 @@ export async function handleV2Uid(
     updated.onboardingStep === "needs_review"
       ? ADMISSION_NEEDS_REVIEW_MESSAGE
       : ADMISSION_NOT_MET_MESSAGE,
+    updated.onboardingStep === "needs_review"
+      ? undefined
+      : [registrationGuideButton()],
   );
 }
 export async function handleV2Join(

@@ -120,6 +120,10 @@ it("shows the admission rules before asking for an exchange", async () => {
   expect(text).toContain("200,000 USDT");
   expect(keyboard[0][0]).toMatchObject({ callback_data: RULES_ACK_CALLBACK });
   expect(keyboard[1][0]).toMatchObject({ callback_data: "payment:upgrade" });
+  expect(keyboard[2][0]).toEqual({
+    text: "查看交易所註冊方式",
+    url: "https://x-plan-sage.vercel.app/apply",
+  });
 });
 it("asks for the exchange only after the rules are acknowledged", async () => {
   await handleV2RulesAck(
@@ -182,6 +186,15 @@ it("asks applicants without a Telegram username to set one first", () => {
   const { text, keyboard } = unknownApplicantMessage("");
   expect(text).toContain("設定 → 使用者名稱");
   expect(keyboard[0][0].url).toBe("https://example.com/form");
+});
+
+it("points members who failed admission to the registration guide", async () => {
+  mocks.recheck.mockResolvedValue({ ...member, admissionVerifiedAt: null, onboardingStep: "collecting_info" });
+  await handleV2Uid({ ...member, admissionVerifiedAt: null }, { chat: { id: 123 }, text: "001234" } as any, now);
+  const [, text, keyboard] = mocks.send.mock.calls.at(-1)!;
+  expect(text).toContain("查看交易所註冊方式");
+  expect(keyboard[0][0].url).toBe("https://x-plan-sage.vercel.app/apply");
+  expect(keyboard[1][0].text).toBe("聯絡小夏");
 });
 
 afterEach(() => vi.unstubAllEnvs());

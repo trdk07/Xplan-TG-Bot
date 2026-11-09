@@ -5,6 +5,21 @@ import { exchangeLabel, normalizeExchange } from "@/lib/membership-v2";
 /** Guided V2 onboarding copy. Messages are sent with Telegram parse_mode=HTML. */
 
 export const RULES_ACK_CALLBACK = "onboarding:rules_ack";
+
+export const DEFAULT_APPLICATION_FORM_URL =
+  "https://x-plan-sage.vercel.app/apply";
+
+/** The website apply page also explains how to register with each exchange. */
+export function applicationFormUrl() {
+  return process.env.APPLICATION_FORM_URL || DEFAULT_APPLICATION_FORM_URL;
+}
+
+export function registrationGuideButton(): InlineKeyboardButton[] {
+  return [{ text: "查看交易所註冊方式", url: applicationFormUrl() }];
+}
+
+const REGISTRATION_GUIDE_NOTE =
+  "還不知道怎麼註冊？點下方「查看交易所註冊方式」，報名頁有各交易所的推薦註冊方式；已經填過報名表的人不需要重填。";
 export const PAYMENT_UPGRADE_CALLBACK = "payment:upgrade";
 
 /** The same paid-upgrade entry point is offered wherever the member reads the rules or the Discord guide. */
@@ -29,6 +44,7 @@ export const V2_WELCOME_RULES = [
   "",
   "📌 <b>入群規則</b>",
   "1. 需使用我們的推薦連結註冊 MEXC、Bitget 或 OKX。",
+  `　${REGISTRATION_GUIDE_NOTE}`,
   "2. 該帳號的歷史累積入金需達 100 USDT（站內入金也算）。",
   "3. <b>審核通過後，資金提領或轉走都不影響資格</b>，不需要一直放在交易所。",
   "4. 通過後即可加入 Telegram 群組，並取得 Discord 邀請。TG 群組與 Discord 免費資源不會因到期被移出。",
@@ -45,6 +61,7 @@ export function rulesAckKeyboard(): InlineKeyboardButton[][] {
   return [
     [{ text: "我了解，開始驗證", callback_data: RULES_ACK_CALLBACK }],
     paymentUpgradeButton(),
+    registrationGuideButton(),
   ];
 }
 
@@ -105,6 +122,7 @@ export const ADMISSION_NOT_MET_MESSAGE = [
   "・這個 UID 不是透過我們的推薦連結註冊",
   "・該帳號的歷史累積入金尚未達 100 USDT",
   "",
+  REGISTRATION_GUIDE_NOTE,
   "確認後可以再回覆一次 UID。若確定已符合條件仍無法通過，請聯絡小夏。",
 ].join("\n");
 
