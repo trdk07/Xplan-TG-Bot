@@ -1,6 +1,8 @@
 import {
   qualificationFields,
   normalizeExchange,
+  v2Enabled,
+  v2Statuses,
   type QualificationFields,
 } from "@/lib/membership-v2";
 import { Client } from "@notionhq/client";
@@ -286,6 +288,13 @@ export function normalizeExchangeUid(value: string | null | undefined): string {
 }
 
 export function buildNotionProperties(patch: MemberPatch): Record<string, any> {
+  if (
+    patch.status !== undefined &&
+    v2Enabled() &&
+    !v2Statuses.some((status) => status === patch.status)
+  ) {
+    throw new Error("V2 Status writes must use one of the seven membership statuses.");
+  }
   const props: Record<string, any> = {};
 
   if (patch.telegramUserId !== undefined) {

@@ -17,19 +17,15 @@ const dataSource = await notion.dataSources.retrieve({
 const existing = dataSource.properties || {};
 const patch = {};
 
+// Add V2 membership choices only; workflow states belong in their own fields.
 ensureSelect("Status", [
-  { name: "eligible", color: "gray" },
-  { name: "collecting_info", color: "yellow" },
-  { name: "join_pending", color: "orange" },
-  { name: "trial_active", color: "green" },
-  { name: "payment_pending", color: "purple" },
+  { name: "free", color: "gray" },
+  { name: "active_volume", color: "green" },
   { name: "active_paid", color: "green" },
   { name: "partner", color: "blue" },
   { name: "exempt", color: "gray" },
   { name: "VIP", color: "pink" },
-  { name: "expired", color: "red" },
-  { name: "kicked", color: "red" },
-  { name: "denied", color: "red" },
+  { name: "suspended", color: "red" },
 ]);
 ensureMultiSelect("Tags", [{ name: "翻倉成功", color: "green" }]);
 ensureEmail("email");
