@@ -1,8 +1,11 @@
-import { ProofThumbnail } from "@/app/admin/components/ProofThumbnail";
+import {
+  ProofButton,
+  ProofThumbnail,
+} from "@/app/admin/components/ProofThumbnail";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { BadgeCheck, ImageIcon } from "lucide-react";
+import { BadgeCheck } from "lucide-react";
 import {
   markPaidAction,
   requestPaymentProofAction,
@@ -134,15 +137,7 @@ export function TodayInbox({ members }: { members: Member[] }) {
                   proofFileId={member.paymentProofFileId || undefined}
                 >
                   {member.paymentProofFileId ? (
-                    <a
-                      className="button secondary small"
-                      href={`/api/admin/payment-proof?fileId=${encodeURIComponent(member.paymentProofFileId)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <ImageIcon width={13} height={13} aria-hidden="true" />
-                      看截圖
-                    </a>
+                    <ProofButton fileId={member.paymentProofFileId} />
                   ) : null}
                   <form action={markPaidAction.bind(null, member.pageId, 1)}>
                     <ActionButton icon={<BadgeCheck />} small>

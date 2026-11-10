@@ -1,3 +1,4 @@
+import { ProofThumbnail } from "@/app/admin/components/ProofThumbnail";
 import Link from "next/link";
 import { DiscordAdminControls } from "@/app/admin/components/DiscordAdminControls";
 import { isDiscordAdminConfigured } from "@/lib/discord-admin";
@@ -148,21 +149,7 @@ export default async function MemberDetailPage({
             <div>付款證明</div>
             <div>
               {member.paymentProofFileId ? (
-                <a
-                  href={`/api/admin/payment-proof?fileId=${encodeURIComponent(
-                    member.paymentProofFileId,
-                  )}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <img
-                    src={`/api/admin/payment-proof?fileId=${encodeURIComponent(
-                      member.paymentProofFileId,
-                    )}`}
-                    alt="付款證明截圖"
-                    style={{ maxWidth: "240px", borderRadius: "8px" }}
-                  />
-                </a>
+                <ProofThumbnail fileId={member.paymentProofFileId} />
               ) : (
                 "-"
               )}

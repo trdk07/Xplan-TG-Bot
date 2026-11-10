@@ -1,5 +1,7 @@
-import { ProofThumbnail } from "@/app/admin/components/ProofThumbnail";
-import { ImageIcon } from "lucide-react";
+import {
+  ProofButton,
+  ProofThumbnail,
+} from "@/app/admin/components/ProofThumbnail";
 import { formatDateTime } from "@/lib/dates";
 import type { Member } from "@/lib/notion";
 import { effectiveMembership, v2Enabled } from "@/lib/membership-v2";
@@ -55,17 +57,7 @@ export function PaymentReviewSummary({ member }: { member: Member }) {
         <ProofThumbnail fileId={member.paymentProofFileId} />
       ) : null}
       {member.paymentProofFileId ? (
-        <a
-          className="proof-link"
-          href={`/api/admin/payment-proof?fileId=${encodeURIComponent(
-            member.paymentProofFileId,
-          )}`}
-          target="_blank"
-          rel="noreferrer"
-        >
-          <ImageIcon width={14} height={14} aria-hidden="true" />
-          看截圖
-        </a>
+        <ProofButton fileId={member.paymentProofFileId} className="proof-link" />
       ) : null}
     </div>
   );
