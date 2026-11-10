@@ -275,7 +275,7 @@ describe("renewal bot flow", () => {
     expect(results.find((r) => r.pageId === "fail")?.action).toBe("error");
     expect(state.members[0].renewalReminderSentAt).toBeNull();
     expect(state.members[1].renewalReminderSentAt).toBe("2026-05-01T00:00:00.000Z");
-    expect(state.sent.some((s) => s.chatId === "1222518302" && s.text.includes("失敗 1"))).toBe(true);
+    expect(state.sent.some((s) => s.chatId === "1222518302" && s.text.includes("需要處理 1 人"))).toBe(true);
   });
 
   it.each(["trial_active", "active_paid", "payment_pending"])("expires %s once in Notion without removing Telegram access", async (status) => {

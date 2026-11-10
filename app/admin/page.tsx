@@ -10,6 +10,11 @@ import { MembersList } from "@/app/admin/components/MembersList";
 import { SettingsPanel } from "@/app/admin/components/SettingsPanel";
 import { StatsOverview } from "@/app/admin/components/StatsOverview";
 import { TodayInbox } from "@/app/admin/components/TodayInbox";
+import {
+  HeldNotificationsPanel,
+  type HeldNotification,
+} from "@/app/admin/components/HeldNotificationsPanel";
+import { getEvidenceStore } from "@/lib/evidence-store";
 import { ActionButton } from "@/app/components/ActionButton";
 import { ActionToast } from "@/app/components/ActionToast";
 import { isAdminView, isInvitationPending, isEndingSoon, matchesAdminView } from "@/lib/admin-views";
@@ -63,6 +68,15 @@ export default async function AdminPage({
   } catch (error) {
     loadError =
       error instanceof Error ? error.message : "Unable to load members";
+  }
+
+  let heldNotifications: HeldNotification[] = [];
+  if (v2Enabled()) {
+    try {
+      heldNotifications = await (await getEvidenceStore()).heldNotifications();
+    } catch (error) {
+      console.error("Unable to load held notifications", error);
+    }
   }
 
   const now = new Date();
@@ -136,6 +150,7 @@ export default async function AdminPage({
         </div>
       </header>
 
+      {v2Enabled() ? <HeldNotificationsPanel held={heldNotifications} members={allMembers} /> : null}
       {v2Enabled() ? <QualificationReviewQueue members={allMembers} /> : null}
       <TodayInbox members={allMembers} />
 

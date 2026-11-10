@@ -19,6 +19,11 @@ import {
 } from "@/lib/auth";
 import { sendUsdtQrCode } from "@/lib/bot/payment-info";
 import {
+  getEvidenceStore,
+  notificationKindLabel,
+  pageIdFromNotificationKey,
+} from "@/lib/evidence-store";
+import {
   accountRebindPatch,
   findAccountOwner,
   sameBoundAccount,
@@ -764,4 +769,18 @@ export async function unlinkDiscordAction(
   formData: FormData,
 ): Promise<DiscordAdminState> {
   return discordAdminAction(pageId, discordId, verifiedAt, "unlink", formData);
+}
+
+/** Close a notification whose delivery is unknown, without resending it. */
+export async function resolveHeldNotificationAction(key: string) {
+  const pageId = pageIdFromNotificationKey(key) ?? "";
+  await withAdminAction(pageId, async (operator) => {
+    if (!v2Enabled()) throw new Error("新版會員政策尚未啟用。");
+    const closed = await (await getEvidenceStore()).resolveHeldNotification(key);
+    if (closed && pageId)
+      await updateMemberExistingProperties(pageId, {
+        lastBotCheckAt: new Date().toISOString(),
+        lastBotMessage: `Held notification closed by ${operator} without resend: ${notificationKindLabel(key)}`,
+      }).catch(() => []);
+  });
 }

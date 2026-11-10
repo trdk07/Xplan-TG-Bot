@@ -537,10 +537,25 @@ it("reports retained-volume API failures to the existing operator alert path", a
   expect(results).toEqual([
     {
       pageId: "p",
+      label: "p",
       action: "error",
       detail: expect.stringContaining("upstream_unavailable"),
     },
   ]);
   expect((await d.read()).volumeQualified).toBe(true);
   expect((await d.read()).status).toBe("active_volume");
+});
+it("marks a member without an exchange once instead of reporting it daily", async () => {
+  const d = fixture({ exchangeName: "", volumeQualified: false });
+  const first = await runDailyV2(now, d as any);
+  expect(first[0]).toMatchObject({ action: "needs_data" });
+  expect((await d.read()).depositReviewReason).toContain("缺少交易所或 UID");
+  const writes = d.write.mock.calls.length;
+  await runDailyV2(now, d as any);
+  expect(
+    d.write.mock.calls
+      .slice(writes)
+      .some(([, patch]: any) => "depositReviewReason" in patch),
+  ).toBe(false);
+  expect(d.effects.every((e) => e.locked)).toBe(true);
 });
