@@ -584,6 +584,30 @@ describe("v2 payment and membership boundaries", () => {
       expect(state.messages[0]).not.toContain("免費會員");
     },
   );
+  it("sends the community invitation when approving a member who never joined", async () => {
+    external.invite.mockClear();
+    state.member = member({
+      status: "free",
+      exchangeName: "Bybit",
+      paidAt: null,
+      reviewDueAt: null,
+      groupJoinedAt: null,
+      admissionVerifiedAt: null,
+    });
+    await actions.markPaidAction("member-1", 1);
+    expect(external.invite).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "active_paid", paidAt: now }),
+      state.member.telegramUserId,
+      expect.any(Date),
+    );
+    external.invite.mockClear();
+    state.member = member({ status: "free", groupJoinedAt: "2026-05-06T00:00:00.000Z", paidAt: null, reviewDueAt: null });
+    await actions.markPaidAction("member-1", 1);
+    expect(external.invite).not.toHaveBeenCalled();
+    state.member = member({ status: "suspended", groupJoinedAt: null, paidAt: null, reviewDueAt: null });
+    await actions.markPaidAction("member-1", 1);
+    expect(external.invite).not.toHaveBeenCalled();
+  });
   it.each(["kicked", "denied"] as const)(
     "explicit new payment retains legacy %s blocking in status and message",
     async (status) => {
@@ -811,7 +835,7 @@ describe("v2 admin evidence presentation", () => {
     expect(html).toContain("重新檢查資格");
     expect(html).toContain("220,000");
     expect(html).toContain("上次成功資料");
-    expect(html).toContain("upstream_unavailable");
+    expect(html).toContain("交易所 API 暫時無法連線");
     expect(html).toContain("身分組：探索者");
     expect(html).toContain("Discord 重新驗證");
     expect(html).not.toContain("延長體驗期");

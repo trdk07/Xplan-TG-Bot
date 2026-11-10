@@ -54,6 +54,20 @@ describe("v2 exchange identity", () => {
     Object.assign(pages[1]!.properties, { "Exchange Name": { type: "select", select: { name: "MEXC" } } });
     expect(await client.findMember(member.exchangeId, member.email, "mexc")).toBeNull();
   });
+  it("lets a member on another exchange verify under 'other' and qualify by payment only", async () => {
+    expect(JSON.stringify(modal(true))).toContain('"other"');
+    const page = notionPage();
+    Object.assign(page.properties, { "Exchange Name": { type: "select", select: { name: "Bybit" } } });
+    const client = new NotionClient(v2, async () => Response.json({ results: [page], has_more: false }));
+    const found = await client.findMember(member.exchangeId, member.email, "other");
+    expect(found).toMatchObject({ pageId: member.pageId, exchange: "other" });
+    expect(await client.findMember(member.exchangeId, member.email, "mexc")).toBeNull();
+    const paid = { ...member, exchange: "other" as const, status: "active_paid", paidAt: "2026-09-01" };
+    expect(evaluateMember(paid, now, null, {}, "trial", true)).toMatchObject({ tier: "paid" });
+    expect(evaluateMember({ ...paid, dueAt: new Date(now).toISOString() }, now, null, {}, "trial", true)).toMatchObject({ tier: "explorer" });
+    Object.assign(page.properties, { "Exchange Name": { type: "select", select: { name: "否" } } });
+    expect(await client.findMember(member.exchangeId, member.email, "other")).toBeNull();
+  });
   it("reads exact successful volume facts and includes them in projected queries", async () => {
     const page = notionPage();
     Object.assign(page.properties, { "Exchange Name": { type: "select", select: { name: "OKX" } }, "Volume Qualified": { type: "checkbox", checkbox: true }, "Admission Verified At": { type: "date", date: { start: "2026-01-01" } }, "Volume Checked At": { type: "date", date: { start: "2026-01-02" } }, "Volume Check Error": { type: "rich_text", rich_text: [{ plain_text: "stale" }] } });

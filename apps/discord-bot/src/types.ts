@@ -1,4 +1,5 @@
-export type Exchange = "mexc" | "bitget" | "okx";
+/** "other" is any exchange we cannot query; such members qualify by payment or special status only. */
+export type Exchange = "mexc" | "bitget" | "okx" | "other";
 export type Tier = "trial" | "paid" | "non_expiring" | "partner" | "explorer" | "volume";
 export interface Config {
   membershipPolicyV2Enabled?: boolean;

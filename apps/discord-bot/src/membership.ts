@@ -49,7 +49,9 @@ function evaluateV2(member: Member, now: number): Decision {
 export function normalizeExchange(input: string | null | undefined): Exchange | null {
   const value = input?.trim().toLowerCase();
   if (value === "mexc" || value === "mexc（抹茶）") return "mexc";
-  return value === "bitget" || value === "okx" ? value : null;
+  if (value === "bitget" || value === "okx") return value;
+  // "否" is the legacy form answer for "no exchange account", not an exchange.
+  return value && value !== "否" ? "other" : null;
 }
 export function normalizeExchangeId(input: string): string { return input.trim().toLowerCase(); }
 export function normalizeEmail(input: string): string { return input.trim().toLowerCase(); }

@@ -1108,3 +1108,82 @@ tr:hover td {
     grid-template-columns: 56px 1fr 60px;
   }
 }
+
+/* Payment screenshot preview: visible on phones without leaving the page. */
+.proof-thumb {
+  align-self: flex-start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: block;
+  justify-self: start;
+  width: fit-content;
+  margin-top: 8px;
+  max-width: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.proof-thumb img {
+  display: block;
+  max-height: 180px;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.proof-thumb-hint {
+  background: rgba(0, 0, 0, 0.6);
+  bottom: 0;
+  color: #fff;
+  font-size: 11px;
+  left: 0;
+  padding: 2px 8px;
+  position: absolute;
+  right: 0;
+  text-align: center;
+}
+
+button.proof-thumb,
+button.proof-link {
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+
+button.proof-link {
+  border: 0;
+}
+
+.proof-overlay {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.88);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  inset: 0;
+  justify-content: center;
+  overflow: auto;
+  padding: 16px;
+  position: fixed;
+  z-index: 1000;
+}
+
+.proof-overlay img {
+  border-radius: 8px;
+  max-height: calc(100vh - 90px);
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.proof-overlay-close {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 14px;
+  gap: 6px;
+  padding: 8px 16px;
+}

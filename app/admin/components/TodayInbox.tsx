@@ -1,7 +1,11 @@
+import {
+  ProofButton,
+  ProofThumbnail,
+} from "@/app/admin/components/ProofThumbnail";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { BadgeCheck, ImageIcon } from "lucide-react";
+import { BadgeCheck } from "lucide-react";
 import {
   markPaidAction,
   requestPaymentProofAction,
@@ -31,10 +35,12 @@ function Avatar({ label }: { label: string }) {
 function InboxMemberCard({
   member,
   detail,
+  proofFileId,
   children,
 }: {
   member: Member;
   detail: string;
+  proofFileId?: string;
   children: ReactNode;
 }) {
   const label = member.telegramUsername || member.telegramUserId || "-";
@@ -47,6 +53,7 @@ function InboxMemberCard({
           <StatusBadge status={v2Enabled() ? effectiveMembership(member) : member.status} />
         </div>
         <p className="subtle small-text">{detail}</p>
+        {proofFileId ? <ProofThumbnail fileId={proofFileId} /> : null}
       </div>
       <div className="inbox-card-actions">{children}</div>
     </article>
@@ -127,17 +134,10 @@ export function TodayInbox({ members }: { members: Member[] }) {
                   key={member.pageId}
                   member={member}
                   detail={`UID 末四碼：${member.paymentUidLast4 || "-"}`}
+                  proofFileId={member.paymentProofFileId || undefined}
                 >
                   {member.paymentProofFileId ? (
-                    <a
-                      className="button secondary small"
-                      href={`/api/admin/payment-proof?fileId=${encodeURIComponent(member.paymentProofFileId)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <ImageIcon width={13} height={13} aria-hidden="true" />
-                      看截圖
-                    </a>
+                    <ProofButton fileId={member.paymentProofFileId} />
                   ) : null}
                   <form action={markPaidAction.bind(null, member.pageId, 1)}>
                     <ActionButton icon={<BadgeCheck />} small>

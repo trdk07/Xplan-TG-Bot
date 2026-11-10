@@ -8,6 +8,7 @@ export function modal(v2 = false): unknown {
   return { type: 9, data: { custom_id: ids.credentials, title: "現有會員驗證", components: [
     ...(v2 ? [{ type: 18, label: "報名時填寫的交易所", component: { type: 3, custom_id: "exchange", required: true, min_values: 1, max_values: 1, options: [
       { label: "MEXC", value: "mexc" }, { label: "Bitget", value: "bitget" }, { label: "OKX", value: "okx" },
+      { label: "其他交易所（直接付費會員）", value: "other" },
     ] } }] : []),
     { type: 18, label: "報名時填寫的 Exchange ID", component: { type: 4, custom_id: "exchange_id", style: 1, required: true, min_length: 1, max_length: 100, placeholder: "交易所 UID" } },
     { type: 18, label: "報名時填寫的 Email", component: { type: 4, custom_id: "email", style: 1, required: true, min_length: 3, max_length: 254, placeholder: "報名信箱" } },
