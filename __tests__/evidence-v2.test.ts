@@ -86,6 +86,42 @@ it("holds unknown send outcome instead of blindly repeating", async () => {
   ).toBe("held");
   expect(delivered).toBe(false);
 });
+it("closes a notification Telegram proves undeliverable instead of holding it", async () => {
+  expect(
+    await store.deliverOnce("paid_expiry:blocked:1", async () => {
+      throw new Error("Forbidden: bot was blocked by the user");
+    }),
+  ).toBe("undeliverable");
+  let delivered = false;
+  expect(
+    await store.deliverOnce("paid_expiry:blocked:1", async () => {
+      delivered = true;
+    }),
+  ).toBe("already_sent");
+  expect(delivered).toBe(false);
+  expect(
+    (await store.heldNotifications()).some((row) => row.key === "paid_expiry:blocked:1"),
+  ).toBe(false);
+});
+it("lets the assistant close a held notification without resending", async () => {
+  await expect(
+    store.deliverOnce("paid_expiry:held:1", async () => {
+      throw new Error("network timeout");
+    }),
+  ).rejects.toThrow();
+  expect(
+    (await store.heldNotifications()).some((row) => row.key === "paid_expiry:held:1"),
+  ).toBe(true);
+  expect(await store.resolveHeldNotification("paid_expiry:held:1")).toBe(true);
+  expect(await store.resolveHeldNotification("paid_expiry:held:1")).toBe(false);
+  let delivered = false;
+  expect(
+    await store.deliverOnce("paid_expiry:held:1", async () => {
+      delivered = true;
+    }),
+  ).toBe("already_sent");
+  expect(delivered).toBe(false);
+});
 it("serializes per-member scans across independent store instances", async () => {
   let release!: () => void;
   let entered!: () => void;

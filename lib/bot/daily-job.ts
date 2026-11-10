@@ -14,6 +14,7 @@ import {
   renewalReminderMessage,
 } from "@/lib/bot/messages";
 import { normalizeBotMember } from "@/lib/bot/member-policy";
+import { formatDailyReport, type ReportResult } from "@/lib/bot/daily-report";
 
 export async function sendRenewalReminder(
   member: Member,
@@ -151,18 +152,12 @@ export async function runDailyMembershipJob(now = new Date()) {
 }
 
 async function notifyTeacherOfDailyJobErrors(
-  results: Array<{ pageId: string; action: string; detail?: string }>,
+  results: ReportResult[],
   now: Date,
 ) {
-  const errors = results.filter((result) => result.action === "error");
-  if (!errors.length) return;
+  const summary = formatDailyReport(results, now);
+  if (!summary) return;
   const config = getRuntimeConfig();
-  const summary = [
-    `每日會員檢查任務發生錯誤（${isoDateTime(now)}）`,
-    `處理 ${results.length} 人，成功 ${results.length - errors.length}，失敗 ${errors.length}`,
-    "",
-    ...errors.map((error) => `- ${error.pageId}: ${error.detail}`),
-  ].join("\n");
   try {
     await sendMessage(config.teacherTelegramUid, summary);
   } catch (error) {

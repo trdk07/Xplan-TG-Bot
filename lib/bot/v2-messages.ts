@@ -6,6 +6,40 @@ import { exchangeLabel, normalizeExchange } from "@/lib/membership-v2";
 
 export const RULES_ACK_CALLBACK = "onboarding:rules_ack";
 
+export const DEFAULT_APPLICATION_FORM_URL =
+  "https://x-plan-sage.vercel.app/apply";
+
+/** The website apply page also explains how to register with each exchange. */
+export function applicationFormUrl() {
+  return process.env.APPLICATION_FORM_URL || DEFAULT_APPLICATION_FORM_URL;
+}
+
+export function registrationGuideButton(): InlineKeyboardButton[] {
+  return [{ text: "前往報名頁（註冊＋填表）", url: applicationFormUrl() }];
+}
+
+const REGISTRATION_GUIDE_NOTE =
+  "還沒用推薦連結註冊？點下方「前往報名頁（註冊＋填表）」，頁面上有三家交易所的推薦註冊連結，照著步驟完成註冊並填寫報名表。只註冊沒填表，系統會找不到你的資料。";
+
+const RETRY_REGISTRATION_NOTE =
+  "請點下方「前往報名頁（註冊＋填表）」，照著頁面步驟用推薦連結註冊並填寫報名表。如果換了新的交易所帳號，也要重新填表，系統才查得到你的新 UID。";
+export const PAYMENT_UPGRADE_CALLBACK = "payment:upgrade";
+
+/** The same paid-upgrade entry point is offered wherever the member reads the rules or the Discord guide. */
+export function paymentUpgradeButton(): InlineKeyboardButton[] {
+  return [{ text: "我要付費升級", callback_data: PAYMENT_UPGRADE_CALLBACK }];
+}
+
+export const REBIND_START_CALLBACK = "rebind:start";
+
+export function rebindButton(): InlineKeyboardButton[] {
+  return [{ text: "更換綁定交易所", callback_data: REBIND_START_CALLBACK }];
+}
+
+export function discordGuideKeyboard(): InlineKeyboardButton[][] {
+  return [paymentUpgradeButton(), rebindButton()];
+}
+
 export function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -19,6 +53,7 @@ export const V2_WELCOME_RULES = [
   "",
   "📌 <b>入群規則</b>",
   "1. 需使用我們的推薦連結註冊 MEXC、Bitget 或 OKX。",
+  `　${REGISTRATION_GUIDE_NOTE}`,
   "2. 該帳號的歷史累積入金需達 100 USDT（站內入金也算）。",
   "3. <b>審核通過後，資金提領或轉走都不影響資格</b>，不需要一直放在交易所。",
   "4. 通過後即可加入 Telegram 群組，並取得 Discord 邀請。TG 群組與 Discord 免費資源不會因到期被移出。",
@@ -26,13 +61,17 @@ export const V2_WELCOME_RULES = [
   "🚀 <b>想升級成「宇航員」？</b>",
   "・付費訂閱，或",
   "・同一個交易所帳號近 30 天現貨＋合約交易量達 200,000 USDT。",
-  "升級後在 Discord 完成驗證，身分組會自動同步。",
+  "想付費可以隨時點下方「我要付費升級」。升級後在 Discord 完成驗證，身分組會自動同步。",
   "",
   "看完請點下方「我了解，開始驗證」。",
 ].join("\n");
 
 export function rulesAckKeyboard(): InlineKeyboardButton[][] {
-  return [[{ text: "我了解，開始驗證", callback_data: RULES_ACK_CALLBACK }]];
+  return [
+    [{ text: "我了解，開始驗證", callback_data: RULES_ACK_CALLBACK }],
+    paymentUpgradeButton(),
+    registrationGuideButton(),
+  ];
 }
 
 export const EXCHANGE_SELECTION_MESSAGE = [
@@ -66,7 +105,7 @@ export const UID_MISMATCH_MESSAGE = [
   "",
   UID_LOCATION_HINT,
   "",
-  "若報名時填錯交易所或 UID，請聯絡小夏協助更正。",
+  "若想改用其他交易所的帳號，請點下方「更換綁定交易所」；報名資料填錯也可以聯絡小夏協助更正。",
 ].join("\n");
 
 export function admissionPassedMessage(inviteLink: string) {
@@ -92,7 +131,8 @@ export const ADMISSION_NOT_MET_MESSAGE = [
   "・這個 UID 不是透過我們的推薦連結註冊",
   "・該帳號的歷史累積入金尚未達 100 USDT",
   "",
-  "確認後可以再回覆一次 UID。若確定已符合條件仍無法通過，請聯絡小夏。",
+  RETRY_REGISTRATION_NOTE,
+  "完成後回到這裡按 /start 重新驗證。若確定已符合條件仍無法通過，請聯絡小夏。",
 ].join("\n");
 
 function discordLink() {
@@ -116,6 +156,7 @@ export function discordGuideMessage(member: Member, intro: string) {
     "1. 點上方連結加入伺服器，完成伺服器規則確認。",
     "2. 約 10 分鐘內會自動取得「探索者」，免費資源不需要驗證就能使用。",
     "3. 已付費或交易量達標的會員，到驗證頻道點「驗證現有會員」，選擇交易所並輸入 UID 和 Email，即可取得「宇航員」。",
+    "想付費升級，可以點下方「我要付費升級」；想改用其他交易所累積交易量，可以點「更換綁定交易所」。",
     "",
     "📝 <b>請記下你的驗證資料（Discord 驗證要用）</b>",
     `・交易所：${escapeHtml(exchangeName)}`,

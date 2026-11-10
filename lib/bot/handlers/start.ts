@@ -1,5 +1,6 @@
 import { v2Enabled } from "@/lib/membership-v2";
 import { handleV2Start, handleV2Uid } from "@/lib/bot/v2";
+import { handleRebindUid, rebindExchangeFromReply } from "@/lib/bot/rebind";
 import { getRuntimeConfig } from "@/lib/config";
 import { isPast, isoDateTime } from "@/lib/dates";
 import { getMexcDirectSubaffiliate, mexcDepositMeetsMinimum } from "@/lib/mexc";
@@ -260,7 +261,7 @@ export async function handleMexcUidMessage(
   await updateMember(member.pageId, {
     status: "eligible",
     exchangeRegistered: true,
-    exchangeName: "Mexc（抹茶）",
+    exchangeName: "MEXC",
     exchangeUid: submittedUid,
     uidSubmittedAt: isoDateTime(now),
     lastBotCheckAt: isoDateTime(now),
@@ -271,7 +272,7 @@ export async function handleMexcUidMessage(
       ...member,
       status: "eligible",
       exchangeRegistered: true,
-      exchangeName: "Mexc（抹茶）",
+      exchangeName: "MEXC",
       exchangeUid: submittedUid,
       telegramUsername: usernameFromMessage(message) || member.telegramUsername,
     },
@@ -284,6 +285,9 @@ export async function handleUidMessage(message: TelegramMessage, now: Date) {
   if (!message.from) return;
   const record = await findMemberByTelegramId(userId(message.from.id));
   if (v2Enabled() && record) {
+    const rebindExchange = rebindExchangeFromReply(message);
+    if (rebindExchange)
+      return handleRebindUid(record, rebindExchange, message, now);
     if (
       !["suspended", "kicked", "denied"].includes(record.status) &&
       isPaymentPending(record)

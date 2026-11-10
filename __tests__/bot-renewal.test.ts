@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   members: [] as any[],
   sent: [] as Array<{ chatId: string | number; text: string; keyboard?: any }>,
+  photos: [] as Array<{ chatId: string | number; photo: string }>,
   edited: [] as Array<{
     chatId: string | number;
     messageId: number;
@@ -118,6 +119,9 @@ vi.mock("@/lib/telegram", () => ({
       state.sent.push({ chatId, text, keyboard });
     },
   ),
+  sendPhoto: vi.fn(async (chatId: string | number, photo: string) => {
+    state.photos.push({ chatId, photo });
+  }),
   unbanChatMember: vi.fn(async (userId: string | number) => {
     state.unbanned.push(userId);
   }),
@@ -177,6 +181,7 @@ describe("renewal bot flow", () => {
   beforeEach(() => {
     state.members = [];
     state.sent = [];
+    state.photos = [];
     state.edited = [];
     state.callbackAnswers = [];
     state.updates = [];
@@ -270,7 +275,7 @@ describe("renewal bot flow", () => {
     expect(results.find((r) => r.pageId === "fail")?.action).toBe("error");
     expect(state.members[0].renewalReminderSentAt).toBeNull();
     expect(state.members[1].renewalReminderSentAt).toBe("2026-05-01T00:00:00.000Z");
-    expect(state.sent.some((s) => s.chatId === "1222518302" && s.text.includes("失敗 1"))).toBe(true);
+    expect(state.sent.some((s) => s.chatId === "1222518302" && s.text.includes("需要處理 1 人"))).toBe(true);
   });
 
   it.each(["trial_active", "active_paid", "payment_pending"])("expires %s once in Notion without removing Telegram access", async (status) => {
@@ -342,7 +347,11 @@ describe("renewal bot flow", () => {
     const now = new Date("2026-05-02T00:00:00.000Z");
     await click("renewal:stay", now, true);
     expect(state.members[0]).toMatchObject({ status: "payment_pending", renewalStep: "payment_pending", paidAt: "2026-04-08T00:00:00.000Z", paymentDeadlineAt: "2026-05-08T00:00:00.000Z" });
-    expect(state.sent.some((s) => s.text.includes("MEXC - UID：77242747"))).toBe(true);
+    const paymentText = state.sent.find((s) => s.text.includes("已收到你的續費申請"))?.text || "";
+    expect(paymentText).toContain("Bitget UID：<code>3904055146</code>");
+    expect(paymentText).toContain("MEXC UID：<code>77242747</code>");
+    expect(paymentText).toContain("0x3b91863cb0e71c37350c8de95fdf28a8f3cdd701");
+    expect(state.photos.at(-1)?.photo).toMatch(/\/payment\/usdt-bep20-qr\.png$/);
     expect(state.edited.at(-1)?.text).toContain("✅ 你已選擇：繼續訂閱");
     await handleTelegramUpdate({ update_id: 2, message: { message_id: 2, from: { id: 1001 }, chat: { id: 1001, type: "private" }, caption: "UID 末四碼 1234", photo: [{ file_id: "proof", width: 500, height: 500 }] } }, now);
     expect(state.members[0]).toMatchObject({ paymentUidLast4: "1234", paymentProofFileId: "proof", paymentProofSubmittedAt: now.toISOString() });
@@ -649,7 +658,7 @@ describe("renewal bot flow", () => {
     expect(state.members[0]).toMatchObject({
       status: "join_pending",
       exchangeRegistered: true,
-      exchangeName: "Mexc（抹茶）",
+      exchangeName: "MEXC",
       exchangeUid: "987654321",
       uidSubmittedAt: now.toISOString(),
       telegramUsername: "@user",

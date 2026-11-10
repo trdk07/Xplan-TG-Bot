@@ -154,7 +154,7 @@ export class EvidenceStore {
   async deliverOnce(
     key: string,
     send: () => Promise<unknown>,
-  ): Promise<"sent" | "already_sent" | "held"> {
+  ): Promise<"sent" | "already_sent" | "held" | "undeliverable"> {
     await this.db
       .prepare(
         "INSERT OR IGNORE INTO notification_outbox(key,state,created_at) VALUES(?,'pending',?)",
@@ -184,6 +184,15 @@ export class EvidenceStore {
         .run();
       return "sent";
     } catch (error) {
+      if (isUndeliverableTelegramError(error)) {
+        // Telegram refused the chat outright: nothing was delivered and a retry
+        // cannot succeed. Close the key (sent_at NULL = closed without delivery).
+        await this.db
+          .prepare("UPDATE notification_outbox SET state='sent' WHERE key=?")
+          .bind(key)
+          .run();
+        return "undeliverable";
+      }
       await this.db
         .prepare("UPDATE notification_outbox SET state='unknown' WHERE key=?")
         .bind(key)
@@ -191,6 +200,16 @@ export class EvidenceStore {
         .catch(() => {});
       throw error;
     }
+  }
+  /** Assistant confirmed a held notification; close it without resending. */
+  async resolveHeldNotification(key: string) {
+    const result = await this.db
+      .prepare(
+        "UPDATE notification_outbox SET state='sent', sent_at=NULL WHERE key=? AND state IN ('sending','unknown')",
+      )
+      .bind(key)
+      .run();
+    return result.meta?.changes === 1;
   }
   async heldNotifications() {
     return (
@@ -209,4 +228,34 @@ export async function getEvidenceStore(): Promise<EvidenceStore> {
     .MEMBERSHIP_EVIDENCE_DB;
   if (!db) throw new Error("MEMBERSHIP_EVIDENCE_DB is required for v2");
   return new EvidenceStore(db);
+}
+
+/** Telegram errors that prove the message was not, and cannot be, delivered. */
+export function isUndeliverableTelegramError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /^Forbidden:|chat not found|user is deactivated|bot can't initiate conversation/i.test(
+    message,
+  );
+}
+
+/** Member page ID embedded in an outbox key, e.g. "paid_expiry:<pageId>:<time>". */
+export function pageIdFromNotificationKey(key: string) {
+  return (
+    key.match(
+      /[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}/i,
+    )?.[0] ?? null
+  );
+}
+
+export function notificationKindLabel(key: string) {
+  const kind = key.split(":")[0];
+  return (
+    {
+      reminder: key.endsWith(":3day") ? "到期前 3 天提醒" : "到期前 7 天提醒",
+      paid_expiry: "付費到期通知",
+      volume_upgrade: "交易量升級通知",
+      volume_downgrade: "交易量降級通知",
+      "discord-invitation": "入群後 Discord 邀請",
+    } as Record<string, string>
+  )[kind] ?? kind;
 }

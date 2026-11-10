@@ -42,6 +42,20 @@ async function delivery(): Promise<Delivery> {
     send: sendMessage,
   };
 }
+export type DailyResult = {
+  pageId: string;
+  /** Telegram username (or email) so the operator report is readable. */
+  label?: string;
+  action: string;
+  detail?: string;
+};
+export const MISSING_ACCOUNT_ERROR = "Account requires exchange/UID review";
+export const MISSING_ACCOUNT_REASON =
+  "缺少交易所或 UID，需人工補資料（後台「更換綁定交易所帳號」或請會員在 TG 自助換綁）";
+const memberLabel = (member: Member) =>
+  member.telegramUsername || member.email || member.pageId;
+export const UNDELIVERABLE_NOTE =
+  "Telegram notification undeliverable (member blocked the bot or deleted the chat); closed without retry";
 const normal = (member: Member) =>
   ["free", "active_volume", "active_paid"].includes(member.status);
 const inactiveOrSpecial = (member: Member) =>
@@ -120,7 +134,10 @@ async function sendReminderUnlocked(
           ? member.renewalReminder3DaySentAt
           : null,
     lastBotCheckAt: now.toISOString(),
-    lastBotMessage: `${stage} paid expiry reminder delivered`,
+    lastBotMessage:
+      result === "undeliverable"
+        ? UNDELIVERABLE_NOTE
+        : `${stage} paid expiry reminder delivered`,
   });
 }
 
@@ -260,6 +277,11 @@ async function consumeTransitions(
     if (result === "held") throw new Error("通知傳送結果不明，需要人工覆核");
     await guard();
     await d.store.completeTransition(event.key);
+    if (result === "undeliverable")
+      await d.write(member.pageId, {
+        lastBotCheckAt: now.toISOString(),
+        lastBotMessage: UNDELIVERABLE_NOTE,
+      });
   }
 }
 
@@ -321,7 +343,7 @@ export async function runDailyV2(now = new Date(), override?: JobDependencies) {
     client: new ExchangeClient(process.env, fetch, now),
   };
   const members = await deps.list(),
-    results: Array<{ pageId: string; action: string; detail?: string }> = [];
+    results: DailyResult[] = [];
   const accounts = new Map<string, number>();
   for (const member of members) {
     const exchange = normalizeExchange(member.exchangeName);
@@ -331,6 +353,7 @@ export async function runDailyV2(now = new Date(), override?: JobDependencies) {
     }
   }
   for (const original of members) {
+    const label = memberLabel(original);
     try {
       const key = `${normalizeExchange(original.exchangeName)}:${original.exchangeUid}`;
       if ((accounts.get(key) || 0) > 1)
@@ -360,29 +383,58 @@ export async function runDailyV2(now = new Date(), override?: JobDependencies) {
           qualificationIssue = `Admission verification requires operator review: ${checked.depositReviewReason}`;
         }
       } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
         if (
-          error instanceof Error &&
           ["qualification_in_progress", "qualification_lease_expired"].includes(
-            error.message,
+            message,
           )
         ) {
           results.push({
             pageId: original.pageId,
+            label,
             action: "qualification_busy",
           });
           continue;
         }
-        qualificationIssue = "Qualification requires operator review";
+        if (message === MISSING_ACCOUNT_ERROR) {
+          await reconcileMember(original.pageId, now, deps);
+          // Known data gap: mark it once in Notion instead of alerting every day.
+          await deps.store.withQualificationLock(original.pageId, async (guard) => {
+            const fresh = await deps.read(original.pageId);
+            if (
+              !fresh ||
+              fresh.depositReviewReason === MISSING_ACCOUNT_REASON ||
+              (normalizeExchange(fresh.exchangeName) && fresh.exchangeUid)
+            )
+              return;
+            await guard();
+            await deps.write(original.pageId, {
+              ...(fresh.groupJoinedAt ? {} : { onboardingStep: "needs_review" }),
+              depositReviewReason: MISSING_ACCOUNT_REASON,
+              lastBotCheckAt: now.toISOString(),
+            });
+          });
+          results.push({
+            pageId: original.pageId,
+            label,
+            action: "needs_data",
+            detail: MISSING_ACCOUNT_REASON,
+          });
+          continue;
+        }
+        qualificationIssue = message;
       }
       await reconcileMember(original.pageId, now, deps);
       results.push({
         pageId: original.pageId,
+        label,
         action: qualificationIssue ? "error" : "qualification_checked",
         ...(qualificationIssue ? { detail: qualificationIssue } : {}),
       });
     } catch (error) {
       results.push({
         pageId: original.pageId,
+        label,
         action: "error",
         detail:
           error instanceof Error ? error.message : "Membership check failed",

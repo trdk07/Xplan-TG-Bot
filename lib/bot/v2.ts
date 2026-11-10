@@ -16,6 +16,7 @@ import {
   type TelegramMessage,
   type TelegramChatJoinRequest,
   type TelegramCallbackQuery,
+  type InlineKeyboardButton,
   answerCallbackQuery,
 } from "@/lib/telegram";
 import { teacherContactKeyboard } from "@/lib/bot/keyboards";
@@ -28,6 +29,9 @@ import {
   UID_MISMATCH_MESSAGE,
   V2_WELCOME_RULES,
   admissionPassedMessage,
+  discordGuideKeyboard,
+  rebindButton,
+  registrationGuideButton,
   discordGuideMessage,
   exchangeSelectionKeyboard,
   rulesAckKeyboard,
@@ -38,8 +42,12 @@ const special = (member: Member) =>
   ["partner", "exempt", "VIP"].includes(member.status);
 const blocked = (member: Member) =>
   ["suspended", "kicked", "denied"].includes(member.status);
-async function refuse(chatId: number | string, text: string) {
-  await sendMessage(chatId, text, teacherContactKeyboard());
+async function refuse(
+  chatId: number | string,
+  text: string,
+  extraButtons: InlineKeyboardButton[][] = [],
+) {
+  await sendMessage(chatId, text, [...extraButtons, ...teacherContactKeyboard()]);
 }
 export async function createV2Invite(
   member: Member,
@@ -88,6 +96,7 @@ export async function handleV2Start(
     await sendMessage(
       message.chat.id,
       discordGuideMessage(member, ALREADY_JOINED_INTRO),
+      discordGuideKeyboard(),
     );
     return;
   }
@@ -110,7 +119,8 @@ export async function handleV2Start(
   if (!exchange) {
     await refuse(
       message.chat.id,
-      "報名資料缺少有效交易所，請由助理核對綁定帳號。",
+      "報名資料缺少有效交易所。請點下方「更換綁定交易所」選擇你用推薦連結註冊的交易所並填 UID，或聯絡小夏協助。",
+      [rebindButton()],
     );
     return;
   }
@@ -131,6 +141,7 @@ export async function handleV2RulesAck(
     await sendMessage(
       query.from.id,
       discordGuideMessage(member, ALREADY_JOINED_INTRO),
+      discordGuideKeyboard(),
     );
     return;
   }
@@ -141,7 +152,8 @@ export async function handleV2RulesAck(
   if (!normalizeExchange(member.exchangeName)) {
     await refuse(
       query.from.id,
-      "報名資料缺少有效交易所，請由助理核對綁定帳號。",
+      "報名資料缺少有效交易所。請點下方「更換綁定交易所」選擇你用推薦連結註冊的交易所並填 UID，或聯絡小夏協助。",
+      [rebindButton()],
     );
     return;
   }
@@ -157,11 +169,20 @@ export async function handleV2Exchange(
 ) {
   const selected = query.data?.replace("exchange:confirm:", "");
   const expected = normalizeExchange(member.exchangeName);
-  if (blocked(member) || selected !== expected) {
+  if (blocked(member)) {
+    await answerCallbackQuery(query.id, "會員權益已停用，請聯絡助理。", true);
+    return;
+  }
+  if (selected !== expected) {
     await answerCallbackQuery(
       query.id,
-      "請使用報名紀錄中的交易所；更換帳號須由助理處理。",
+      "這不是你報名紀錄中的交易所。",
       true,
+    );
+    await sendMessage(
+      query.from.id,
+      `你的報名紀錄是 ${expected ? exchangeLabel(expected) : "未填交易所"}。如果想改用其他交易所的帳號，請點下方「更換綁定交易所」。`,
+      [rebindButton(), ...teacherContactKeyboard()],
     );
     return;
   }
@@ -179,7 +200,7 @@ export async function handleV2Uid(
   }
   const uid = (message.text || "").trim();
   if (!/^\d{1,32}$/.test(uid) || uid !== member.exchangeUid) {
-    await refuse(message.chat.id, UID_MISMATCH_MESSAGE);
+    await refuse(message.chat.id, UID_MISMATCH_MESSAGE, [rebindButton()]);
     return;
   }
   const updated = await recheckQualifications(member.pageId, now);
@@ -192,6 +213,9 @@ export async function handleV2Uid(
     updated.onboardingStep === "needs_review"
       ? ADMISSION_NEEDS_REVIEW_MESSAGE
       : ADMISSION_NOT_MET_MESSAGE,
+    updated.onboardingStep === "needs_review"
+      ? undefined
+      : [registrationGuideButton()],
   );
 }
 export async function handleV2Join(
@@ -228,6 +252,7 @@ export async function handleV2Join(
       sendMessage(
         request.user_chat_id,
         discordGuideMessage(member, JOIN_APPROVED_INTRO),
+        discordGuideKeyboard(),
       ),
   );
   if (result === "held")

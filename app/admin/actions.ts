@@ -17,6 +17,17 @@ import {
   setAdminCookie,
   type Operator,
 } from "@/lib/auth";
+import { sendUsdtQrCode } from "@/lib/bot/payment-info";
+import {
+  getEvidenceStore,
+  notificationKindLabel,
+  pageIdFromNotificationKey,
+} from "@/lib/evidence-store";
+import {
+  accountRebindPatch,
+  findAccountOwner,
+  sameBoundAccount,
+} from "@/lib/account-rebind";
 import {
   manualPaymentProofRequestMessage,
   paymentProofRequestKeyboard,
@@ -216,7 +227,7 @@ export async function markPaidAction(
         await sendMessage(
           member.telegramUserId,
           policyV2
-            ? `付款已核准（${durationMonths} 個月），付費期限至 ${formatDateTime(isoDateTime(reviewDueAt))}。目前會籍：${memberStatusLabel(approvedStatus)}。Telegram 群組資格不受會籍到期影響。`
+            ? `付款已核准（${durationMonths} 個月），付費期限至 ${formatDateTime(isoDateTime(reviewDueAt))}。目前會籍：${memberStatusLabel(approvedStatus)}。Telegram 群組資格不受會籍到期影響。\nDiscord 已驗證者會在 10 分鐘內自動更新為「宇航員」；尚未驗證請到驗證頻道點「驗證現有會員」。`
             : `訂閱已更新，目前為有效狀態，有效期限至 ${formatDateTime(isoDateTime(reviewDueAt))}。Telegram 群組資格不受會籍到期影響。`,
         );
       }
@@ -288,6 +299,8 @@ export async function requestPaymentProofAction(pageId: string) {
               : manualPaymentProofRequestMessage(),
             continueCurrentRequest ? undefined : paymentProofRequestKeyboard(),
           );
+          if (!continueCurrentRequest)
+            await sendUsdtQrCode(member.telegramUserId);
         } catch (error) {
           await updateMemberExistingProperties(pageId, {
             lastBotCheckAt: isoDateTime(now),
@@ -554,13 +567,7 @@ async function readV2Member(pageId: string): Promise<Member> {
   return member;
 }
 
-function sameAccount(left: Member, right: Member) {
-  return (
-    normalizeExchange(left.exchangeName) ===
-      normalizeExchange(right.exchangeName) &&
-    left.exchangeUid === right.exchangeUid
-  );
-}
+const sameAccount = sameBoundAccount;
 
 export async function recheckQualificationAction(pageId: string) {
   await withAdminAction(pageId, async (operator) => {
@@ -662,15 +669,7 @@ export async function resetBoundAccountAction(
         member.exchangeUid === exchangeUid
       )
         return;
-      const all = await listMembers();
-      if (
-        all.some(
-          (other) =>
-            other.pageId !== pageId &&
-            normalizeExchange(other.exchangeName) === exchange &&
-            other.exchangeUid.trim() === exchangeUid,
-        )
-      )
+      if (findAccountOwner(await listMembers(), pageId, exchange, exchangeUid))
         throw new Error("此交易所與 UID 已綁定其他會員，請先處理重複紀錄。");
       await guard();
       await reserveBoundAccount(pageId, exchange, exchangeUid);
@@ -678,35 +677,13 @@ export async function resetBoundAccountAction(
       const fresh = await readV2Member(pageId);
       if (!sameAccount(member, fresh))
         throw new Error("綁定帳號已變更，請重新核對。");
-      const now = new Date();
-      const patch: MemberPatch = {
-        exchangeName: exchangeLabel(exchange),
+      const patch = accountRebindPatch(
+        fresh,
+        exchange,
         exchangeUid,
-        uidSubmittedAt: now.toISOString(),
-        exchangeRegistered: false,
-        onboardingStep: "collecting_info",
-        admissionVerifiedAt: null,
-        verifiedDepositUsdt: null,
-        depositEvidenceComplete: false,
-        depositReviewReason: "綁定帳號已變更，須重新核對推薦關係與歷史入金。",
-        depositReviewedAt: null,
-        depositReviewedBy: "",
-        volumeSpot30d: null,
-        volumeFutures30d: null,
-        volumeTotal30d: null,
-        volumeQualified: false,
-        volumeWindowStart: null,
-        volumeWindowEnd: null,
-        volumeCheckedAt: null,
-        volumeCheckError: "",
-        qualificationCheckedAt: null,
-        inviteLink: null,
-        inviteExpiresAt: null,
-        invitationEmailSent: false,
-        lastBotCheckAt: now.toISOString(),
-        lastBotMessage: `Bound exchange account reset by ${operator}; Discord re-verification required`,
-      };
-      patch.status = effectiveMembership({ ...fresh, ...patch }, now);
+        new Date(),
+        operator,
+      );
       await guard();
       await updateMember(pageId, patch);
     });
@@ -792,4 +769,18 @@ export async function unlinkDiscordAction(
   formData: FormData,
 ): Promise<DiscordAdminState> {
   return discordAdminAction(pageId, discordId, verifiedAt, "unlink", formData);
+}
+
+/** Close a notification whose delivery is unknown, without resending it. */
+export async function resolveHeldNotificationAction(key: string) {
+  const pageId = pageIdFromNotificationKey(key) ?? "";
+  await withAdminAction(pageId, async (operator) => {
+    if (!v2Enabled()) throw new Error("新版會員政策尚未啟用。");
+    const closed = await (await getEvidenceStore()).resolveHeldNotification(key);
+    if (closed && pageId)
+      await updateMemberExistingProperties(pageId, {
+        lastBotCheckAt: new Date().toISOString(),
+        lastBotMessage: `Held notification closed by ${operator} without resend: ${notificationKindLabel(key)}`,
+      }).catch(() => []);
+  });
 }

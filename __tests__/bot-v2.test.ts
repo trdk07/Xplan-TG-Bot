@@ -100,6 +100,10 @@ it("approves identity-bound admission and sends Discord link without a trial dea
   expect(mocks.send).toHaveBeenCalledWith(
     123,
     expect.stringContaining("discord.gg/example"),
+    [
+      [{ text: "我要付費升級", callback_data: "payment:upgrade" }],
+      [{ text: "更換綁定交易所", callback_data: "rebind:start" }],
+    ],
   );
 });
 it("does not query an account different from the registration record", async () => {
@@ -118,6 +122,11 @@ it("shows the admission rules before asking for an exchange", async () => {
   expect(text).toContain("提領或轉走都不影響資格");
   expect(text).toContain("200,000 USDT");
   expect(keyboard[0][0]).toMatchObject({ callback_data: RULES_ACK_CALLBACK });
+  expect(keyboard[1][0]).toMatchObject({ callback_data: "payment:upgrade" });
+  expect(keyboard[2][0]).toEqual({
+    text: "前往報名頁（註冊＋填表）",
+    url: "https://x-plan-sage.vercel.app/apply",
+  });
 });
 it("asks for the exchange only after the rules are acknowledged", async () => {
   await handleV2RulesAck(
@@ -168,9 +177,9 @@ it("tells the member which details the Discord form will ask for", () => {
 it("offers the application form again to applicants missing from Notion", () => {
   const { text, keyboard } = unknownApplicantMessage("@new_user");
   expect(text).toContain("<b>@new_user</b>");
-  expect(text).toContain("不要重複填寫");
+  expect(text).toContain("重新填寫");
   expect(keyboard[0][0]).toEqual({
-    text: "填寫報名表單",
+    text: "前往報名頁（註冊＋填表）",
     url: "https://x-plan-sage.vercel.app/apply",
   });
   expect(keyboard[1][0].text).toBe("聯絡小夏");
@@ -180,6 +189,15 @@ it("asks applicants without a Telegram username to set one first", () => {
   const { text, keyboard } = unknownApplicantMessage("");
   expect(text).toContain("設定 → 使用者名稱");
   expect(keyboard[0][0].url).toBe("https://example.com/form");
+});
+
+it("points members who failed admission to the registration guide", async () => {
+  mocks.recheck.mockResolvedValue({ ...member, admissionVerifiedAt: null, onboardingStep: "collecting_info" });
+  await handleV2Uid({ ...member, admissionVerifiedAt: null }, { chat: { id: 123 }, text: "001234" } as any, now);
+  const [, text, keyboard] = mocks.send.mock.calls.at(-1)!;
+  expect(text).toContain("重新填表");
+  expect(keyboard[0][0].url).toBe("https://x-plan-sage.vercel.app/apply");
+  expect(keyboard[1][0].text).toBe("聯絡小夏");
 });
 
 afterEach(() => vi.unstubAllEnvs());

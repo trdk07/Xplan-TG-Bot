@@ -44,6 +44,9 @@ export type Member = QualificationFields & {
   lastBotMessage: string;
   kickReason: string;
   tradingView: string;
+  /** Account bound before the last rebind, kept for payment reconciliation. */
+  previousExchange?: string;
+  previousExchangeUid?: string;
 };
 
 export type MemberPatch = Partial<
@@ -90,6 +93,8 @@ export const notionProperties = {
   lastBotCheckAt: "Last Bot Check At",
   lastBotMessage: "Last Bot Message",
   kickReason: "Kick Reason",
+  previousExchange: "Previous Exchange",
+  previousExchangeUid: "Previous Exchange UID",
   tradingView: "TradingView",
 } as const;
 
@@ -267,6 +272,8 @@ export function mapNotionPageToMember(page: NotionPage): Member {
     lastBotMessage: textProp(page, notionProperties.lastBotMessage),
     kickReason: textProp(page, notionProperties.kickReason),
     tradingView: textProp(page, notionProperties.tradingView),
+    previousExchange: textProp(page, notionProperties.previousExchange),
+    previousExchangeUid: textProp(page, notionProperties.previousExchangeUid),
   };
 }
 
@@ -406,6 +413,14 @@ export function buildNotionProperties(patch: MemberPatch): Record<string, any> {
   }
   if (patch.kickReason !== undefined) {
     props[notionProperties.kickReason] = richText(patch.kickReason);
+  }
+  if (patch.previousExchange !== undefined) {
+    props[notionProperties.previousExchange] = richText(patch.previousExchange);
+  }
+  if (patch.previousExchangeUid !== undefined) {
+    props[notionProperties.previousExchangeUid] = richText(
+      patch.previousExchangeUid,
+    );
   }
 
   for (const [key, [name, type]] of Object.entries(qualificationFields)) {

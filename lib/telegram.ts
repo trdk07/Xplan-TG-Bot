@@ -35,6 +35,7 @@ export type TelegramMessage = {
   caption?: string;
   photo?: TelegramPhotoSize[];
   document?: TelegramDocument;
+  reply_to_message?: TelegramMessage;
 };
 
 export type TelegramCallbackQuery = {
@@ -121,6 +122,39 @@ export async function sendMessage(
     text,
     parse_mode: "HTML",
     disable_web_page_preview: true,
+    reply_markup: keyboard ? { inline_keyboard: keyboard } : undefined,
+  });
+}
+
+/** Opens Telegram's reply box so the member's answer quotes this prompt. */
+export async function sendForceReply(
+  chatId: string | number,
+  text: string,
+  placeholder?: string,
+) {
+  return telegramApi("sendMessage", {
+    chat_id: chatId,
+    text,
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+    reply_markup: {
+      force_reply: true,
+      input_field_placeholder: placeholder,
+    },
+  });
+}
+
+export async function sendPhoto(
+  chatId: string | number,
+  photoUrl: string,
+  caption?: string,
+  keyboard?: InlineKeyboardButton[][],
+) {
+  return telegramApi("sendPhoto", {
+    chat_id: chatId,
+    photo: photoUrl,
+    caption,
+    parse_mode: "HTML",
     reply_markup: keyboard ? { inline_keyboard: keyboard } : undefined,
   });
 }
