@@ -18,11 +18,19 @@ export function registrationGuideButton(): InlineKeyboardButton[] {
   return [{ text: "前往報名頁（註冊＋填表）", url: applicationFormUrl() }];
 }
 
-const REGISTRATION_GUIDE_NOTE =
-  "還沒用推薦連結註冊？點下方「前往報名頁（註冊＋填表）」，頁面上有三家交易所的推薦註冊連結，照著步驟完成註冊並填寫報名表。只註冊沒填表，系統會找不到你的資料。";
+/** For members already in Notion: the apply page only for its referral links. */
+export function referralLinksButton(): InlineKeyboardButton[] {
+  return [{ text: "查看交易所推薦註冊連結", url: applicationFormUrl() }];
+}
 
+// Shown to members already in Notion, so they need the referral links, not the form.
+const REGISTRATION_GUIDE_NOTE =
+  "還沒用推薦連結註冊交易所？點下方「查看交易所推薦註冊連結」。你已經填過報名表，不用重填；如果註冊的帳號跟報名表上的不同，驗證時請點「更換綁定交易所」。";
+
+// The website refuses a second submission with different data for the same
+// identity (HTTP 409), so existing members switch accounts via rebind instead.
 const RETRY_REGISTRATION_NOTE =
-  "請點下方「前往報名頁（註冊＋填表）」，照著頁面步驟用推薦連結註冊並填寫報名表。如果換了新的交易所帳號，也要重新填表，系統才查得到你的新 UID。";
+  "還沒用推薦連結註冊？點下方「查看交易所推薦註冊連結」。如果你已經用推薦連結註冊了另一個帳號，<b>不用重新填報名表</b>，請點「更換綁定交易所」換成新帳號。";
 export const PAYMENT_UPGRADE_CALLBACK = "payment:upgrade";
 
 /** The same paid-upgrade entry point is offered wherever the member reads the rules or the Discord guide. */
@@ -70,7 +78,7 @@ export function rulesAckKeyboard(): InlineKeyboardButton[][] {
   return [
     [{ text: "我了解，開始驗證", callback_data: RULES_ACK_CALLBACK }],
     paymentUpgradeButton(),
-    registrationGuideButton(),
+    referralLinksButton(),
   ];
 }
 

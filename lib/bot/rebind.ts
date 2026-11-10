@@ -32,7 +32,7 @@ import { teacherContactKeyboard } from "@/lib/bot/keyboards";
 import {
   REBIND_START_CALLBACK,
   escapeHtml,
-  registrationGuideButton,
+  referralLinksButton,
   UID_LOCATION_HINT,
 } from "@/lib/bot/v2-messages";
 
@@ -48,7 +48,7 @@ const EXCHANGES = ["mexc", "bitget", "okx"] as const;
 export const REBIND_RULES_MESSAGE = [
   "🔄 <b>更換綁定交易所</b>",
   "想改用其他交易所累積交易量，可以在這裡換綁。請先確認：",
-  "1. 新帳號必須透過我們的推薦連結註冊（MEXC／Bitget／OKX）。還沒註冊請先點下方「前往報名頁（註冊＋填表）」。",
+  "1. 新帳號必須透過我們的推薦連結註冊（MEXC／Bitget／OKX）。還沒註冊請點下方「查看交易所推薦註冊連結」；註冊好後回到這裡換綁，<b>不用重新填報名表</b>。",
   "2. 新帳號的歷史累積入金需達 100 USDT。",
   "3. 交易量只計算目前綁定的帳號，新舊帳號不會合併計算。",
   "4. 付費期限會保留，換綁不需要重新付費。",
@@ -81,7 +81,7 @@ const blocked = (member: Member) =>
 
 async function refuse(chatId: number | string, text: string, withGuide = false) {
   await sendMessage(chatId, text, [
-    ...(withGuide ? [registrationGuideButton()] : []),
+    ...(withGuide ? [referralLinksButton()] : []),
     ...teacherContactKeyboard(),
   ]);
 }
@@ -101,7 +101,7 @@ export async function handleRebindCallback(
         text: exchangeLabel(key),
         callback_data: `${REBIND_EXCHANGE_PREFIX}${key}`,
       })),
-      registrationGuideButton(),
+      referralLinksButton(),
     ]);
     return;
   }
@@ -230,7 +230,7 @@ async function defaultDeps(now: Date): Promise<RebindDeps> {
 export function rebindSuccessMessage(member: Member) {
   return [
     `✅ <b>已換綁為 ${escapeHtml(member.exchangeName)} UID ${escapeHtml(member.exchangeUid)}</b>`,
-    "付費期限保留不變；交易量從現在起依新帳號計算（每天台北時間 09:00 更新）。",
+    "付費期限保留不變；之後的交易量資格會依新帳號計算。",
     "",
     "⚠️ <b>請到 Discord 重新驗證</b>：在驗證頻道點「驗證現有會員」，填入：",
     `・交易所：${escapeHtml(member.exchangeName)}`,
@@ -303,7 +303,7 @@ export async function handleRebindUid(
         "・這個帳號不是透過我們的推薦連結註冊",
         "・該帳號的歷史累積入金尚未達 100 USDT",
         "",
-        "請點下方「前往報名頁（註冊＋填表）」，用推薦連結註冊新帳號；入金達標後再點「更換綁定交易所」重試。",
+        "請點下方「查看交易所推薦註冊連結」，用推薦連結註冊新帳號（不用重新填報名表）；入金達標後再點「更換綁定交易所」重試。",
       ].join("\n"),
       true,
     );

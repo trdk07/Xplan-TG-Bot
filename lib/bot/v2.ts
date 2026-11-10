@@ -31,7 +31,7 @@ import {
   admissionPassedMessage,
   discordGuideKeyboard,
   rebindButton,
-  registrationGuideButton,
+  referralLinksButton,
   discordGuideMessage,
   exchangeSelectionKeyboard,
   rulesAckKeyboard,
@@ -215,7 +215,7 @@ export async function handleV2Uid(
       : ADMISSION_NOT_MET_MESSAGE,
     updated.onboardingStep === "needs_review"
       ? undefined
-      : [registrationGuideButton()],
+      : [referralLinksButton(), rebindButton()],
   );
 }
 export async function handleV2Join(
