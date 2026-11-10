@@ -658,7 +658,7 @@ describe("renewal bot flow", () => {
     expect(state.members[0]).toMatchObject({
       status: "join_pending",
       exchangeRegistered: true,
-      exchangeName: "Mexc（抹茶）",
+      exchangeName: "MEXC",
       exchangeUid: "987654321",
       uidSubmittedAt: now.toISOString(),
       telegramUsername: "@user",

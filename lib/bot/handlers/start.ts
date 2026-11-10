@@ -261,7 +261,7 @@ export async function handleMexcUidMessage(
   await updateMember(member.pageId, {
     status: "eligible",
     exchangeRegistered: true,
-    exchangeName: "Mexc（抹茶）",
+    exchangeName: "MEXC",
     exchangeUid: submittedUid,
     uidSubmittedAt: isoDateTime(now),
     lastBotCheckAt: isoDateTime(now),
@@ -272,7 +272,7 @@ export async function handleMexcUidMessage(
       ...member,
       status: "eligible",
       exchangeRegistered: true,
-      exchangeName: "Mexc（抹茶）",
+      exchangeName: "MEXC",
       exchangeUid: submittedUid,
       telegramUsername: usernameFromMessage(message) || member.telegramUsername,
     },
