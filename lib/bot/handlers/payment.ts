@@ -87,7 +87,10 @@ async function sendPaymentRequestUnlocked(
   const config = getRuntimeConfig();
   const actualDeadline =
     deadline ??
-    (member.reviewDueAt && !isPast(member.reviewDueAt, now)
+    (member.reviewDueAt &&
+    (v2Enabled()
+      ? currentPaidFacts(member, now)
+      : !isPast(member.reviewDueAt, now))
       ? new Date(member.reviewDueAt)
       : addDays(now, config.paymentGraceDays));
   await updateMember(member.pageId, {
@@ -225,6 +228,17 @@ export async function sendPaymentRequest(
     return sendPaymentRequestUnlocked(member, chatId, now, deadline);
   return withQualificationLock(member.pageId, async (guard) => {
     const fresh = await livePaymentMember(member.pageId);
+    if (["suspended", "kicked", "denied"].includes(fresh.status)) {
+      await sendMessage(chatId, STALE_STEP_MESSAGE);
+      return;
+    }
+    if (nonExpiringStatuses.has(fresh.status)) {
+      await sendMessage(
+        chatId,
+        "你目前的會員資格不受付費期限限制，不需要付費。",
+      );
+      return;
+    }
     if (
       fresh.reviewDueAt !== member.reviewDueAt ||
       fresh.paidAt !== member.paidAt
