@@ -203,4 +203,70 @@ it("points members who failed admission to the registration guide", async () => 
   expect(keyboard[2][0].text).toBe("聯絡小夏");
 });
 
+const bybit = {
+  ...member,
+  exchangeName: "Bybit",
+  exchangeUid: "52587006",
+  admissionVerifiedAt: null,
+  inviteLink: null,
+  inviteExpiresAt: null,
+};
+const paidFacts = {
+  status: "active_paid",
+  paidAt: "2026-10-27T00:00:00Z",
+  reviewDueAt: "2026-11-27T00:00:00Z",
+};
+it("shows the rules with a direct-payment option to members on other exchanges", async () => {
+  await handleV2Start(bybit, { chat: { id: 123 } } as any, now);
+  const [, text, keyboard] = mocks.send.mock.calls[0];
+  expect(text).toContain("直接付費加入");
+  expect(keyboard[1][0]).toEqual({
+    text: "不註冊，直接付費加入",
+    callback_data: "payment:upgrade",
+  });
+});
+it("offers payment or rebind when free verification is impossible for the exchange", async () => {
+  await handleV2RulesAck({ id: "q", from: { id: 123 } } as any, bybit, now);
+  const [, text, keyboard] = mocks.send.mock.calls.at(-1)!;
+  expect(text).toContain("不是 MEXC、Bitget 或 OKX");
+  expect(keyboard.map((row: any) => row[0].text)).toEqual([
+    "不註冊，直接付費加入",
+    "查看交易所推薦註冊連結",
+    "更換綁定交易所",
+    "聯絡小夏",
+  ]);
+});
+it("invites an approved paying member without referral or deposit verification", async () => {
+  await handleV2Start({ ...bybit, ...paidFacts }, { chat: { id: 123 } } as any, now);
+  expect(mocks.invite).toHaveBeenCalled();
+  expect(mocks.send.mock.calls.at(-1)![1]).toContain("https://t.me/new");
+});
+it("does not invite an unpaid or expired member who was never verified", async () => {
+  await createV2Invite(bybit, 123, now);
+  await createV2Invite(
+    { ...bybit, ...paidFacts, reviewDueAt: "2026-10-27T12:00:00Z" },
+    123,
+    now,
+  );
+  expect(mocks.invite).not.toHaveBeenCalled();
+});
+it("approves the join request of a paying member on another exchange", async () => {
+  mocks.read.mockResolvedValue({
+    ...bybit,
+    ...paidFacts,
+    inviteLink: "https://t.me/paid",
+    inviteExpiresAt: "2026-10-29",
+  });
+  await handleV2Join(
+    {
+      chat: { id: 1 },
+      from: { id: 123 },
+      user_chat_id: 123,
+      invite_link: { invite_link: "https://t.me/paid" },
+    } as any,
+    now,
+  );
+  expect(mocks.approve).toHaveBeenCalledWith(123);
+});
+
 afterEach(() => vi.unstubAllEnvs());

@@ -231,6 +231,34 @@ export async function markPaidAction(
             : `訂閱已更新，目前為有效狀態，有效期限至 ${formatDateTime(isoDateTime(reviewDueAt))}。Telegram 群組資格不受會籍到期影響。`,
         );
       }
+      // Direct payment: an approved member who never joined gets the community
+      // invitation now, without referral or deposit verification.
+      if (
+        policyV2 &&
+        member.telegramUserId &&
+        !member.groupJoinedAt &&
+        !["suspended", "kicked", "denied"].includes(member.status)
+      ) {
+        try {
+          await guard();
+          await createV2Invite(
+            {
+              ...member,
+              status: approvedStatus,
+              paidAt: isoDateTime(now),
+              reviewDueAt: isoDateTime(reviewDueAt),
+            },
+            member.telegramUserId,
+            now,
+          );
+        } catch (error) {
+          console.error("Invitation after payment approval failed", error);
+          await updateMemberExistingProperties(pageId, {
+            lastBotCheckAt: isoDateTime(now),
+            lastBotMessage: `Marked paid by ${operator} (${label}); invitation failed, resend from admin`,
+          }).catch(() => []);
+        }
+      }
     });
   });
 }

@@ -38,6 +38,19 @@ export function paymentUpgradeButton(): InlineKeyboardButton[] {
   return [{ text: "我要付費升級", callback_data: PAYMENT_UPGRADE_CALLBACK }];
 }
 
+/** Same payment request as an upgrade, worded for people who have not joined yet. */
+export function directPayButton(): InlineKeyboardButton[] {
+  return [
+    { text: "不註冊，直接付費加入", callback_data: PAYMENT_UPGRADE_CALLBACK },
+  ];
+}
+
+export const UNSUPPORTED_EXCHANGE_MESSAGE = [
+  "你的報名資料不是 MEXC、Bitget 或 OKX 的帳號，沒辦法自動審核免費入群。你可以：",
+  "1. <b>直接付費加入</b>：點「不註冊，直接付費加入」，付款確認後就能入群。",
+  "2. <b>改走免費入群</b>：用我們的推薦連結註冊 MEXC／Bitget／OKX，再點「更換綁定交易所」填新帳號的 UID。",
+].join("\n");
+
 export const REBIND_START_CALLBACK = "rebind:start";
 
 export function rebindButton(): InlineKeyboardButton[] {
@@ -69,15 +82,18 @@ export const V2_WELCOME_RULES = [
   "🚀 <b>想升級成「宇航員」？</b>",
   "・付費訂閱，或",
   "・同一個交易所帳號近 30 天現貨＋合約交易量達 200,000 USDT。",
-  "想付費可以隨時點下方「我要付費升級」。升級後在 Discord 完成驗證，身分組會自動同步。",
+  "升級後在 Discord 完成驗證，身分組會自動同步。",
   "",
-  "看完請點下方「我了解，開始驗證」。",
+  "💳 <b>不想註冊交易所？可以直接付費加入</b>",
+  "點下方「不註冊，直接付費加入」，付款經助理確認後，就會收到 Telegram 入群連結和 Discord 邀請，不需要推薦註冊或入金審核。",
+  "",
+  "要走免費入群，看完請點下方「我了解，開始驗證」。",
 ].join("\n");
 
 export function rulesAckKeyboard(): InlineKeyboardButton[][] {
   return [
     [{ text: "我了解，開始驗證", callback_data: RULES_ACK_CALLBACK }],
-    paymentUpgradeButton(),
+    directPayButton(),
     referralLinksButton(),
   ];
 }

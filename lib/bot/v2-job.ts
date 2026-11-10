@@ -398,6 +398,17 @@ export async function runDailyV2(now = new Date(), override?: JobDependencies) {
         }
         if (message === MISSING_ACCOUNT_ERROR) {
           await reconcileMember(original.pageId, now, deps);
+          // An account on another exchange (direct-payment member) is not a
+          // data gap: it simply cannot be checked for deposits or volume.
+          const name = original.exchangeName.trim();
+          if (name && name !== "否" && original.exchangeUid.trim()) {
+            results.push({
+              pageId: original.pageId,
+              label,
+              action: "unsupported_exchange",
+            });
+            continue;
+          }
           // Known data gap: mark it once in Notion instead of alerting every day.
           await deps.store.withQualificationLock(original.pageId, async (guard) => {
             const fresh = await deps.read(original.pageId);

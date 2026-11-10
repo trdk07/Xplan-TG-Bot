@@ -5,7 +5,11 @@ import {
 } from "@/lib/notion";
 import { getEvidenceStore } from "@/lib/evidence-store";
 import { recheckQualifications } from "@/lib/qualification";
-import { normalizeExchange, exchangeLabel } from "@/lib/membership-v2";
+import {
+  currentPaidFacts,
+  normalizeExchange,
+  exchangeLabel,
+} from "@/lib/membership-v2";
 import {
   sendMessage,
   createChatInviteLink,
@@ -29,6 +33,8 @@ import {
   UID_MISMATCH_MESSAGE,
   V2_WELCOME_RULES,
   admissionPassedMessage,
+  UNSUPPORTED_EXCHANGE_MESSAGE,
+  directPayButton,
   discordGuideKeyboard,
   rebindButton,
   referralLinksButton,
@@ -42,6 +48,19 @@ const special = (member: Member) =>
   ["partner", "exempt", "VIP"].includes(member.status);
 const blocked = (member: Member) =>
   ["suspended", "kicked", "denied"].includes(member.status);
+/**
+ * Who may enter the Telegram community: verified referral admission, special
+ * members, returning members, or a member inside an approved paid period
+ * (direct payment needs no exchange registration).
+ */
+export function canJoinCommunity(member: Member, now: Date) {
+  return Boolean(
+    member.admissionVerifiedAt ||
+      special(member) ||
+      member.groupJoinedAt ||
+      currentPaidFacts(member, now),
+  );
+}
 async function refuse(
   chatId: number | string,
   text: string,
@@ -56,7 +75,7 @@ export async function createV2Invite(
 ) {
   if (
     blocked(member) ||
-    (!member.admissionVerifiedAt && !special(member) && !member.groupJoinedAt)
+    !canJoinCommunity(member, now)
   ) {
     await refuse(
       chatId,
@@ -76,7 +95,9 @@ export async function createV2Invite(
     inviteLink: invite.invite_link,
     inviteExpiresAt: expiry.toISOString(),
     lastBotCheckAt: now.toISOString(),
-    lastBotMessage: "Verified community invitation sent; no trial created",
+    lastBotMessage: member.admissionVerifiedAt
+      ? "Verified community invitation sent; no trial created"
+      : "Community invitation sent (paid, special or returning member)",
   });
   await sendMessage(chatId, admissionPassedMessage(invite.invite_link));
 }
@@ -111,19 +132,15 @@ export async function handleV2Start(
     );
     return;
   }
-  if (member.admissionVerifiedAt || special(member)) {
+  if (
+    member.admissionVerifiedAt ||
+    special(member) ||
+    currentPaidFacts(member, now)
+  ) {
     await createV2Invite(member, message.chat.id, now);
     return;
   }
-  const exchange = normalizeExchange(member.exchangeName);
-  if (!exchange) {
-    await refuse(
-      message.chat.id,
-      "報名資料缺少有效交易所。請點下方「更換綁定交易所」選擇你用推薦連結註冊的交易所並填 UID，或聯絡小夏協助。",
-      [rebindButton()],
-    );
-    return;
-  }
+  // Shown even for exchanges we cannot verify: the rules offer direct payment.
   await sendMessage(message.chat.id, V2_WELCOME_RULES, rulesAckKeyboard());
 }
 /** Second guided step: the member acknowledged the rules, so ask for the exchange. */
@@ -145,15 +162,19 @@ export async function handleV2RulesAck(
     );
     return;
   }
-  if (member.admissionVerifiedAt || special(member)) {
+  if (
+    member.admissionVerifiedAt ||
+    special(member) ||
+    currentPaidFacts(member, now)
+  ) {
     await createV2Invite(member, query.from.id, now);
     return;
   }
   if (!normalizeExchange(member.exchangeName)) {
     await refuse(
       query.from.id,
-      "報名資料缺少有效交易所。請點下方「更換綁定交易所」選擇你用推薦連結註冊的交易所並填 UID，或聯絡小夏協助。",
-      [rebindButton()],
+      UNSUPPORTED_EXCHANGE_MESSAGE,
+      [directPayButton(), referralLinksButton(), rebindButton()],
     );
     return;
   }
@@ -226,7 +247,7 @@ export async function handleV2Join(
   const valid =
     member &&
     !blocked(member) &&
-    (member.admissionVerifiedAt || special(member) || member.groupJoinedAt) &&
+    canJoinCommunity(member, now) &&
     member.inviteLink &&
     member.inviteLink === request.invite_link?.invite_link &&
     member.inviteExpiresAt &&

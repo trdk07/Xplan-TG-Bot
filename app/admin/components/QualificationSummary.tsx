@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { formatDateTime } from "@/lib/dates";
-import { effectiveMembership, validPastDate } from "@/lib/membership-v2";
+import { currentPaidFacts, effectiveMembership, normalizeExchange, validPastDate } from "@/lib/membership-v2";
 import type { Member } from "@/lib/notion";
 import { qualificationCodeLabel } from "@/lib/qualification-labels";
 
@@ -23,6 +23,8 @@ export function QualificationSummary({ member, now = new Date() }: { member: Mem
   return (
     <div className="payment-review">
       <span className={`mini-badge ${admitted ? "success" : "warning"}`}>{admitted ? "入群資格已核實" : "入群資格待核對"}</span>
+      {!admitted && currentPaidFacts(member, now) ? <span className="mini-badge muted">直接付費會員（未經入金審核）</span> : null}
+      {!normalizeExchange(member.exchangeName) && member.exchangeName.trim() ? <span className="subtle small-text">其他交易所（{member.exchangeName}）：無法自動查核入金與交易量</span> : null}
       <span className="subtle small-text">歷史入金下限：{amount(member.verifiedDepositUsdt)} USDT</span>
       <span className="small-text">30 日成交額：{amount(member.volumeTotal30d)} USDT</span>
       <span className={`mini-badge ${stale ? "warning" : "muted"}`}>{stale ? "上次成功資料（待更新）" : "交易量最後成功資料"}</span>
