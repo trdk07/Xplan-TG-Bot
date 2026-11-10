@@ -130,6 +130,7 @@ export default async function MemberDetailPage({
             </div>
             <div>交易所 UID</div>
             <div>{member.exchangeUid || "-"}</div>
+            {member.previousExchangeUid ? <><div>換綁前帳號</div><div>{member.previousExchange || "-"} {member.previousExchangeUid}</div></> : null}
             <div>UID 填寫時間</div>
             <div>{formatDateTime(member.uidSubmittedAt)}</div>
             <div>入群邀請連結</div>
@@ -253,7 +254,7 @@ export default async function MemberDetailPage({
               <details className="advanced-actions">
                 <summary>更換綁定交易所帳號</summary>
                 <form action={resetBoundAccountAction.bind(null,pageId)} className="stack">
-                  <p className="field-hint">更換後清除入群資格、入金與交易量證據，並撤銷舊邀請連結；付費事實與 Telegram 入群紀錄保留。需要 Discord 重新驗證，既有角色寫回保留供審核。</p>
+                  <p className="field-hint">更換後清除入群資格、入金與交易量證據，並撤銷舊邀請連結；付費事實與 Telegram 入群紀錄保留，舊帳號記錄在「換綁前帳號」。會員也可以在 TG Bot 自助換綁（新帳號查核通過才會更換）。需要 Discord 重新驗證，既有角色寫回保留供審核。</p>
                   <div className="field"><label htmlFor="bound-exchange">新綁定交易所</label><select className="input" id="bound-exchange" name="exchange" defaultValue={normalizeExchange(member.exchangeName) ?? ""} required><option value="" disabled>請選擇交易所</option><option value="mexc">MEXC</option><option value="bitget">Bitget</option><option value="okx">OKX</option></select></div>
                   <div className="field"><label htmlFor="bound-uid">新帳號 UID</label><input className="input" id="bound-uid" name="exchangeUid" inputMode="numeric" pattern="[0-9]{1,32}" maxLength={32} defaultValue={member.exchangeUid} required /></div>
                   <ActionButton icon={<Save />} danger>確認更換並重設資格</ActionButton>

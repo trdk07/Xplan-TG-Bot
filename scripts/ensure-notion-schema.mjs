@@ -27,10 +27,10 @@ ensureSelect("Status", [
   { name: "VIP", color: "pink" },
   { name: "suspended", color: "red" },
 ]);
-ensureMultiSelect("Tags", [{ name: "翻倉成功", color: "green" }]);
 ensureEmail("email");
 ensureCheckbox("已送出邀請");
-ensureRichText("Final P/L");
+ensureRichText("Previous Exchange");
+ensureRichText("Previous Exchange UID");
 ensureSelect("Renewal Step", [
   { name: "payment_pending", color: "purple" },
   { name: "declined", color: "gray" },

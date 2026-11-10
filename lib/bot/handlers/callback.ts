@@ -5,6 +5,7 @@ import {
   RULES_ACK_CALLBACK,
 } from "@/lib/bot/v2-messages";
 import { nonExpiringStatuses } from "@/lib/status";
+import { handleRebindCallback, isRebindCallback } from "@/lib/bot/rebind";
 import { getRuntimeConfig } from "@/lib/config";
 import { addDays, isPast, isoDateTime } from "@/lib/dates";
 import { isPaymentPending, isRenewalNoticeCandidate } from "@/lib/member-state";
@@ -70,6 +71,8 @@ export async function handleCallback(query: TelegramCallbackQuery, now: Date) {
     await markCallbackSelection(query, "我了解，開始驗證");
     return handleV2RulesAck(query, record, now);
   }
+  if (v2Enabled() && isRebindCallback(query.data))
+    return handleRebindCallback(query, record);
   if (v2Enabled() && query.data === PAYMENT_UPGRADE_CALLBACK)
     return handlePaymentUpgrade(query, record, now);
   if (v2Enabled() && query.data.startsWith("exchange:confirm:"))

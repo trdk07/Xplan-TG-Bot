@@ -100,7 +100,10 @@ it("approves identity-bound admission and sends Discord link without a trial dea
   expect(mocks.send).toHaveBeenCalledWith(
     123,
     expect.stringContaining("discord.gg/example"),
-    [[{ text: "我要付費升級", callback_data: "payment:upgrade" }]],
+    [
+      [{ text: "我要付費升級", callback_data: "payment:upgrade" }],
+      [{ text: "更換綁定交易所", callback_data: "rebind:start" }],
+    ],
   );
 });
 it("does not query an account different from the registration record", async () => {

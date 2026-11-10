@@ -30,8 +30,14 @@ export function paymentUpgradeButton(): InlineKeyboardButton[] {
   return [{ text: "我要付費升級", callback_data: PAYMENT_UPGRADE_CALLBACK }];
 }
 
+export const REBIND_START_CALLBACK = "rebind:start";
+
+export function rebindButton(): InlineKeyboardButton[] {
+  return [{ text: "更換綁定交易所", callback_data: REBIND_START_CALLBACK }];
+}
+
 export function discordGuideKeyboard(): InlineKeyboardButton[][] {
-  return [paymentUpgradeButton()];
+  return [paymentUpgradeButton(), rebindButton()];
 }
 
 export function escapeHtml(value: string) {
@@ -99,7 +105,7 @@ export const UID_MISMATCH_MESSAGE = [
   "",
   UID_LOCATION_HINT,
   "",
-  "若報名時填錯交易所或 UID，請聯絡小夏協助更正。",
+  "若想改用其他交易所的帳號，請點下方「更換綁定交易所」；報名資料填錯也可以聯絡小夏協助更正。",
 ].join("\n");
 
 export function admissionPassedMessage(inviteLink: string) {
@@ -150,7 +156,7 @@ export function discordGuideMessage(member: Member, intro: string) {
     "1. 點上方連結加入伺服器，完成伺服器規則確認。",
     "2. 約 10 分鐘內會自動取得「探索者」，免費資源不需要驗證就能使用。",
     "3. 已付費或交易量達標的會員，到驗證頻道點「驗證現有會員」，選擇交易所並輸入 UID 和 Email，即可取得「宇航員」。",
-    "想付費升級，可以點下方「我要付費升級」。",
+    "想付費升級，可以點下方「我要付費升級」；想改用其他交易所累積交易量，可以點「更換綁定交易所」。",
     "",
     "📝 <b>請記下你的驗證資料（Discord 驗證要用）</b>",
     `・交易所：${escapeHtml(exchangeName)}`,

@@ -19,6 +19,11 @@ import {
 } from "@/lib/auth";
 import { sendUsdtQrCode } from "@/lib/bot/payment-info";
 import {
+  accountRebindPatch,
+  findAccountOwner,
+  sameBoundAccount,
+} from "@/lib/account-rebind";
+import {
   manualPaymentProofRequestMessage,
   paymentProofRequestKeyboard,
   sendRenewalReminder,
@@ -557,13 +562,7 @@ async function readV2Member(pageId: string): Promise<Member> {
   return member;
 }
 
-function sameAccount(left: Member, right: Member) {
-  return (
-    normalizeExchange(left.exchangeName) ===
-      normalizeExchange(right.exchangeName) &&
-    left.exchangeUid === right.exchangeUid
-  );
-}
+const sameAccount = sameBoundAccount;
 
 export async function recheckQualificationAction(pageId: string) {
   await withAdminAction(pageId, async (operator) => {
@@ -665,15 +664,7 @@ export async function resetBoundAccountAction(
         member.exchangeUid === exchangeUid
       )
         return;
-      const all = await listMembers();
-      if (
-        all.some(
-          (other) =>
-            other.pageId !== pageId &&
-            normalizeExchange(other.exchangeName) === exchange &&
-            other.exchangeUid.trim() === exchangeUid,
-        )
-      )
+      if (findAccountOwner(await listMembers(), pageId, exchange, exchangeUid))
         throw new Error("此交易所與 UID 已綁定其他會員，請先處理重複紀錄。");
       await guard();
       await reserveBoundAccount(pageId, exchange, exchangeUid);
@@ -681,35 +672,13 @@ export async function resetBoundAccountAction(
       const fresh = await readV2Member(pageId);
       if (!sameAccount(member, fresh))
         throw new Error("綁定帳號已變更，請重新核對。");
-      const now = new Date();
-      const patch: MemberPatch = {
-        exchangeName: exchangeLabel(exchange),
+      const patch = accountRebindPatch(
+        fresh,
+        exchange,
         exchangeUid,
-        uidSubmittedAt: now.toISOString(),
-        exchangeRegistered: false,
-        onboardingStep: "collecting_info",
-        admissionVerifiedAt: null,
-        verifiedDepositUsdt: null,
-        depositEvidenceComplete: false,
-        depositReviewReason: "綁定帳號已變更，須重新核對推薦關係與歷史入金。",
-        depositReviewedAt: null,
-        depositReviewedBy: "",
-        volumeSpot30d: null,
-        volumeFutures30d: null,
-        volumeTotal30d: null,
-        volumeQualified: false,
-        volumeWindowStart: null,
-        volumeWindowEnd: null,
-        volumeCheckedAt: null,
-        volumeCheckError: "",
-        qualificationCheckedAt: null,
-        inviteLink: null,
-        inviteExpiresAt: null,
-        invitationEmailSent: false,
-        lastBotCheckAt: now.toISOString(),
-        lastBotMessage: `Bound exchange account reset by ${operator}; Discord re-verification required`,
-      };
-      patch.status = effectiveMembership({ ...fresh, ...patch }, now);
+        new Date(),
+        operator,
+      );
       await guard();
       await updateMember(pageId, patch);
     });
