@@ -121,7 +121,10 @@ export async function handleV2Start(
     );
     return;
   }
+  // A stored link is only usable while the member may still join; after a
+  // status change (e.g. special -> free) fall through to the rules instead.
   if (
+    canJoinCommunity(member, now) &&
     member.inviteLink &&
     member.inviteExpiresAt &&
     Date.parse(member.inviteExpiresAt) > now.getTime()

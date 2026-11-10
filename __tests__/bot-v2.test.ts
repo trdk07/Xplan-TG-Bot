@@ -269,4 +269,15 @@ it("approves the join request of a paying member on another exchange", async () 
   expect(mocks.approve).toHaveBeenCalledWith(123);
 });
 
+it("shows the rules instead of a stale invite link once the member may no longer join", async () => {
+  const stale = { ...bybit, inviteLink: "https://t.me/old", inviteExpiresAt: "2026-10-29" };
+  await handleV2Start(stale, { chat: { id: 123 } } as any, now);
+  const [, text, keyboard] = mocks.send.mock.calls[0];
+  expect(text).not.toContain("https://t.me/old");
+  expect(keyboard[1][0].callback_data).toBe("payment:upgrade");
+  mocks.send.mockClear();
+  await handleV2Start({ ...stale, ...paidFacts }, { chat: { id: 123 } } as any, now);
+  expect(mocks.send.mock.calls[0][1]).toContain("https://t.me/old");
+});
+
 afterEach(() => vi.unstubAllEnvs());
