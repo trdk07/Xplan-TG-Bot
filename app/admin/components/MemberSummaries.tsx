@@ -1,3 +1,4 @@
+import { ProofThumbnail } from "@/app/admin/components/ProofThumbnail";
 import { ImageIcon } from "lucide-react";
 import { formatDateTime } from "@/lib/dates";
 import type { Member } from "@/lib/notion";
@@ -49,6 +50,9 @@ export function PaymentReviewSummary({ member }: { member: Member }) {
       <span className="subtle small-text">{state.detail}</span>
       {legacyBitMartReviewNote(member) ? (
         <span className="legacy-note">{legacyBitMartReviewNote(member)}</span>
+      ) : null}
+      {member.paymentProofFileId ? (
+        <ProofThumbnail fileId={member.paymentProofFileId} />
       ) : null}
       {member.paymentProofFileId ? (
         <a

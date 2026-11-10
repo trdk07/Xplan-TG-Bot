@@ -1108,3 +1108,36 @@ tr:hover td {
     grid-template-columns: 56px 1fr 60px;
   }
 }
+
+/* Payment screenshot preview: visible on phones without leaving the page. */
+.proof-thumb {
+  align-self: flex-start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: block;
+  justify-self: start;
+  width: fit-content;
+  margin-top: 8px;
+  max-width: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.proof-thumb img {
+  display: block;
+  max-height: 180px;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.proof-thumb-hint {
+  background: rgba(0, 0, 0, 0.6);
+  bottom: 0;
+  color: #fff;
+  font-size: 11px;
+  left: 0;
+  padding: 2px 8px;
+  position: absolute;
+  right: 0;
+  text-align: center;
+}

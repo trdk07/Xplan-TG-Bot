@@ -1,3 +1,4 @@
+import { ProofThumbnail } from "@/app/admin/components/ProofThumbnail";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import type { Route } from "next";
@@ -31,10 +32,12 @@ function Avatar({ label }: { label: string }) {
 function InboxMemberCard({
   member,
   detail,
+  proofFileId,
   children,
 }: {
   member: Member;
   detail: string;
+  proofFileId?: string;
   children: ReactNode;
 }) {
   const label = member.telegramUsername || member.telegramUserId || "-";
@@ -47,6 +50,7 @@ function InboxMemberCard({
           <StatusBadge status={v2Enabled() ? effectiveMembership(member) : member.status} />
         </div>
         <p className="subtle small-text">{detail}</p>
+        {proofFileId ? <ProofThumbnail fileId={proofFileId} /> : null}
       </div>
       <div className="inbox-card-actions">{children}</div>
     </article>
@@ -127,6 +131,7 @@ export function TodayInbox({ members }: { members: Member[] }) {
                   key={member.pageId}
                   member={member}
                   detail={`UID 末四碼：${member.paymentUidLast4 || "-"}`}
+                  proofFileId={member.paymentProofFileId || undefined}
                 >
                   {member.paymentProofFileId ? (
                     <a

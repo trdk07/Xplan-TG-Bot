@@ -811,7 +811,7 @@ describe("v2 admin evidence presentation", () => {
     expect(html).toContain("重新檢查資格");
     expect(html).toContain("220,000");
     expect(html).toContain("上次成功資料");
-    expect(html).toContain("upstream_unavailable");
+    expect(html).toContain("交易所 API 暫時無法連線");
     expect(html).toContain("身分組：探索者");
     expect(html).toContain("Discord 重新驗證");
     expect(html).not.toContain("延長體驗期");
