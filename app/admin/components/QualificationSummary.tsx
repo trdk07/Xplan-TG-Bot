@@ -13,6 +13,13 @@ export function qualificationNeedsReview(member: Member, now = new Date()) {
   return unboundPremiumDiscord(member,now) || member.qualificationFieldsAvailable === false || member.onboardingStep === "needs_review"
     || Boolean(member.volumeCheckError) || (!validPastDate(member.admissionVerifiedAt, now) && Boolean(member.depositReviewReason));
 }
+/** Turnover counted beyond spot and futures; derived because only the total is stored. */
+function otherVolume(member: Member) {
+  const { volumeTotal30d: total, volumeSpot30d: spot, volumeFutures30d: futures } = member;
+  return [total, spot, futures].every(value => typeof value === "number")
+    ? Math.max(0, Math.round((total! - spot! - futures!) * 1e8) / 1e8)
+    : 0;
+}
 function staleVolume(member: Member, now: Date) {
   return Boolean(member.volumeCheckError) || (validPastDate(member.volumeCheckedAt, now) && now.getTime() - Date.parse(member.volumeCheckedAt!) > 86_400_000);
 }
@@ -52,6 +59,7 @@ export function QualificationDetails({ member }: { member: Member }) {
         <div>覆核人／時間</div><div>{member.depositReviewedBy || "尚無紀錄"}／{formatDateTime(member.depositReviewedAt ?? null)}</div>
         <div>30 日現貨成交額</div><div>{amount(member.volumeSpot30d)} USDT</div>
         <div>30 日合約成交額</div><div>{amount(member.volumeFutures30d)} USDT</div>
+        {otherVolume(member) > 0 ? <><div>30 日其他成交額（鏈上／CFD／美股等）</div><div>{amount(otherVolume(member))} USDT</div></> : null}
         <div>交易量資格</div><div>{member.volumeQualified && validPastDate(member.admissionVerifiedAt,now) && validPastDate(member.volumeCheckedAt,now) ? "上次成功核實達標" : "尚無有效達標證據"}</div>
         <div>統計起日（含）</div><div>{formatDateTime(member.volumeWindowStart ?? null)}</div>
         <div>統計迄日（不含）</div><div>{formatDateTime(member.volumeWindowEnd ?? null)}</div>
@@ -59,7 +67,7 @@ export function QualificationDetails({ member }: { member: Member }) {
         <div>捉妖小道權限</div><div>{["active_paid","partner","exempt","VIP"].includes(effective) ? "符合有效付費或特殊會籍條件" : "未符合有效付費或特殊會籍條件"}</div>
       </div>
       <div className="panel-body">
-        <p className="field-hint">成交額為單一綁定帳號、前 30 個完整台北日的現貨與合約合計；每天 09:00 檢查，達 200,000 USDT 才取得交易量資格。API 異常保留上次成功資格，付費期限仍獨立到期。</p>
+        <p className="field-hint">成交額為單一綁定帳號、前 30 個完整台北日的合計：現貨與合約，以及交易所一併統計的鏈上、CFD、美股等交易；每天 09:00 檢查，達 200,000 USDT 才取得交易量資格。API 異常保留上次成功資格，付費期限仍獨立到期。</p>
         <p className="field-hint">Discord 身分組僅顯示 Notion 寫回結果，不以會籍推測已套用角色。</p>
       </div>
     </section>

@@ -1,4 +1,8 @@
-import { type Exchange, sumAmounts } from "@/lib/membership-v2";
+import {
+  type Exchange,
+  amountRemainder,
+  sumAmounts,
+} from "@/lib/membership-v2";
 import type { DepositEvent } from "@/lib/evidence-store";
 export type AdmissionEvidence = {
   referral: boolean | null;
@@ -6,7 +10,14 @@ export type AdmissionEvidence = {
   complete: boolean;
   events: DepositEvent[];
 };
-export type VolumeEvidence = { spot: string; futures: string };
+export type VolumeEvidence = {
+  spot: string;
+  futures: string;
+  /** Turnover the exchange counts beyond spot and futures (on-chain, CFD, stocks). */
+  other?: string;
+};
+export type VolumeDay = { time: number; spot: string; futures: string; total: string };
+export type VolumeProbe = VolumeEvidence & { days: VolumeDay[] };
 export class ExchangeCheckError extends Error {}
 type Row = Record<string, any>;
 // Only deposit history may retain already-scoped pages after a later read fails.
@@ -310,8 +321,31 @@ export class ExchangeClient {
     uid: string,
     window: { start: string; end: string },
   ): Promise<VolumeEvidence> {
-    const deadline = Date.now() + 120000;
     this.require(exchange, "VOLUME");
+    const { days: _days, ...evidence } = await this.readVolume(
+      exchange,
+      uid,
+      window,
+    );
+    return evidence;
+  }
+  /**
+   * Read-only operator diagnostic: the same query as `volume` without the
+   * capability gates, plus the per-day rows. Never used to grant a tier.
+   */
+  async probeVolume(
+    exchange: Exchange,
+    uid: string,
+    window: { start: string; end: string },
+  ): Promise<VolumeProbe> {
+    return this.readVolume(exchange, uid, window);
+  }
+  private async readVolume(
+    exchange: Exchange,
+    uid: string,
+    window: { start: string; end: string },
+  ): Promise<VolumeProbe> {
+    const deadline = Date.now() + 120000;
     if (!/^\d{1,32}$/.test(uid)) throw new ExchangeCheckError("invalid_uid");
     const start = Date.parse(window.start),
       end = Date.parse(window.end);
@@ -337,17 +371,29 @@ export class ExchangeClient {
         )
       )
         throw new ExchangeCheckError("incomplete_volume_window");
-      if (
-        rows.some(
-          (row) =>
-            sumAmounts([String(row.spotVolume), String(row.futuresVolume)]) !==
-            sumAmounts([String(row.volumn)]),
-        )
-      )
+      // The daily total also covers on-chain, CFD and stock trades, which count
+      // toward the threshold. A total below spot + futures is still inconsistent.
+      const others = rows.map((row) =>
+        amountRemainder(String(row.volumn), [
+          String(row.spotVolume),
+          String(row.futuresVolume),
+        ]),
+      );
+      if (others.some((value) => value === null))
         throw new ExchangeCheckError("volume_total_mismatch");
+      const other = sumAmounts(others as string[]);
       return {
         spot: sumAmounts(rows.map((row) => String(row.spotVolume))),
         futures: sumAmounts(rows.map((row) => String(row.futuresVolume))),
+        ...(other !== "0" ? { other } : {}),
+        days: rows
+          .map((row) => ({
+            time: Number(row.time),
+            spot: sumAmounts([String(row.spotVolume)]),
+            futures: sumAmounts([String(row.futuresVolume)]),
+            total: sumAmounts([String(row.volumn)]),
+          }))
+          .sort((a, b) => a.time - b.time),
       };
     }
     if (exchange === "okx") {
@@ -372,7 +418,7 @@ export class ExchangeClient {
           throw new ExchangeCheckError("incomplete_volume_window");
         totals.push(sumAmounts([String(rows[0].totalVol)]));
       }
-      return { spot: totals[0], futures: totals[1] };
+      return { spot: totals[0], futures: totals[1], days: [] };
     }
     // Commission-eligible turnover is never authoritative full trading turnover.
     // MEXC full spot/futures coverage is unavailable, irrespective of operator flags.

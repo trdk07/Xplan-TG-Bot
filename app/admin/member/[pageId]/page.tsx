@@ -1,3 +1,4 @@
+import { VolumeProbe } from "@/app/admin/components/VolumeProbe";
 import { ProofThumbnail } from "@/app/admin/components/ProofThumbnail";
 import Link from "next/link";
 import { DiscordAdminControls } from "@/app/admin/components/DiscordAdminControls";
@@ -228,6 +229,7 @@ export default async function MemberDetailPage({
 
             {policyV2 ? <>
               <form action={recheckQualificationAction.bind(null,pageId)}><ActionButton icon={<RefreshCw />} secondary>重新檢查資格</ActionButton><p className="field-hint">依已開啟且完成資料範圍核對的交易所服務檢查；查詢失敗不會清除上次成功交易量資格。</p></form>
+              <VolumeProbe pageId={pageId} />
               <details className="advanced-actions">
                 <summary>歷史入金人工覆核</summary>
                 <form action={approveHistoricalDepositAction.bind(null,pageId)} className="stack">

@@ -54,8 +54,27 @@ export function amountAtLeast(value: string, minimum: string): boolean {
   const { units } = decimals([value, minimum]);
   return units[0] >= units[1];
 }
-export function volumeMeetsThreshold(spot: string, futures: string) {
-  return amountAtLeast(sumAmounts([spot, futures]), VOLUME_THRESHOLD_USDT);
+/** `other` is turnover the exchange reports beyond spot and futures (on-chain, CFD, stocks). */
+export function volumeMeetsThreshold(
+  spot: string,
+  futures: string,
+  other = "0",
+) {
+  return amountAtLeast(
+    sumAmounts([spot, futures, other]),
+    VOLUME_THRESHOLD_USDT,
+  );
+}
+/** total - parts as a decimal string, or null when the parts exceed the total. */
+export function amountRemainder(total: string, parts: string[]): string | null {
+  const { scale, units } = decimals([total, ...parts]);
+  const rest = units[0] - units.slice(1).reduce((a, b) => a + b, 0n);
+  if (rest < 0n) return null;
+  const text = rest.toString().padStart(scale + 1, "0");
+  return scale
+    ? `${text.slice(0, -scale)}.${text.slice(-scale)}`.replace(/\.?0+$/, "") ||
+        "0"
+    : text;
 }
 export function completedVolumeWindow(now = new Date()): {
   start: string;
