@@ -120,3 +120,21 @@ export async function runDiscordAdmin(
 }
 export const requestDiscordAdmin = (request: AdminRequest) =>
   runDiscordAdmin(request);
+
+/**
+ * What to tell a member about Discord right after a payment approval.
+ * `syncMessage` is the Discord Worker's reply to an immediate sync, or null
+ * when no sync ran (not verified, admin link not configured, or it failed).
+ */
+export function discordNoteAfterApproval(
+  discordId: string,
+  syncMessage: string | null,
+) {
+  if (!discordId.trim())
+    return "Discord 尚未驗證：請到驗證頻道點「驗證現有會員」，完成後即可取得「宇航員」。";
+  if (syncMessage && /「(宇航員|飛行員)」/.test(syncMessage))
+    return "Discord 身分組已同步更新。";
+  if (syncMessage && syncMessage.includes("重新驗證"))
+    return "⚠️ 你的 Discord 綁定需要重新驗證才能取得「宇航員」：請到驗證頻道點「驗證現有會員」，填入目前的交易所、UID 和 Email。";
+  return "Discord 已驗證者會在 10 分鐘內自動更新為「宇航員」；尚未驗證請到驗證頻道點「驗證現有會員」。";
+}
