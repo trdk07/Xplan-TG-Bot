@@ -3,6 +3,8 @@
 import { randomUUID } from "node:crypto";
 import {
   DiscordAdminError,
+  discordNoteAfterApproval,
+  isDiscordAdminConfigured,
   requestDiscordAdmin,
   type DiscordAdminState,
 } from "@/lib/discord-admin";
@@ -223,11 +225,36 @@ export async function markPaidAction(
         lastBotCheckAt: isoDateTime(now),
         lastBotMessage: `Marked paid by ${operator} (${label})`,
       });
+      // Update the Discord role right away instead of waiting for the next
+      // ten-minute sync. Best effort: the scheduled sync still applies it.
+      let discordSync: string | null = null;
+      if (policyV2 && member.discordId && isDiscordAdminConfigured()) {
+        try {
+          await guard();
+          discordSync = (
+            await requestDiscordAdmin({
+              action: "sync",
+              requestId: randomUUID(),
+              pageId: member.pageId,
+              discordId: member.discordId,
+              verifiedAt: member.discordVerifiedAt
+                ? Date.parse(member.discordVerifiedAt)
+                : null,
+              operator,
+            })
+          ).message;
+          await updateMemberExistingProperties(pageId, {
+            lastBotMessage: `Marked paid by ${operator} (${label}); DC sync: ${discordSync}`,
+          }).catch(() => []);
+        } catch (error) {
+          console.error("Discord sync after payment approval failed", error);
+        }
+      }
       if (member.telegramUserId) {
         await sendMessage(
           member.telegramUserId,
           policyV2
-            ? `付款已核准（${durationMonths} 個月），付費期限至 ${formatDateTime(isoDateTime(reviewDueAt))}。目前會籍：${memberStatusLabel(approvedStatus)}。Telegram 群組資格不受會籍到期影響。\nDiscord 已驗證者會在 10 分鐘內自動更新為「宇航員」；尚未驗證請到驗證頻道點「驗證現有會員」。`
+            ? `付款已核准（${durationMonths} 個月），付費期限至 ${formatDateTime(isoDateTime(reviewDueAt))}。目前會籍：${memberStatusLabel(approvedStatus)}。Telegram 群組資格不受會籍到期影響。\n${discordNoteAfterApproval(member.discordId, discordSync)}`
             : `訂閱已更新，目前為有效狀態，有效期限至 ${formatDateTime(isoDateTime(reviewDueAt))}。Telegram 群組資格不受會籍到期影響。`,
         );
       }
