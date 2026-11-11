@@ -150,7 +150,9 @@ async function checkUnlocked(
         volume = await deps.client.volume(exchange, member.exchangeUid, window);
       patch.volumeSpot30d = Number(volume.spot);
       patch.volumeFutures30d = Number(volume.futures);
-      patch.volumeTotal30d = Number(sumAmounts([volume.spot, volume.futures]));
+      patch.volumeTotal30d = Number(
+        sumAmounts([volume.spot, volume.futures, volume.other ?? "0"]),
+      );
       if (
         ![
           patch.volumeSpot30d,
@@ -159,7 +161,11 @@ async function checkUnlocked(
         ].every(Number.isFinite)
       )
         throw new ExchangeCheckError("invalid_volume_amount");
-      patch.volumeQualified = volumeMeetsThreshold(volume.spot, volume.futures);
+      patch.volumeQualified = volumeMeetsThreshold(
+        volume.spot,
+        volume.futures,
+        volume.other,
+      );
       patch.volumeWindowStart = window.start;
       patch.volumeWindowEnd = window.end;
       patch.volumeCheckedAt = now.toISOString();

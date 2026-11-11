@@ -19,6 +19,9 @@ import {
   setAdminCookie,
   type Operator,
 } from "@/lib/auth";
+import { ExchangeClient } from "@/lib/exchanges";
+import { qualificationCodeLabel } from "@/lib/qualification-labels";
+import { describeVolumeProbe, type VolumeProbeState } from "@/lib/volume-probe";
 import { sendUsdtQrCode } from "@/lib/bot/payment-info";
 import {
   getEvidenceStore,
@@ -41,9 +44,11 @@ import {
   recheckQualifications,
   reserveBoundAccount,
   withQualificationLock,
+  qualificationError,
 } from "@/lib/qualification";
 import {
   amountAtLeast,
+  completedVolumeWindow,
   effectiveMembership,
   exchangeLabel,
   normalizeExchange,
@@ -837,5 +842,42 @@ export async function resolveHeldNotificationAction(key: string) {
         lastBotCheckAt: new Date().toISOString(),
         lastBotMessage: `Held notification closed by ${operator} without resend: ${notificationKindLabel(key)}`,
       }).catch(() => []);
+  });
+}
+
+/**
+ * Read-only: query the member's bound account for the last 30 complete days,
+ * ignoring the volume capability gates. Writes nothing and grants nothing.
+ */
+export async function probeVolumeAction(
+  pageId: string,
+  _previous: VolumeProbeState,
+  _formData: FormData,
+): Promise<VolumeProbeState> {
+  return withAdminAction(pageId, async () => {
+    const fail = (message: string): VolumeProbeState => ({
+      kind: "error",
+      message,
+      lines: [],
+    });
+    const member = await getMemberByPageId(pageId);
+    if (!member) return fail("找不到會員。");
+    const exchange = normalizeExchange(member.exchangeName);
+    const uid = member.exchangeUid.trim();
+    if (!exchange || !uid)
+      return fail("這位會員綁定的不是 MEXC／Bitget／OKX，或缺少 UID，無法查詢交易量。");
+    const now = new Date();
+    const window = completedVolumeWindow(now);
+    try {
+      const probe = await new ExchangeClient(process.env, fetch, now).probeVolume(
+        exchange,
+        uid,
+        window,
+      );
+      return describeVolumeProbe(exchange, uid, window, probe);
+    } catch (error) {
+      const code = qualificationError(error);
+      return fail(`查詢失敗：${qualificationCodeLabel(code)}（${code}）`);
+    }
   });
 }

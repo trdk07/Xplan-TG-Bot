@@ -1187,3 +1187,11 @@ button.proof-link {
   gap: 6px;
   padding: 8px 16px;
 }
+
+.probe-lines {
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 8px 0 0;
+  overflow-wrap: anywhere;
+  padding-left: 18px;
+}

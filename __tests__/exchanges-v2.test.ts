@@ -495,3 +495,41 @@ it("resets the two-minute budget for each sequential call on the reused exchange
     vi.useRealTimers();
   }
 });
+
+describe("turnover beyond spot and futures, and the read-only probe", () => {
+  const window = completedVolumeWindow(now),
+    start = Date.parse(window.start);
+  const rows = (volumn: string) =>
+    vi.fn(async () =>
+      Response.json({
+        code: "00000",
+        data: Array.from({ length: 30 }, (_, i) => ({
+          uid: "123",
+          time: String(start + i * 86400000),
+          spotVolume: "1000",
+          futuresVolume: "5000",
+          volumn,
+        })),
+      }),
+    );
+  it("counts on-chain, CFD and stock turnover reported in the daily total", async () => {
+    expect(
+      await new ExchangeClient(env, rows("7500.5"), now).volume("bitget", "123", window),
+    ).toEqual({ spot: "30000", futures: "150000", other: "45015" });
+  });
+  it("still rejects a daily total below spot plus futures", async () => {
+    await expect(
+      new ExchangeClient(env, rows("5999"), now).volume("bitget", "123", window),
+    ).rejects.toThrow("volume_total_mismatch");
+  });
+  it("probes with the capability gates off and returns the daily rows", async () => {
+    const gated = { ...env, BITGET_VOLUME_ENABLED: "false", BITGET_VOLUME_UNIT_VERIFIED: "false" };
+    await expect(
+      new ExchangeClient(gated, rows("6000"), now).volume("bitget", "123", window),
+    ).rejects.toThrow("volume_disabled");
+    const probe = await new ExchangeClient(gated, rows("6000"), now).probeVolume("bitget", "123", window);
+    expect(probe).toMatchObject({ spot: "30000", futures: "150000" });
+    expect(probe.days).toHaveLength(30);
+    expect(probe.days[0]).toEqual({ time: start, spot: "1000", futures: "5000", total: "6000" });
+  });
+});
