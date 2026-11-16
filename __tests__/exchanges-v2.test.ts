@@ -533,3 +533,33 @@ describe("turnover beyond spot and futures, and the read-only probe", () => {
     expect(probe.days[0]).toEqual({ time: start, spot: "1000", futures: "5000", total: "6000" });
   });
 });
+
+describe("Cloudflare Workers fetch compatibility", () => {
+  it("never asks for redirect: \"error\", which the Workers runtime refuses", async () => {
+    const window = completedVolumeWindow(now),
+      start = Date.parse(window.start);
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(init?.redirect).toBe("manual");
+      return Response.json({
+        code: "00000",
+        data: Array.from({ length: 30 }, (_, i) => ({
+          uid: "123",
+          time: String(start + i * 86400000),
+          spotVolume: "1",
+          futuresVolume: "1",
+          volumn: "2",
+        })),
+      });
+    });
+    await new ExchangeClient(env, fetcher, now).volume("bitget", "123", window);
+    expect(fetcher).toHaveBeenCalled();
+  });
+  it("refuses a redirected exchange response instead of following it", async () => {
+    const fetcher = vi.fn(
+      async () => new Response(null, { status: 302, headers: { location: "https://elsewhere.example/" } }),
+    );
+    await expect(
+      new ExchangeClient(env, fetcher, now).admission("bitget", "123"),
+    ).rejects.toThrow("upstream_http_302");
+  });
+});
