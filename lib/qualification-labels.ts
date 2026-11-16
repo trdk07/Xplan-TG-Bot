@@ -22,5 +22,10 @@ const LABELS: Record<string, string> = {
 
 export function qualificationCodeLabel(code: string | null | undefined) {
   if (!code) return "";
+  const http = code.match(/^upstream_http_(\d{3})$/)?.[1];
+  if (http)
+    return `交易所 API 回應錯誤（HTTP ${http}${
+      http === "401" || http === "403" ? "，金鑰無效或權限不足" : ""
+    }）`;
   return LABELS[code] ?? code;
 }

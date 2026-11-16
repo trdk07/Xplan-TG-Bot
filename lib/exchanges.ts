@@ -125,7 +125,9 @@ export class ExchangeClient {
           signal: AbortSignal.timeout(
             Math.min(10000, this.remaining(deadline)),
           ),
-          redirect: "error",
+          // Cloudflare Workers reject redirect: "error" with a TypeError before
+          // sending anything. "manual" returns the 3xx, which is refused below.
+          redirect: "manual",
         },
       );
       this.remaining(deadline);

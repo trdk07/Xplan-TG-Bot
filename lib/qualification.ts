@@ -35,6 +35,10 @@ type Dependencies = {
   client: Pick<ExchangeClient, "admission" | "volume">;
 };
 export function qualificationError(error: unknown) {
+  // Keep the real cause in the Worker logs: a generic code alone once hid a
+  // runtime incompatibility that failed every exchange call.
+  if (!(error instanceof ExchangeCheckError))
+    console.error("Unexpected exchange check failure", error);
   return error instanceof ExchangeCheckError
     ? error.message
     : "upstream_unavailable";
