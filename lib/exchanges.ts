@@ -66,6 +66,24 @@ export class ExchangeClient {
       throw new ExchangeCheckError("operation_budget_exceeded");
     return remaining;
   }
+  private bitgetRelay() {
+    const { BITGET_RELAY_URL: url, BITGET_RELAY_TOKEN: token } = this.env;
+    if (!url && !token) return undefined;
+    try {
+      const relay = new URL(url ?? "");
+      if (
+        relay.protocol === "https:" &&
+        !relay.username && !relay.password &&
+        relay.pathname === "/" && !relay.search && !relay.hash &&
+        token && /^[A-Za-z0-9_-]{32,256}$/.test(token)
+      ) {
+        return { origin: relay.origin, token };
+      }
+    } catch {
+      // A malformed URL fails closed along with other incomplete relay settings.
+    }
+    throw new ExchangeCheckError("bitget_relay_configuration_invalid");
+  }
   private async request(
     exchange: Exchange,
     path: string,
@@ -80,11 +98,12 @@ export class ExchangeClient {
     const passphrase = this.env[`${prefix}_API_PASSPHRASE`];
     if (!key || !secret || (exchange !== "mexc" && !passphrase))
       throw new ExchangeCheckError("credentials_missing");
+    const relay = exchange === "bitget" ? this.bitgetRelay() : undefined;
     const method = exchange === "bitget" ? "POST" : "GET";
     const body = method === "POST" ? JSON.stringify(values) : "";
     const host = {
       mexc: "https://api.mexc.com",
-      bitget: "https://api.bitget.com",
+      bitget: relay?.origin ?? "https://api.bitget.com",
       okx: "https://www.okx.com",
     }[exchange];
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -92,6 +111,7 @@ export class ExchangeClient {
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
       };
+      if (relay) headers.Authorization = `Bearer ${relay.token}`;
       let query =
         exchange === "bitget"
           ? ""

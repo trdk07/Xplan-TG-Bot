@@ -24,11 +24,17 @@ describe("exchange-qualified evidence", () => {
       client.volume("bitget", "123", completedVolumeWindow(now)),
     ).rejects.toThrow("volume_not_verified");
   });
-  it("signs UID-scoped Bitget requests and preserves deposit events for dedupe", async () => {
+  it.each([false, true])("signs UID-scoped Bitget requests and preserves deposit events (relay: %s)", async (useRelay) => {
+    const token = "test_bitget_relay_token_for_affiliate";
+    const origin = useRelay ? "https://relay.example" : "https://api.bitget.com";
+    const config = useRelay ? { ...env, BITGET_RELAY_URL: origin, BITGET_RELAY_TOKEN: token } : env;
     const fetcher = vi.fn(
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const headers = new Headers(init?.headers),
           url = new URL(String(input));
+        expect(url.origin).toBe(origin);
+        expect(headers.get("Authorization")).toBe(useRelay ? `Bearer ${token}` : null);
+        expect(init?.redirect).toBe("manual");
         expect(headers.get("ACCESS-SIGN")).toBe(
           createHmac("sha256", env.BITGET_API_SECRET_KEY)
             .update(
@@ -62,7 +68,7 @@ describe("exchange-qualified evidence", () => {
         });
       },
     );
-    const result = await new ExchangeClient(env, fetcher, now).admission(
+    const result = await new ExchangeClient(config, fetcher, now).admission(
       "bitget",
       "123",
     );
@@ -72,6 +78,19 @@ describe("exchange-qualified evidence", () => {
       usdtAmount: "100",
       kind: "deposit",
     });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+  it.each([
+    { BITGET_RELAY_URL: "https://relay.example" },
+    { BITGET_RELAY_TOKEN: "test_bitget_relay_token_for_affiliate" },
+    { BITGET_RELAY_URL: "http://relay.example", BITGET_RELAY_TOKEN: "test_bitget_relay_token_for_affiliate" },
+    { BITGET_RELAY_URL: "https://relay.example/redirect", BITGET_RELAY_TOKEN: "test_bitget_relay_token_for_affiliate" },
+  ])("rejects an incomplete or invalid Bitget relay configuration before fetch", async (config) => {
+    const fetcher = vi.fn(async () => Response.json({ code: "00000", data: [] }));
+    await expect(
+      new ExchangeClient({ ...env, ...config }, fetcher, now).admission("bitget", "123"),
+    ).rejects.toThrow("bitget_relay_configuration_invalid");
+    expect(fetcher).not.toHaveBeenCalled();
   });
   it("rejects foreign-account rows rather than aggregating them", async () => {
     const fetcher = vi.fn(async () =>
