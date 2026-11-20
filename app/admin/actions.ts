@@ -867,7 +867,7 @@ export async function probeVolumeAction(
     if (!exchange || !uid)
       return fail("這位會員綁定的不是 MEXC／Bitget／OKX，或缺少 UID，無法查詢交易量。");
     const now = new Date();
-    const window = completedVolumeWindow(now);
+    const window = completedVolumeWindow(now, exchange);
     try {
       const probe = await new ExchangeClient(process.env, fetch, now).probeVolume(
         exchange,
