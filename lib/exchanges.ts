@@ -20,6 +20,8 @@ export type VolumeDay = { time: number; spot: string; futures: string; total: st
 export type VolumeProbe = VolumeEvidence & { days: VolumeDay[] };
 export class ExchangeCheckError extends Error {}
 type Row = Record<string, any>;
+// OKX documents a server error for invitee-list limits of 99 or greater.
+const OKX_UID_PAGE_SIZE = "10";
 // Only deposit history may retain already-scoped pages after a later read fails.
 class PartialDepositHistory extends ExchangeCheckError {
   constructor(readonly rows: Row[]) {
@@ -152,8 +154,13 @@ export class ExchangeClient {
           redirect: "manual",
         },
       );
+      const result = response.ok ? ((await response.json()) as Row) : null;
       this.remaining(deadline);
-      if ((response.status === 429 || response.status >= 500) && attempt < 2) {
+      const isRetryable =
+        response.status === 429 ||
+        response.status >= 500 ||
+        (exchange === "okx" && String(result?.code) === "50011");
+      if (isRetryable && attempt < 2) {
         const retrySeconds = Number(response.headers.get("Retry-After") ?? "1");
         const delay =
           Number.isFinite(retrySeconds) && retrySeconds >= 0
@@ -166,9 +173,8 @@ export class ExchangeClient {
       }
       if (!response.ok)
         throw new ExchangeCheckError(`upstream_http_${response.status}`);
-      const result = (await response.json()) as Row;
-      this.remaining(deadline);
       if (
+        !result ||
         result.success === false ||
         !["0", "00000", "200"].includes(String(result.code ?? "0"))
       )
@@ -243,7 +249,7 @@ export class ExchangeClient {
       const listed = await this.request(
         exchange,
         "/api/v5/affiliate/invitee/list",
-        { uid, page: "1", limit: "100" },
+        { uid, page: "1", limit: OKX_UID_PAGE_SIZE },
         deadline,
       );
       const matches = this.scoped(listed.data, uid),
@@ -429,7 +435,7 @@ export class ExchangeClient {
           {
             uid,
             page: "1",
-            limit: "100",
+            limit: OKX_UID_PAGE_SIZE,
             periodType: "custom",
             begin: String(start),
             end: String(end - 1),
@@ -440,6 +446,7 @@ export class ExchangeClient {
         const rows = this.scoped(result.data, uid);
         if (rows.length !== 1 || Number(result.totalPage || 1) > 1)
           throw new ExchangeCheckError("incomplete_volume_window");
+        // The list endpoint scopes totalVol to its requested periodType.
         totals.push(sumAmounts([String(rows[0].totalVol)]));
       }
       return { spot: totals[0], futures: totals[1], days: [] };
