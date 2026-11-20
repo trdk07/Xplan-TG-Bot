@@ -150,7 +150,7 @@ async function checkUnlocked(
   }
   if (admitted && !admissionOnly) {
     try {
-      const window = completedVolumeWindow(now),
+      const window = completedVolumeWindow(now, exchange),
         volume = await deps.client.volume(exchange, member.exchangeUid, window);
       patch.volumeSpot30d = Number(volume.spot);
       patch.volumeFutures30d = Number(volume.futures);

@@ -16,7 +16,7 @@ const env = {
 describe("exchange-qualified evidence", () => {
   it("refuses unverified turnover capability instead of returning zero", async () => {
     const client = new ExchangeClient(
-      { ...env, BITGET_VOLUME_UNIT_VERIFIED: "false" },
+      { ...env, BITGET_VOLUME_UNIT_VERIFIED: "false", BITGET_VOLUME_USE_REPORTED_TOTALS: "true" },
       vi.fn(),
       now,
     );
@@ -100,7 +100,7 @@ describe("exchange-qualified evidence", () => {
       new ExchangeClient(env, fetcher, now).admission("bitget", "123"),
     ).rejects.toThrow("unexpected_account");
   });
-  it("requires exactly30 completed daily Bitget buckets and correct sum", async () => {
+  it("uses the opt-in Bitget report with 30 complete buckets and no full-coverage claim", async () => {
     const window = completedVolumeWindow(now);
     const start = Date.parse(window.start);
     const fetcher = vi.fn(
@@ -119,8 +119,13 @@ describe("exchange-qualified evidence", () => {
         });
       },
     );
+    const reportedConfig = { ...env, BITGET_VOLUME_COVERAGE_VERIFIED: "false" };
+    await expect(new ExchangeClient(reportedConfig, fetcher, now).volume("bitget", "123", window))
+      .rejects.toThrow("volume_not_verified");
     expect(
-      await new ExchangeClient(env, fetcher, now).volume(
+      await new ExchangeClient({
+        ...reportedConfig, BITGET_VOLUME_USE_REPORTED_TOTALS: "true",
+      }, fetcher, now).volume(
         "bitget",
         "123",
         window,
@@ -220,8 +225,8 @@ it("verifies the exact OKX UID on invitee/list before accepting detail deposit e
   ]);
 });
 
-it("reads OKX spot and derivatives for the same complete Taipei days and retries business-code rate limits", async () => {
-  const window = completedVolumeWindow(now);
+it("reads opted-in OKX reports for complete UTC days and retries business-code rate limits", async () => {
+  const window = { start: "2026-09-28T00:00:00.000Z", end: "2026-10-28T00:00:00.000Z" };
   const categories: string[] = [];
   const fetcher = vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input));
@@ -241,7 +246,15 @@ it("reads OKX spot and derivatives for the same complete Taipei days and retries
       data: [{ uid: "123", totalVol: category === "SPOT" ? "50000.01" : "149999.99" }],
     });
   });
-  await expect(new ExchangeClient(okxEnv, fetcher, now).probeVolume("okx", "123", window))
+  const configured = {
+    ...okxEnv, OKX_VOLUME_ENABLED: "true", OKX_VOLUME_UNIT_VERIFIED: "true",
+    OKX_VOLUME_WINDOW_VERIFIED: "true", OKX_VOLUME_COVERAGE_VERIFIED: "false",
+    OKX_VOLUME_USE_REPORTED_TOTALS: "true",
+  };
+  const client = new ExchangeClient(configured, fetcher, now);
+  await expect(client.volume("okx", "123", completedVolumeWindow(now, "bitget")))
+    .rejects.toThrow("invalid_window");
+  await expect(client.volume("okx", "123", window))
     .resolves.toMatchObject({ spot: "50000.01", futures: "149999.99" });
   expect(categories).toEqual(["SPOT", "SPOT", "DERIVATIVE"]);
 });

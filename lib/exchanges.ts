@@ -1,6 +1,7 @@
 import {
   type Exchange,
   amountRemainder,
+  hasVolumePrerequisites,
   sumAmounts,
 } from "@/lib/membership-v2";
 import type { DepositEvent } from "@/lib/evidence-store";
@@ -54,12 +55,7 @@ export class ExchangeClient {
     const prefix = exchange.toUpperCase();
     if (this.env[`${prefix}_${capability}_ENABLED`] !== "true")
       throw new ExchangeCheckError(`${capability.toLowerCase()}_disabled`);
-    if (
-      capability === "VOLUME" &&
-      ["UNIT", "COVERAGE", "WINDOW"].some(
-        (kind) => this.env[`${prefix}_VOLUME_${kind}_VERIFIED`] !== "true",
-      )
-    )
+    if (capability === "VOLUME" && !hasVolumePrerequisites(exchange, this.env))
       throw new ExchangeCheckError("volume_not_verified");
   }
   private remaining(deadline: number): number {
@@ -380,6 +376,8 @@ export class ExchangeClient {
     const start = Date.parse(window.start),
       end = Date.parse(window.end);
     if (!Number.isFinite(start) || end - start !== 30 * 86400000)
+      throw new ExchangeCheckError("invalid_window");
+    if (exchange === "okx" && start % 86400000 !== 0)
       throw new ExchangeCheckError("invalid_window");
     if (exchange === "bitget") {
       const rows = await this.bitgetPages(

@@ -15,9 +15,9 @@ export type VolumeProbeState = {
 
 const money = (value: string) =>
   Number(value).toLocaleString("en-US", { maximumFractionDigits: 2 });
-const day = (time: number) =>
+const day = (time: number, timeZone: string) =>
   new Intl.DateTimeFormat("zh-TW", {
-    timeZone: "Asia/Taipei",
+    timeZone,
     month: "2-digit",
     day: "2-digit",
   }).format(new Date(time));
@@ -33,13 +33,14 @@ export function describeVolumeProbe(
   const total = sumAmounts([probe.spot, probe.futures, other]);
   const qualified = volumeMeetsThreshold(probe.spot, probe.futures, other);
   const active = probe.days.filter((row) => row.total !== "0");
+  const timeZone = exchange === "okx" ? "UTC" : "Asia/Taipei";
   return {
     kind: "success",
     message: `${exchangeLabel(exchange)} UID ${uid}：近 30 天合計 ${money(total)}，${
       qualified ? "已達" : "未達"
     } ${money(VOLUME_THRESHOLD_USDT)} 門檻`,
     lines: [
-      `統計期間（台北時間）：${day(Date.parse(window.start))} ～ ${day(Date.parse(window.end) - 1)}`,
+      `統計期間（${timeZone === "UTC" ? "UTC" : "台北時間"}）：${day(Date.parse(window.start), timeZone)} ～ ${day(Date.parse(window.end) - 1, timeZone)}`,
       `現貨：${money(probe.spot)}`,
       `合約：${money(probe.futures)}`,
       ...(other !== "0" ? [`其他（鏈上／CFD／美股等）：${money(other)}`] : []),
@@ -48,11 +49,11 @@ export function describeVolumeProbe(
             `有成交的天數：${active.length} / ${probe.days.length}`,
             ...active.map(
               (row) =>
-                `${day(row.time)}　現貨 ${money(row.spot)}　合約 ${money(row.futures)}　當日合計 ${money(row.total)}`,
+                `${day(row.time, timeZone)}　現貨 ${money(row.spot)}　合約 ${money(row.futures)}　當日合計 ${money(row.total)}`,
             ),
           ]
         : []),
-      "這是試查結果，不會寫入 Notion，也不會改變會員資格。金額單位以交易所回傳為準（待確認是否為 USDT）。",
+      "這是試查結果，不會寫入 Notion，也不會改變會員資格。成交額以交易所回報為準。",
     ],
   };
 }

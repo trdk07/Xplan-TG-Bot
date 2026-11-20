@@ -76,12 +76,23 @@ export function amountRemainder(total: string, parts: string[]): string | null {
         "0"
     : text;
 }
-export function completedVolumeWindow(now = new Date()): {
+export function hasVolumePrerequisites(
+  exchange: Exchange,
+  env: Record<string, string | undefined>,
+): boolean {
+  const key = `${exchange.toUpperCase()}_VOLUME_`;
+  const reportedTotals = exchange !== "mexc" && env[key + "USE_REPORTED_TOTALS"] === "true";
+  return env[key + "UNIT_VERIFIED"] === "true" &&
+    env[key + "WINDOW_VERIFIED"] === "true" &&
+    (reportedTotals || env[key + "COVERAGE_VERIFIED"] === "true");
+}
+
+export function completedVolumeWindow(now = new Date(), exchange?: Exchange): {
   start: string;
   end: string;
 } {
   const day = 86400000,
-    offset = 8 * 3600000;
+    offset = exchange === "okx" ? 0 : 8 * 3600000;
   const end = Math.floor((now.getTime() + offset) / day) * day - offset;
   return {
     start: new Date(end - 30 * day).toISOString(),

@@ -29,6 +29,12 @@ describe("v2 independent membership facts", () => {
       end: "2026-10-27T16:00:00.000Z",
     });
   });
+  it("uses completed UTC dates for OKX's daily report", () => {
+    expect(completedVolumeWindow(now, "okx")).toEqual({
+      start: "2026-09-28T00:00:00.000Z",
+      end: "2026-10-28T00:00:00.000Z",
+    });
+  });
   it("gives paid priority but retains volume eligibility after expiration", () => {
     expect(
       effectiveMembership(

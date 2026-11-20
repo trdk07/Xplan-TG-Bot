@@ -67,7 +67,7 @@ export function QualificationDetails({ member }: { member: Member }) {
         <div>捉妖小道權限</div><div>{["active_paid","partner","exempt","VIP"].includes(effective) ? "符合有效付費或特殊會籍條件" : "未符合有效付費或特殊會籍條件"}</div>
       </div>
       <div className="panel-body">
-        <p className="field-hint">成交額為單一綁定帳號、前 30 個完整台北日的合計：現貨與合約，以及交易所一併統計的鏈上、CFD、美股等交易；每天 09:00 檢查，達 200,000 USDT 才取得交易量資格。API 異常保留上次成功資格，付費期限仍獨立到期。</p>
+        <p className="field-hint">採用交易所回報的單一綁定帳號成交額，以各交易所切日的前 30 個完整日計算。每天台北時間 09:00 檢查，達 200,000 USDT 取得交易量資格。API 異常保留上次成功資格，付費期限仍獨立到期。</p>
         <p className="field-hint">Discord 身分組僅顯示 Notion 寫回結果，不以會籍推測已套用角色。</p>
       </div>
     </section>
