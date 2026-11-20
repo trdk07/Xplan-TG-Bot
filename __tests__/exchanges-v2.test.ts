@@ -189,6 +189,9 @@ it("verifies the exact OKX UID on invitee/list before accepting detail deposit e
         headers = new Headers(init?.headers);
       paths.push(url.pathname);
       expect(url.searchParams.get("uid")).toBe("123");
+      if (url.pathname.endsWith("/list")) {
+        expect(Number(url.searchParams.get("limit"))).toBeLessThan(99);
+      }
       expect(headers.get("OK-ACCESS-SIGN")).toBe(
         createHmac("sha256", okxEnv.OKX_API_SECRET_KEY)
           .update(
@@ -216,6 +219,33 @@ it("verifies the exact OKX UID on invitee/list before accepting detail deposit e
     "/api/v5/affiliate/invitee/detail",
   ]);
 });
+
+it("reads OKX spot and derivatives for the same complete Taipei days and retries business-code rate limits", async () => {
+  const window = completedVolumeWindow(now);
+  const categories: string[] = [];
+  const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input));
+    expect(url.searchParams.get("uid")).toBe("123");
+    expect(url.searchParams.get("periodType")).toBe("custom");
+    expect(url.searchParams.get("begin")).toBe(String(Date.parse(window.start)));
+    expect(url.searchParams.get("end")).toBe(String(Date.parse(window.end) - 1));
+    const category = url.searchParams.get("commissionCategory")!;
+    categories.push(category);
+    if (categories.length === 1) {
+      return Response.json({ code: "50011" }, { headers: { "Retry-After": "0" } });
+    }
+    expect(Number(url.searchParams.get("limit"))).toBeLessThan(99);
+    return Response.json({
+      code: "0",
+      totalPage: "1",
+      data: [{ uid: "123", totalVol: category === "SPOT" ? "50000.01" : "149999.99" }],
+    });
+  });
+  await expect(new ExchangeClient(okxEnv, fetcher, now).probeVolume("okx", "123", window))
+    .resolves.toMatchObject({ spot: "50000.01", futures: "149999.99" });
+  expect(categories).toEqual(["SPOT", "SPOT", "DERIVATIVE"]);
+});
+
 it.each([
   { data: [{ uid: "999" }], totalPage: "1" },
   { data: [{ uid: "123" }, { uid: "123" }], totalPage: "1" },
