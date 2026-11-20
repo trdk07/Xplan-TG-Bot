@@ -554,6 +554,17 @@ describe("turnover beyond spot and futures, and the read-only probe", () => {
 });
 
 describe("Cloudflare Workers fetch compatibility", () => {
+  it("calls an injected global fetch without binding it to ExchangeClient", async () => {
+    const fetcher: typeof fetch = async function (this: unknown) {
+      if (this !== undefined && this !== globalThis) {
+        throw new TypeError("Illegal invocation: function called with incorrect this reference");
+      }
+      return Response.json({ code: "00000", data: [] });
+    };
+    await expect(new ExchangeClient(env, fetcher, now).admission("bitget", "123"))
+      .resolves.toMatchObject({ referral: false });
+  });
+
   it("never asks for redirect: \"error\", which the Workers runtime refuses", async () => {
     const window = completedVolumeWindow(now),
       start = Date.parse(window.start);
