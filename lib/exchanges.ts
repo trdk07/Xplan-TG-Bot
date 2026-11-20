@@ -106,6 +106,8 @@ export class ExchangeClient {
       bitget: relay?.origin ?? "https://api.bitget.com",
       okx: "https://www.okx.com",
     }[exchange];
+    // Calling this.fetcher(...) would bind the Workers global fetch to the client.
+    const fetcher = this.fetcher;
     for (let attempt = 0; attempt < 3; attempt++) {
       this.remaining(deadline);
       const headers: Record<string, string> = {
@@ -136,7 +138,7 @@ export class ExchangeClient {
           timestamp + method + path + (query ? "?" + query : "") + body,
         );
       }
-      const response = await this.fetcher(
+      const response = await fetcher(
         host + path + (query ? "?" + query : ""),
         {
           method,
