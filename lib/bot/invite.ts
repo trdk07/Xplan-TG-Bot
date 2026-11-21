@@ -43,7 +43,11 @@ export function unknownApplicantMessage(username: string) {
       "・還沒有填寫報名表單",
       "・表單上的 Telegram username 和目前這個帳號不一樣",
       "",
-      "請點下方「前往報名頁（註冊＋填表）」，照著頁面步驟用推薦連結註冊交易所並填寫報名表，送出後稍等一下，再回到這裡重新按 /start。",
+      "不管走哪一種方式，都要先填報名表，機器人才找得到你：",
+      "・<b>免費入群</b>：用我們的推薦連結註冊 MEXC／Bitget／OKX，歷史累積入金滿 100 USDT。",
+      "・<b>付費加入</b>：不用重新註冊，填你自己的交易所和 UID，之後在這裡完成付款。",
+      "",
+      "請點下方「前往報名頁（註冊＋填表）」，選擇加入方式並送出，稍等一下，再回到這裡重新按 /start。",
       safeUsername
         ? `表單的 Telegram username 請填：<b>${safeUsername}</b>`
         : "你目前沒有設定 Telegram username，請先到 Telegram「設定 → 使用者名稱」設定一個，再填到表單裡。",
