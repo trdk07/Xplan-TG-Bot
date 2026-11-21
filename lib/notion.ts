@@ -47,6 +47,8 @@ export type Member = QualificationFields & {
   /** Account bound before the last rebind, kept for payment reconciliation. */
   previousExchange?: string;
   previousExchangeUid?: string;
+  /** When the application record was created in Notion (read-only). */
+  createdAt?: string | null;
 };
 
 export type MemberPatch = Partial<
@@ -58,6 +60,7 @@ export type MemberPatch = Partial<
     | "discordVerifiedAt"
     | "discordRole"
     | "reminderFieldsAvailable"
+    | "createdAt"
   >
 >;
 
@@ -105,6 +108,7 @@ const legacyProperties = {
 
 type NotionPage = {
   id: string;
+  created_time?: string;
   properties: Record<string, any>;
 };
 
@@ -274,6 +278,7 @@ export function mapNotionPageToMember(page: NotionPage): Member {
     tradingView: textProp(page, notionProperties.tradingView),
     previousExchange: textProp(page, notionProperties.previousExchange),
     previousExchangeUid: textProp(page, notionProperties.previousExchangeUid),
+    createdAt: page.created_time ?? null,
   };
 }
 

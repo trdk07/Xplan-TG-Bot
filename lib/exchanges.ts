@@ -250,6 +250,10 @@ export class ExchangeClient {
       );
       const matches = this.scoped(listed.data, uid),
         pages = Number(listed.totalPage ?? 1);
+      // OKX answers a UID outside our invitees with an empty list and zero
+      // pages. That is a definite "not referred", not an incomplete read.
+      if (matches.length === 0 && (pages === 0 || pages === 1))
+        return { referral: false, cumulative: "0", complete: true, events: [] };
       if (!Number.isInteger(pages) || pages < 1 || pages > 1)
         throw new ExchangeCheckError("pagination_incomplete");
       if (matches.length !== 1)

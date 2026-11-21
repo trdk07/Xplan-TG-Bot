@@ -27,7 +27,7 @@ it("groups problems by plain-language reason and names members by username", () 
     ],
     now,
   )!;
-  expect(text).toContain("共檢查 5 人，需要處理 3 人");
+  expect(text).toContain("共檢查 5 人，需要你處理 3 人");
   expect(text).toContain("【通知不確定有沒有送到】1 人\n@alice");
   expect(text).toContain("【交易所帳號重複（兩位會員綁了同一個 UID）】2 人\n@bob、@carol");
   expect(text).toContain("待確認通知");
@@ -48,4 +48,32 @@ it("reads the member and notification kind from an outbox key", () => {
   expect(pageIdFromNotificationKey(key)).toBe("35350abc-cc15-818a-a08e-dc5400870650");
   expect(notificationKindLabel(key)).toBe("付費到期通知");
   expect(notificationKindLabel("reminder:p:1:3day")).toBe("到期前 3 天提醒");
+});
+it("reports an exchange API outage once instead of as 62 manual reviews", () => {
+  const mexc = Array.from({ length: 62 }, (_, i) => ({
+    pageId: `m${i}`,
+    label: `@mexc${i}`,
+    exchange: "Mexc（抹茶）",
+    action: "error",
+    detail: "Admission verification requires operator review: upstream_http_400",
+  }));
+  const text = formatDailyReport(
+    [
+      ...mexc,
+      { pageId: "o", label: "@okx_user", exchange: "OKX", action: "error", detail: "Admission verification requires operator review: pagination_incomplete" },
+      { pageId: "ok", label: "@fine", action: "qualification_checked" },
+    ],
+    now,
+  )!;
+  expect(text).toContain("共檢查 64 人，需要你處理 1 人；另有 62 人受交易所 API 問題影響");
+  expect(text).toContain("🔧【MEXC API 查詢失敗：交易所 API 回應錯誤（HTTP 400）】62 人");
+  expect(text).toContain("@mexc0、@mexc1、@mexc2、@mexc3、@mexc4 等 62 人");
+  expect(text).not.toContain("@mexc5、");
+  expect(text).toContain("不是會員的問題");
+  expect(text).toContain("【入群資格（推薦關係／入金）需人工確認】1 人\n@okx_user");
+});
+it("keeps volume API failures separate per exchange", () => {
+  const issue = describeDailyIssue("Volume verification: upstream_rejected; retained last successful evidence", "bitget");
+  expect(issue.systemic).toBe(true);
+  expect(issue.title).toContain("Bitget API 查詢失敗");
 });

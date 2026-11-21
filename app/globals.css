@@ -1195,3 +1195,10 @@ button.proof-link {
   overflow-wrap: anywhere;
   padding-left: 18px;
 }
+
+.applicant-contacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  overflow-wrap: anywhere;
+}
