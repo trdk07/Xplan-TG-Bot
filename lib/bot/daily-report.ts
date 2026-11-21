@@ -1,17 +1,43 @@
 import { formatDateTime } from "@/lib/dates";
 import { escapeHtml } from "@/lib/bot/v2-messages";
+import { exchangeLabel, normalizeExchange } from "@/lib/membership-v2";
+import { qualificationCodeLabel } from "@/lib/qualification-labels";
 
 export type ReportResult = {
   pageId: string;
   label?: string;
+  exchange?: string;
   action: string;
   detail?: string;
 };
 
-type Issue = { title: string; fix: string };
+type Issue = { title: string; fix: string; systemic?: boolean };
+
+/** Codes that mean the exchange API call itself failed, not this member. */
+const API_FAILURE = /^(upstream_http_\d{3}|upstream_rejected|upstream_unavailable|credentials_missing|operation_budget_exceeded)$/;
+
+function exchangeName(raw = "") {
+  const exchange = normalizeExchange(raw);
+  return exchange ? exchangeLabel(exchange) : raw || "交易所";
+}
+
+/** The exchange/qualification code carried at the end of a job detail. */
+function detailCode(detail: string) {
+  return detail
+    .replace(/^(Admission verification requires operator review|Volume verification):\s*/, "")
+    .split(";")[0]
+    .trim();
+}
 
 /** Plain-language reason and next step for a daily-job failure detail. */
-export function describeDailyIssue(detail = ""): Issue {
+export function describeDailyIssue(detail = "", exchange = ""): Issue {
+  const code = detailCode(detail);
+  if (API_FAILURE.test(code))
+    return {
+      systemic: true,
+      title: `${exchangeName(exchange)} API 查詢失敗：${qualificationCodeLabel(code)}`,
+      fix: `這是系統問題，不是會員的問題，不用逐一處理。請學長檢查 ${exchangeName(exchange)} 的 API 金鑰與權限；修好後隔天會自動重查。已入群的會員不受影響。`,
+    };
   if (detail.startsWith("Volume verification:"))
     return {
       title: "交易量查詢失敗（已保留上次成功的結果）",
@@ -56,19 +82,38 @@ export function formatDailyReport(results: ReportResult[], now: Date) {
   if (!errors.length) return null;
   const groups = new Map<string, { issue: Issue; members: string[] }>();
   for (const error of errors) {
-    const issue = describeDailyIssue(error.detail);
+    const issue = describeDailyIssue(error.detail, error.exchange);
     const group = groups.get(issue.title) ?? { issue, members: [] };
     group.members.push(error.label || error.pageId);
     groups.set(issue.title, group);
   }
+  const all = [...groups.values()];
+  const personal = all.filter((group) => !group.issue.systemic);
+  const systemic = all.filter((group) => group.issue.systemic);
+  const count = (list: typeof all) =>
+    list.reduce((sum, group) => sum + group.members.length, 0);
   const needsData = results.filter((result) => result.action === "needs_data");
   return [
     `⚠️ <b>每日會員檢查（${formatDateTime(now.toISOString())}）</b>`,
-    `共檢查 ${results.length} 人，需要處理 ${errors.length} 人`,
-    ...[...groups.values()].flatMap(({ issue, members }) => [
+    `共檢查 ${results.length} 人，需要你處理 ${count(personal)} 人${
+      systemic.length ? `；另有 ${count(systemic)} 人受交易所 API 問題影響` : ""
+    }`,
+    ...personal.flatMap(({ issue, members }) => [
       "",
       `【${issue.title}】${members.length} 人`,
       escapeHtml(members.join("、")),
+      `→ ${escapeHtml(issue.fix)}`,
+    ]),
+    ...systemic.flatMap(({ issue, members }) => [
+      "",
+      `🔧【${issue.title}】${members.length} 人`,
+      // One root cause: a long name list would only bury the real action.
+      escapeHtml(
+        members.slice(0, SYSTEMIC_NAME_LIMIT).join("、") +
+          (members.length > SYSTEMIC_NAME_LIMIT
+            ? ` 等 ${members.length} 人`
+            : ""),
+      ),
       `→ ${escapeHtml(issue.fix)}`,
     ]),
     ...(needsData.length
@@ -81,3 +126,5 @@ export function formatDailyReport(results: ReportResult[], now: Date) {
       : []),
   ].join("\n");
 }
+
+const SYSTEMIC_NAME_LIMIT = 5;

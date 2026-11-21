@@ -46,6 +46,8 @@ export type DailyResult = {
   pageId: string;
   /** Telegram username (or email) so the operator report is readable. */
   label?: string;
+  /** Registered exchange name, so API outages can be reported per exchange. */
+  exchange?: string;
   action: string;
   detail?: string;
 };
@@ -439,6 +441,7 @@ export async function runDailyV2(now = new Date(), override?: JobDependencies) {
       results.push({
         pageId: original.pageId,
         label,
+        exchange: original.exchangeName.trim() || undefined,
         action: qualificationIssue ? "error" : "qualification_checked",
         ...(qualificationIssue ? { detail: qualificationIssue } : {}),
       });

@@ -538,6 +538,7 @@ it("reports retained-volume API failures to the existing operator alert path", a
     {
       pageId: "p",
       label: "p",
+      exchange: expect.any(String),
       action: "error",
       detail: expect.stringContaining("upstream_unavailable"),
     },

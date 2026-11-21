@@ -636,3 +636,25 @@ describe("Cloudflare Workers fetch compatibility", () => {
     ).rejects.toThrow("upstream_http_302");
   });
 });
+
+describe("OKX UID outside our invitees", () => {
+  const list = (body: unknown) => vi.fn(async () => Response.json({ code: "0", ...(body as object) }));
+  it.each([{ data: [], totalPage: "0" }, { data: [], totalPage: "1" }, { data: [] }])(
+    "treats an empty invitee list as not referred: %j",
+    async (body) => {
+      const fetcher = list(body);
+      expect(
+        await new ExchangeClient(okxEnv, fetcher, now).admission("okx", "123"),
+      ).toEqual({ referral: false, cumulative: "0", complete: true, events: [] });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    },
+  );
+  it("still refuses a list that spans several pages", async () => {
+    await expect(
+      new ExchangeClient(okxEnv, list({ data: [], totalPage: "3" }), now).admission("okx", "123"),
+    ).rejects.toThrow("pagination_incomplete");
+    await expect(
+      new ExchangeClient(okxEnv, list({ data: [{ uid: "123" }], totalPage: "2" }), now).admission("okx", "123"),
+    ).rejects.toThrow("pagination_incomplete");
+  });
+});
