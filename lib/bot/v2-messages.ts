@@ -45,6 +45,30 @@ export function directPayButton(): InlineKeyboardButton[] {
   ];
 }
 
+/** First message for a member whose registered exchange we cannot verify. */
+export function directPayWelcomeMessage(member: Member) {
+  const name = member.exchangeName.trim();
+  return [
+    "👋 <b>歡迎來到 Xplan！</b>",
+    name && name !== "否"
+      ? `你報名的交易所是 ${escapeHtml(name)}，不在可自動審核的 MEXC／Bitget／OKX 之內，所以加入方式是<b>付費訂閱</b>。`
+      : "你的報名資料沒有可自動審核的交易所（MEXC／Bitget／OKX），所以加入方式是<b>付費訂閱</b>。",
+    "",
+    "💳 <b>付費加入怎麼走</b>",
+    "1. 點下方「不註冊，直接付費加入」，查看方案和付款方式。",
+    "2. 完成轉帳後，在這裡上傳轉帳截圖。",
+    "3. 助理確認收款後，你會收到 Telegram 入群連結，入群後再收到 Discord 邀請。",
+    "不需要推薦註冊，也沒有入金門檻。付費到期後 Telegram 群組仍會保留，Discord 會回到免費的「探索者」。",
+    "",
+    "🆓 <b>想改走免費入群？</b>",
+    "用我們的推薦連結註冊 MEXC／Bitget／OKX、歷史累積入金滿 100 USDT，再點「更換綁定交易所」填新帳號的 UID。",
+  ].join("\n");
+}
+
+export function directPayWelcomeKeyboard(): InlineKeyboardButton[][] {
+  return [directPayButton(), referralLinksButton(), rebindButton()];
+}
+
 export const UNSUPPORTED_EXCHANGE_MESSAGE = [
   "你的報名資料不是 MEXC、Bitget 或 OKX 的帳號，沒辦法自動審核免費入群。你可以：",
   "1. <b>直接付費加入</b>：點「不註冊，直接付費加入」，付款確認後就能入群。",
@@ -84,10 +108,11 @@ export const V2_WELCOME_RULES = [
   "・同一個交易所帳號近 30 天回報成交額達 200,000 USDT。",
   "升級後在 Discord 完成驗證，身分組會自動同步。",
   "",
-  "💳 <b>不想註冊交易所？可以直接付費加入</b>",
-  "點下方「不註冊，直接付費加入」，付款經助理確認後，就會收到 Telegram 入群連結和 Discord 邀請，不需要推薦註冊或入金審核。",
+  "💳 <b>帳號不在我們的推薦名下？有兩個選擇</b>",
+  "・<b>建議：改用推薦連結註冊一個新帳號</b>，就能走免費入群，之後交易量達標還能免費升級。註冊好後點「更換綁定交易所」填新帳號的 UID。",
+  "・<b>不想重新註冊</b>：點下方「不註冊，直接付費加入」，用你原本的帳號付費訂閱。付款經助理確認後，就會收到 Telegram 入群連結和 Discord 邀請，不需要推薦註冊或入金審核。",
   "",
-  "要走免費入群，看完請點下方「我了解，開始驗證」。",
+  "帳號已經在我們名下的話，看完請點下方「我了解，開始驗證」走免費入群。",
 ].join("\n");
 
 export function rulesAckKeyboard(): InlineKeyboardButton[][] {
@@ -95,6 +120,7 @@ export function rulesAckKeyboard(): InlineKeyboardButton[][] {
     [{ text: "我了解，開始驗證", callback_data: RULES_ACK_CALLBACK }],
     directPayButton(),
     referralLinksButton(),
+    rebindButton(),
   ];
 }
 
@@ -156,6 +182,7 @@ export const ADMISSION_NOT_MET_MESSAGE = [
   "・該帳號的歷史累積入金尚未達 100 USDT",
   "",
   RETRY_REGISTRATION_NOTE,
+  "也可以不走免費入群，點「不註冊，直接付費加入」改用付費訂閱加入。",
   "完成後回到這裡按 /start 重新驗證。若確定已符合條件仍無法通過，請聯絡小夏。",
 ].join("\n");
 
@@ -180,10 +207,15 @@ export function discordGuideMessage(member: Member, intro: string) {
     "1. 點上方連結加入伺服器，完成伺服器規則確認。",
     "2. 約 10 分鐘內會自動取得「探索者」，免費資源不需要驗證就能使用。",
     "3. 已付費或交易量達標的會員，到驗證頻道點「驗證現有會員」，選擇交易所並輸入 UID 和 Email，即可取得「宇航員」。",
+    ...(exchange
+      ? []
+      : ["　你的交易所不在選單的三家之內，交易所請選「<b>其他交易所（直接付費會員）</b>」。"]),
     "想付費升級，可以點下方「我要付費升級」；想改用其他交易所累積交易量，可以點「更換綁定交易所」。",
     "",
     "📝 <b>請記下你的驗證資料（Discord 驗證要用）</b>",
-    `・交易所：${escapeHtml(exchangeName)}`,
+    exchange
+      ? `・交易所：${escapeHtml(exchangeName)}`
+      : `・交易所：選「其他交易所」（你報名的是 ${escapeHtml(exchangeName)}）`,
     `・UID：${escapeHtml(member.exchangeUid || "報名時填寫的 UID")}`,
     `・Email：${escapeHtml(member.email || "報名時填寫的 Email")}`,
     "Email 必須和報名時填寫的一樣；若忘記或需要更正，請聯絡小夏。",

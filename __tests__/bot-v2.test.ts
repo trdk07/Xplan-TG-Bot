@@ -179,6 +179,8 @@ it("offers the application form again to applicants missing from Notion", () => 
   const { text, keyboard } = unknownApplicantMessage("@new_user");
   expect(text).toContain("<b>@new_user</b>");
   expect(text).toContain("請不要重新填寫");
+  expect(text).toContain("付費加入");
+  expect(text).toContain("填你自己的交易所和 UID");
   expect(keyboard[0][0]).toEqual({
     text: "前往報名頁（註冊＋填表）",
     url: "https://x-plan-sage.vercel.app/apply",
@@ -198,9 +200,11 @@ it("points members who failed admission to the registration guide", async () => 
   const [, text, keyboard] = mocks.send.mock.calls.at(-1)!;
   // The website refuses a different second submission (409); switch via rebind.
   expect(text).toContain("不用重新填報名表");
-  expect(keyboard[0][0].url).toBe("https://x-plan-sage.vercel.app/apply");
-  expect(keyboard[1][0].callback_data).toBe("rebind:start");
-  expect(keyboard[2][0].text).toBe("聯絡小夏");
+  expect(text).toContain("改用付費訂閱加入");
+  expect(keyboard[0][0].callback_data).toBe("payment:upgrade");
+  expect(keyboard[1][0].url).toBe("https://x-plan-sage.vercel.app/apply");
+  expect(keyboard[2][0].callback_data).toBe("rebind:start");
+  expect(keyboard[3][0].text).toBe("聯絡小夏");
 });
 
 const bybit = {
@@ -216,14 +220,42 @@ const paidFacts = {
   paidAt: "2026-10-27T00:00:00Z",
   reviewDueAt: "2026-11-27T00:00:00Z",
 };
-it("shows the rules with a direct-payment option to members on other exchanges", async () => {
+it("tells a member on another exchange up front that joining is by paid subscription", async () => {
   await handleV2Start(bybit, { chat: { id: 123 } } as any, now);
   const [, text, keyboard] = mocks.send.mock.calls[0];
-  expect(text).toContain("直接付費加入");
-  expect(keyboard[1][0]).toEqual({
+  expect(text).toContain("你報名的交易所是 Bybit");
+  expect(text).toContain("付費訂閱");
+  expect(text).not.toContain("我了解，開始驗證");
+  expect(keyboard[0][0]).toEqual({
     text: "不註冊，直接付費加入",
     callback_data: "payment:upgrade",
   });
+  expect(keyboard[1][0].text).toBe("查看交易所推薦註冊連結");
+  expect(keyboard[2][0].callback_data).toBe("rebind:start");
+});
+it("still shows the free-admission rules to a member on a supported exchange", async () => {
+  await handleV2Start(
+    { ...member, admissionVerifiedAt: null, inviteLink: null },
+    { chat: { id: 123 } } as any,
+    now,
+  );
+  const [, text, keyboard] = mocks.send.mock.calls[0];
+  expect(text).toContain("入群規則");
+  // Own account outside our referral: prefer re-registering, otherwise pay.
+  expect(text).toContain("建議：改用推薦連結註冊一個新帳號");
+  expect(text).toContain("不想重新註冊");
+  expect(keyboard.map((row: any) => row[0].text)).toEqual([
+    "我了解，開始驗證",
+    "不註冊，直接付費加入",
+    "查看交易所推薦註冊連結",
+    "更換綁定交易所",
+  ]);
+});
+it("tells other-exchange members which option to pick on Discord", () => {
+  const text = discordGuideMessage({ ...bybit, email: "a@example.com" } as any, "intro");
+  expect(text).toContain("交易所請選「<b>其他交易所（直接付費會員）</b>」");
+  expect(text).toContain("交易所：選「其他交易所」（你報名的是 Bybit）");
+  expect(discordGuideMessage(member, "intro")).not.toContain("其他交易所（直接付費會員）");
 });
 it("offers payment or rebind when free verification is impossible for the exchange", async () => {
   await handleV2RulesAck({ id: "q", from: { id: 123 } } as any, bybit, now);
@@ -274,7 +306,7 @@ it("shows the rules instead of a stale invite link once the member may no longer
   await handleV2Start(stale, { chat: { id: 123 } } as any, now);
   const [, text, keyboard] = mocks.send.mock.calls[0];
   expect(text).not.toContain("https://t.me/old");
-  expect(keyboard[1][0].callback_data).toBe("payment:upgrade");
+  expect(keyboard[0][0].callback_data).toBe("payment:upgrade");
   mocks.send.mockClear();
   await handleV2Start({ ...stale, ...paidFacts }, { chat: { id: 123 } } as any, now);
   expect(mocks.send.mock.calls[0][1]).toContain("https://t.me/old");

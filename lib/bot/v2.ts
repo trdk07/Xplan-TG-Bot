@@ -35,6 +35,8 @@ import {
   admissionPassedMessage,
   UNSUPPORTED_EXCHANGE_MESSAGE,
   directPayButton,
+  directPayWelcomeKeyboard,
+  directPayWelcomeMessage,
   discordGuideKeyboard,
   rebindButton,
   referralLinksButton,
@@ -143,7 +145,16 @@ export async function handleV2Start(
     await createV2Invite(member, message.chat.id, now);
     return;
   }
-  // Shown even for exchanges we cannot verify: the rules offer direct payment.
+  // An exchange we cannot verify can only join by paying: say so up front
+  // instead of walking the member through the free-admission rules.
+  if (!normalizeExchange(member.exchangeName)) {
+    await sendMessage(
+      message.chat.id,
+      directPayWelcomeMessage(member),
+      directPayWelcomeKeyboard(),
+    );
+    return;
+  }
   await sendMessage(message.chat.id, V2_WELCOME_RULES, rulesAckKeyboard());
 }
 /** Second guided step: the member acknowledged the rules, so ask for the exchange. */
@@ -239,7 +250,7 @@ export async function handleV2Uid(
       : ADMISSION_NOT_MET_MESSAGE,
     updated.onboardingStep === "needs_review"
       ? undefined
-      : [referralLinksButton(), rebindButton()],
+      : [directPayButton(), referralLinksButton(), rebindButton()],
   );
 }
 export async function handleV2Join(
