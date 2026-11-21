@@ -239,7 +239,17 @@ it("still shows the free-admission rules to a member on a supported exchange", a
     { chat: { id: 123 } } as any,
     now,
   );
-  expect(mocks.send.mock.calls[0][1]).toContain("入群規則");
+  const [, text, keyboard] = mocks.send.mock.calls[0];
+  expect(text).toContain("入群規則");
+  // Own account outside our referral: prefer re-registering, otherwise pay.
+  expect(text).toContain("建議：改用推薦連結註冊一個新帳號");
+  expect(text).toContain("不想重新註冊");
+  expect(keyboard.map((row: any) => row[0].text)).toEqual([
+    "我了解，開始驗證",
+    "不註冊，直接付費加入",
+    "查看交易所推薦註冊連結",
+    "更換綁定交易所",
+  ]);
 });
 it("tells other-exchange members which option to pick on Discord", () => {
   const text = discordGuideMessage({ ...bybit, email: "a@example.com" } as any, "intro");

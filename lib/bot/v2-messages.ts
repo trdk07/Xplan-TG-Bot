@@ -108,10 +108,11 @@ export const V2_WELCOME_RULES = [
   "・同一個交易所帳號近 30 天回報成交額達 200,000 USDT。",
   "升級後在 Discord 完成驗證，身分組會自動同步。",
   "",
-  "💳 <b>不想註冊交易所？可以直接付費加入</b>",
-  "點下方「不註冊，直接付費加入」，付款經助理確認後，就會收到 Telegram 入群連結和 Discord 邀請，不需要推薦註冊或入金審核。",
+  "💳 <b>帳號不在我們的推薦名下？有兩個選擇</b>",
+  "・<b>建議：改用推薦連結註冊一個新帳號</b>，就能走免費入群，之後交易量達標還能免費升級。註冊好後點「更換綁定交易所」填新帳號的 UID。",
+  "・<b>不想重新註冊</b>：點下方「不註冊，直接付費加入」，用你原本的帳號付費訂閱。付款經助理確認後，就會收到 Telegram 入群連結和 Discord 邀請，不需要推薦註冊或入金審核。",
   "",
-  "要走免費入群，看完請點下方「我了解，開始驗證」。",
+  "帳號已經在我們名下的話，看完請點下方「我了解，開始驗證」走免費入群。",
 ].join("\n");
 
 export function rulesAckKeyboard(): InlineKeyboardButton[][] {
@@ -119,6 +120,7 @@ export function rulesAckKeyboard(): InlineKeyboardButton[][] {
     [{ text: "我了解，開始驗證", callback_data: RULES_ACK_CALLBACK }],
     directPayButton(),
     referralLinksButton(),
+    rebindButton(),
   ];
 }
 
