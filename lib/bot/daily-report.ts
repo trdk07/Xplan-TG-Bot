@@ -2,11 +2,13 @@ import { formatDateTime } from "@/lib/dates";
 import { escapeHtml } from "@/lib/bot/v2-messages";
 import { exchangeLabel, normalizeExchange } from "@/lib/membership-v2";
 import { qualificationCodeLabel } from "@/lib/qualification-labels";
+import { UNVERIFIED_AFTER_DAYS } from "@/lib/unverified-applicants";
 
 export type ReportResult = {
   pageId: string;
   label?: string;
   exchange?: string;
+  unverifiedDays?: number;
   action: string;
   detail?: string;
 };
@@ -79,7 +81,15 @@ export function describeDailyIssue(detail = "", exchange = ""): Issue {
 /** Operator report grouped by problem, naming members by Telegram username. */
 export function formatDailyReport(results: ReportResult[], now: Date) {
   const errors = results.filter((result) => result.action === "error");
-  if (!errors.length) return null;
+  const unverified = results
+    .filter((result) => typeof result.unverifiedDays === "number")
+    .sort((a, b) => b.unverifiedDays! - a.unverifiedDays!);
+  // Report on its own only on the day someone crosses the threshold, so a
+  // quiet system is not messaged every morning about the same old application.
+  const newlyUnverified = unverified.some(
+    (result) => result.unverifiedDays === UNVERIFIED_AFTER_DAYS,
+  );
+  if (!errors.length && !newlyUnverified) return null;
   const groups = new Map<string, { issue: Issue; members: string[] }>();
   for (const error of errors) {
     const issue = describeDailyIssue(error.detail, error.exchange);
@@ -95,7 +105,7 @@ export function formatDailyReport(results: ReportResult[], now: Date) {
   const needsData = results.filter((result) => result.action === "needs_data");
   return [
     `⚠️ <b>每日會員檢查（${formatDateTime(now.toISOString())}）</b>`,
-    `共檢查 ${results.length} 人，需要你處理 ${count(personal)} 人${
+    `共檢查 ${results.filter((result) => result.action !== "unverified_applicant").length} 人，需要你處理 ${count(personal)} 人${
       systemic.length ? `；另有 ${count(systemic)} 人受交易所 API 問題影響` : ""
     }`,
     ...personal.flatMap(({ issue, members }) => [
@@ -116,6 +126,21 @@ export function formatDailyReport(results: ReportResult[], now: Date) {
       ),
       `→ ${escapeHtml(issue.fix)}`,
     ]),
+    ...(unverified.length
+      ? [
+          "",
+          `📋 有 ${unverified.length} 人填表超過 ${UNVERIFIED_AFTER_DAYS} 天還沒到機器人驗證（不算錯誤）：${escapeHtml(
+            unverified
+              .slice(0, UNVERIFIED_NAME_LIMIT)
+              .map((result) => `${result.label || result.pageId}（${result.unverifiedDays} 天）`)
+              .join("、") +
+              (unverified.length > UNVERIFIED_NAME_LIMIT
+                ? ` 等 ${unverified.length} 人`
+                : ""),
+          )}`,
+          "→ 到後台首頁「已報名未驗證」查看聯絡方式，提醒他們到機器人按 /start。",
+        ]
+      : []),
     ...(needsData.length
       ? [
           "",
@@ -128,3 +153,4 @@ export function formatDailyReport(results: ReportResult[], now: Date) {
 }
 
 const SYSTEMIC_NAME_LIMIT = 5;
+const UNVERIFIED_NAME_LIMIT = 10;

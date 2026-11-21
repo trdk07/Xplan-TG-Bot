@@ -10,6 +10,7 @@ import { MembersList } from "@/app/admin/components/MembersList";
 import { SettingsPanel } from "@/app/admin/components/SettingsPanel";
 import { StatsOverview } from "@/app/admin/components/StatsOverview";
 import { TodayInbox } from "@/app/admin/components/TodayInbox";
+import { UnverifiedApplicantsPanel } from "@/app/admin/components/UnverifiedApplicantsPanel";
 import {
   HeldNotificationsPanel,
   type HeldNotification,
@@ -151,6 +152,7 @@ export default async function AdminPage({
       </header>
 
       {v2Enabled() ? <HeldNotificationsPanel held={heldNotifications} members={allMembers} /> : null}
+      <UnverifiedApplicantsPanel members={allMembers} now={now} />
       {v2Enabled() ? <QualificationReviewQueue members={allMembers} /> : null}
       <TodayInbox members={allMembers} />
 

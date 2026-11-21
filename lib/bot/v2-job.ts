@@ -21,6 +21,7 @@ import { hasSubmittedPaymentProof } from "@/lib/bot/handlers/payment";
 import { sendMessage } from "@/lib/telegram";
 import { renewalKeyboard, rejoinKeyboard } from "@/lib/bot/keyboards";
 import { daysUntil, formatDateTime } from "@/lib/dates";
+import { unverifiedApplicants } from "@/lib/unverified-applicants";
 
 type Guard = () => Promise<void>;
 type Delivery = {
@@ -48,6 +49,8 @@ export type DailyResult = {
   label?: string;
   /** Registered exchange name, so API outages can be reported per exchange. */
   exchange?: string;
+  /** Days since an application that never reached the bot (see unverifiedApplicants). */
+  unverifiedDays?: number;
   action: string;
   detail?: string;
 };
@@ -454,6 +457,17 @@ export async function runDailyV2(now = new Date(), override?: JobDependencies) {
           error instanceof Error ? error.message : "Membership check failed",
       });
     }
+  }
+  for (const { member, days } of unverifiedApplicants(members, now)) {
+    const result = results.find((item) => item.pageId === member.pageId);
+    if (result) result.unverifiedDays = days;
+    else
+      results.push({
+        pageId: member.pageId,
+        label: memberLabel(member),
+        action: "unverified_applicant",
+        unverifiedDays: days,
+      });
   }
   return results;
 }
