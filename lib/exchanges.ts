@@ -1,6 +1,9 @@
 import {
   type Exchange,
+  MINIMUM_DEPOSIT_USDT,
+  amountAtLeast,
   amountRemainder,
+  completedVolumeWindow,
   hasVolumePrerequisites,
   sumAmounts,
 } from "@/lib/membership-v2";
@@ -11,18 +14,28 @@ export type AdmissionEvidence = {
   complete: boolean;
   events: DepositEvent[];
 };
-export type VolumeEvidence = {
-  spot: string;
-  futures: string;
-  /** Turnover the exchange counts beyond spot and futures (on-chain, CFD, stocks). */
-  other?: string;
-};
+export type VolumeEvidence =
+  | {
+      spot: string;
+      futures: string;
+      /** Turnover the exchange counts beyond spot and futures (on-chain, CFD, stocks). */
+      other?: string;
+      reportedTotal?: never;
+    }
+  | { spot: null; futures: null; other?: never; reportedTotal: string };
+export function totalVolume(volume: VolumeEvidence): string {
+  return volume.spot === null
+    ? volume.reportedTotal
+    : sumAmounts([volume.spot, volume.futures, volume.other ?? "0"]);
+}
 export type VolumeDay = { time: number; spot: string; futures: string; total: string };
 export type VolumeProbe = VolumeEvidence & { days: VolumeDay[] };
 export class ExchangeCheckError extends Error {}
 type Row = Record<string, any>;
 // OKX documents a server error for invitee-list limits of 99 or greater.
 const OKX_UID_PAGE_SIZE = "10";
+const MEXC_DEPOSIT_WINDOW_LIMIT = 12;
+const DAY = 86400000;
 // Only deposit history may retain already-scoped pages after a later read fails.
 class PartialDepositHistory extends ExchangeCheckError {
   constructor(readonly rows: Row[]) {
@@ -218,28 +231,63 @@ export class ExchangeClient {
       throw error;
     }
   }
+  private async mexcReferral(
+    uid: string,
+    deadline: number,
+    start: number,
+    end: number,
+  ): Promise<Row | undefined> {
+    const result = await this.request(
+      "mexc",
+      "/api/v3/rebate/affiliate/referral",
+      { uid, page: "1", pageSize: "10", startTime: String(start), endTime: String(end - 1) },
+      deadline,
+    );
+    const data = result.data;
+    const rows = this.scoped(data?.resultList, uid);
+    if (
+      Number(data.totalCount ?? rows.length) !== rows.length ||
+      ![0, 1].includes(Number(data.totalPage ?? 1)) ||
+      Number(data.currentPage ?? 1) !== 1
+    )
+      throw new ExchangeCheckError("pagination_incomplete");
+    if (rows.length > 1) throw new ExchangeCheckError("ambiguous_account");
+    return rows[0];
+  }
+  private async mexcAdmission(uid: string, deadline: number): Promise<AdmissionEvidence> {
+    const today = Date.parse(completedVolumeWindow(this.now, "mexc").end);
+    let start = today - 29 * DAY;
+    const latest = await this.mexcReferral(uid, deadline, start, this.now.getTime() + 1);
+    if (!latest) return { referral: false, cumulative: "0", complete: false, events: [] };
+
+    let cumulative = sumAmounts([String(latest.depositAmount)]);
+    const registration = Number(latest.registerTime ?? latest.inviteTime);
+    for (
+      let window = 1;
+      window < MEXC_DEPOSIT_WINDOW_LIMIT &&
+      !(registration > 0 && registration >= start && registration <= this.now.getTime()) &&
+      !amountAtLeast(cumulative, MINIMUM_DEPOSIT_USDT);
+      window++
+    ) {
+      const end = start;
+      start -= 30 * DAY;
+      try {
+        const older = await this.mexcReferral(uid, deadline, start, end);
+        if (!older) break;
+        cumulative = sumAmounts([cumulative, String(older.depositAmount)]);
+      } catch {
+        // A later query failure must not erase the already-proven deposit lower bound.
+        break;
+      }
+    }
+    // The affiliate API reports gross deposits per window without guaranteeing lifetime coverage.
+    return { referral: true, cumulative, complete: false, events: [] };
+  }
   async admission(exchange: Exchange, uid: string): Promise<AdmissionEvidence> {
     const deadline = Date.now() + 120000;
     this.require(exchange, "ADMISSION");
     if (!/^\d{1,32}$/.test(uid)) throw new ExchangeCheckError("invalid_uid");
-    if (exchange === "mexc") {
-      const data = await this.request(
-        exchange,
-        "/api/v3/rebate/affiliate/referral",
-        { uid, page: "1", pageSize: "100" },
-        deadline,
-      );
-      const rows = this.scoped(data.data?.resultList, uid);
-      if (Number(data.data?.totalCount || rows.length) > rows.length)
-        throw new ExchangeCheckError("pagination_incomplete");
-      if (rows.length > 1) throw new ExchangeCheckError("ambiguous_account");
-      return {
-        referral: rows.length === 1,
-        cumulative: sumAmounts([String(rows[0]?.depositAmount || "0")]),
-        complete: false,
-        events: [],
-      };
-    }
+    if (exchange === "mexc") return this.mexcAdmission(uid, deadline);
     if (exchange === "okx") {
       // Detail does not always echo the UID: prove its unique affiliate scope first.
       const listed = await this.request(
@@ -379,10 +427,25 @@ export class ExchangeClient {
     if (!/^\d{1,32}$/.test(uid)) throw new ExchangeCheckError("invalid_uid");
     const start = Date.parse(window.start),
       end = Date.parse(window.end);
-    if (!Number.isFinite(start) || end - start !== 30 * 86400000)
+    if (!Number.isFinite(start) || end - start !== 30 * DAY)
       throw new ExchangeCheckError("invalid_window");
-    if (exchange === "okx" && start % 86400000 !== 0)
+    if (exchange === "okx" && start % DAY !== 0)
       throw new ExchangeCheckError("invalid_window");
+    if (exchange === "mexc") {
+      if ((start + 8 * 3600000) % DAY !== 0)
+        throw new ExchangeCheckError("invalid_window");
+      const row = await this.mexcReferral(uid, deadline, start, end);
+      if (!row) throw new ExchangeCheckError("incomplete_volume_window");
+      // tradingAmount is the affiliate API's USDT total for this UID and period.
+      // The API does not return a reliable spot/futures breakdown here.
+      let reportedTotal: string;
+      try {
+        reportedTotal = sumAmounts([String(row.tradingAmount)]);
+      } catch {
+        throw new ExchangeCheckError("invalid_volume_amount");
+      }
+      return { spot: null, futures: null, reportedTotal, days: [] };
+    }
     if (exchange === "bitget") {
       const rows = await this.bitgetPages(
         "customer-trade-volume",
@@ -428,33 +491,28 @@ export class ExchangeClient {
           .sort((a, b) => a.time - b.time),
       };
     }
-    if (exchange === "okx") {
-      const totals: string[] = [];
-      for (const category of ["SPOT", "DERIVATIVE"]) {
-        const result = await this.request(
-          exchange,
-          "/api/v5/affiliate/invitee/list",
-          {
-            uid,
-            page: "1",
-            limit: OKX_UID_PAGE_SIZE,
-            periodType: "custom",
-            begin: String(start),
-            end: String(end - 1),
-            commissionCategory: category,
-          },
-          deadline,
-        );
-        const rows = this.scoped(result.data, uid);
-        if (rows.length !== 1 || Number(result.totalPage || 1) > 1)
-          throw new ExchangeCheckError("incomplete_volume_window");
-        // The list endpoint scopes totalVol to its requested periodType.
-        totals.push(sumAmounts([String(rows[0].totalVol)]));
-      }
-      return { spot: totals[0], futures: totals[1], days: [] };
+    const totals: string[] = [];
+    for (const category of ["SPOT", "DERIVATIVE"]) {
+      const result = await this.request(
+        exchange,
+        "/api/v5/affiliate/invitee/list",
+        {
+          uid,
+          page: "1",
+          limit: OKX_UID_PAGE_SIZE,
+          periodType: "custom",
+          begin: String(start),
+          end: String(end - 1),
+          commissionCategory: category,
+        },
+        deadline,
+      );
+      const rows = this.scoped(result.data, uid);
+      if (rows.length !== 1 || Number(result.totalPage || 1) > 1)
+        throw new ExchangeCheckError("incomplete_volume_window");
+      // The list endpoint scopes totalVol to its requested periodType.
+      totals.push(sumAmounts([String(rows[0].totalVol)]));
     }
-    // Commission-eligible turnover is never authoritative full trading turnover.
-    // MEXC full spot/futures coverage is unavailable, irrespective of operator flags.
-    throw new ExchangeCheckError("full_turnover_unavailable");
+    return { spot: totals[0], futures: totals[1], days: [] };
   }
 }

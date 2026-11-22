@@ -1,4 +1,4 @@
-import { ExchangeClient, ExchangeCheckError } from "@/lib/exchanges";
+import { ExchangeClient, ExchangeCheckError, totalVolume } from "@/lib/exchanges";
 import { getEvidenceStore, type EvidenceStore } from "@/lib/evidence-store";
 import {
   admissionDecision,
@@ -8,7 +8,7 @@ import {
   migrationPreview,
   normalizeExchange,
   sumAmounts,
-  volumeMeetsThreshold,
+  VOLUME_THRESHOLD_USDT,
   v2Statuses,
   type Exchange,
 } from "@/lib/membership-v2";
@@ -152,24 +152,19 @@ async function checkUnlocked(
     try {
       const window = completedVolumeWindow(now, exchange),
         volume = await deps.client.volume(exchange, member.exchangeUid, window);
-      patch.volumeSpot30d = Number(volume.spot);
-      patch.volumeFutures30d = Number(volume.futures);
-      patch.volumeTotal30d = Number(
-        sumAmounts([volume.spot, volume.futures, volume.other ?? "0"]),
-      );
+      const total = totalVolume(volume);
+      patch.volumeSpot30d = volume.spot === null ? null : Number(volume.spot);
+      patch.volumeFutures30d = volume.futures === null ? null : Number(volume.futures);
+      patch.volumeTotal30d = Number(total);
       if (
         ![
           patch.volumeSpot30d,
           patch.volumeFutures30d,
           patch.volumeTotal30d,
-        ].every(Number.isFinite)
+        ].every((value) => value === null || Number.isFinite(value))
       )
         throw new ExchangeCheckError("invalid_volume_amount");
-      patch.volumeQualified = volumeMeetsThreshold(
-        volume.spot,
-        volume.futures,
-        volume.other,
-      );
+      patch.volumeQualified = amountAtLeast(total, VOLUME_THRESHOLD_USDT);
       patch.volumeWindowStart = window.start;
       patch.volumeWindowEnd = window.end;
       patch.volumeCheckedAt = now.toISOString();
