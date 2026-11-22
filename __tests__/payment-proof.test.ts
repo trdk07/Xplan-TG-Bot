@@ -53,3 +53,11 @@ it("summarises a probe for the assistant without persisting anything", () => {
   expect(state.lines).toContain("有成交的天數：1 / 2");
   expect(state.lines.at(-1)).toContain("不會寫入 Notion");
 });
+it("shows the MEXC reported total without implying zero spot or futures trades", () => {
+  const state = describeVolumeProbe("mexc", "123", {
+    start: "2026-10-11T16:00:00.000Z",
+    end: "2026-11-10T16:00:00.000Z",
+  }, { spot: null, futures: null, reportedTotal: "200000", days: [] });
+  expect(state.message).toContain("近 30 天合計 200,000，已達 200,000 門檻");
+  expect(state.lines.some(line => line.startsWith("現貨：") || line.startsWith("合約："))).toBe(false);
+});

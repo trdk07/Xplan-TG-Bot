@@ -1,9 +1,8 @@
-import type { VolumeProbe } from "@/lib/exchanges";
+import { totalVolume, type VolumeProbe } from "@/lib/exchanges";
 import {
   VOLUME_THRESHOLD_USDT,
   exchangeLabel,
-  sumAmounts,
-  volumeMeetsThreshold,
+  amountAtLeast,
   type Exchange,
 } from "@/lib/membership-v2";
 
@@ -30,8 +29,8 @@ export function describeVolumeProbe(
   probe: VolumeProbe,
 ): VolumeProbeState {
   const other = probe.other ?? "0";
-  const total = sumAmounts([probe.spot, probe.futures, other]);
-  const qualified = volumeMeetsThreshold(probe.spot, probe.futures, other);
+  const total = totalVolume(probe);
+  const qualified = amountAtLeast(total, VOLUME_THRESHOLD_USDT);
   const active = probe.days.filter((row) => row.total !== "0");
   const timeZone = exchange === "okx" ? "UTC" : "Asia/Taipei";
   return {
@@ -41,8 +40,9 @@ export function describeVolumeProbe(
     } ${money(VOLUME_THRESHOLD_USDT)} 門檻`,
     lines: [
       `統計期間（${timeZone === "UTC" ? "UTC" : "台北時間"}）：${day(Date.parse(window.start), timeZone)} ～ ${day(Date.parse(window.end) - 1, timeZone)}`,
-      `現貨：${money(probe.spot)}`,
-      `合約：${money(probe.futures)}`,
+      ...(probe.spot === null
+        ? ["MEXC 提供成交總額，現貨與合約無分項資料。"]
+        : [`現貨：${money(probe.spot)}`, `合約：${money(probe.futures)}`]),
       ...(other !== "0" ? [`其他（鏈上／CFD／美股等）：${money(other)}`] : []),
       ...(probe.days.length
         ? [

@@ -44,6 +44,7 @@ export function QualificationSummary({ member, now = new Date() }: { member: Mem
 export function QualificationDetails({ member }: { member: Member }) {
   const now = new Date();
   const effective = effectiveMembership(member, now);
+  const mexc = normalizeExchange(member.exchangeName) === "mexc";
   return (
     <section className="panel" style={{ marginTop: 20 }}>
       <div className="panel-head"><h2>入群與交易量資格證據</h2></div>
@@ -57,9 +58,11 @@ export function QualificationDetails({ member }: { member: Member }) {
         <div>歷史入金資料完整性</div><div>{member.depositEvidenceComplete ? "已確認完整" : "歷史資料不完整或尚未確認；已證明達 100 USDT 即可覆核"}</div>
         <div>入金覆核依據</div><div>{qualificationCodeLabel(member.depositReviewReason) || "尚無覆核紀錄"}</div>
         <div>覆核人／時間</div><div>{member.depositReviewedBy || "尚無紀錄"}／{formatDateTime(member.depositReviewedAt ?? null)}</div>
-        <div>30 日現貨成交額</div><div>{amount(member.volumeSpot30d)} USDT</div>
-        <div>30 日合約成交額</div><div>{amount(member.volumeFutures30d)} USDT</div>
-        {otherVolume(member) > 0 ? <><div>30 日其他成交額（鏈上／CFD／美股等）</div><div>{amount(otherVolume(member))} USDT</div></> : null}
+        {mexc ? <><div>成交額來源</div><div>MEXC 回報的 30 日總額</div></> : <>
+          <div>30 日現貨成交額</div><div>{amount(member.volumeSpot30d)} USDT</div>
+          <div>30 日合約成交額</div><div>{amount(member.volumeFutures30d)} USDT</div>
+          {otherVolume(member) > 0 ? <><div>30 日其他成交額（鏈上／CFD／美股等）</div><div>{amount(otherVolume(member))} USDT</div></> : null}
+        </>}
         <div>交易量資格</div><div>{member.volumeQualified && validPastDate(member.admissionVerifiedAt,now) && validPastDate(member.volumeCheckedAt,now) ? "上次成功核實達標" : "尚無有效達標證據"}</div>
         <div>統計起日（含）</div><div>{formatDateTime(member.volumeWindowStart ?? null)}</div>
         <div>統計迄日（不含）</div><div>{formatDateTime(member.volumeWindowEnd ?? null)}</div>

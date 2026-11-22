@@ -1,5 +1,6 @@
 import { it, expect, vi } from "vitest";
 import { checkQualifications } from "@/lib/qualification";
+import type { VolumeEvidence } from "@/lib/exchanges";
 const now = new Date("2026-10-28T01:00:00Z");
 const member = {
   pageId: "p",
@@ -31,7 +32,7 @@ function dependencies(overrides: Record<string, unknown> = {}) {
         complete: false,
         events: [],
       })),
-      volume: vi.fn(async () => ({ spot: "100000", futures: "100000" })),
+      volume: vi.fn(async (): Promise<VolumeEvidence> => ({ spot: "100000", futures: "100000" })),
     },
   };
 }
@@ -46,6 +47,16 @@ it("qualifies admission from cumulative evidence and independent 200k volume", a
     "p",
     expect.not.objectContaining({ discordRole: expect.anything() }),
   );
+});
+it("stores the MEXC reported total and upgrades without inventing category amounts", async () => {
+  const d = dependencies({ exchangeName: "MEXC", admissionVerifiedAt: "2026-01-01" });
+  d.client.volume.mockResolvedValue({ spot: null, futures: null, reportedTotal: "200000" });
+  await expect(checkQualifications("p", d as any, now)).resolves.toMatchObject({
+    status: "active_volume", volumeQualified: true, volumeTotal30d: 200000,
+  });
+  expect(d.write).toHaveBeenCalledWith("p", expect.objectContaining({
+    volumeSpot30d: null, volumeFutures30d: null, volumeTotal30d: 200000,
+  }));
 });
 it("retains previous volume qualification on provider failure without a new timestamp", async () => {
   const d = dependencies({

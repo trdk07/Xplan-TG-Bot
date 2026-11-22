@@ -81,10 +81,11 @@ export function hasVolumePrerequisites(
   env: Record<string, string | undefined>,
 ): boolean {
   const key = `${exchange.toUpperCase()}_VOLUME_`;
-  const reportedTotals = exchange !== "mexc" && env[key + "USE_REPORTED_TOTALS"] === "true";
+  const reportedTotals = env[key + "USE_REPORTED_TOTALS"] === "true";
+  const fullCoverage = exchange !== "mexc" && env[key + "COVERAGE_VERIFIED"] === "true";
   return env[key + "UNIT_VERIFIED"] === "true" &&
     env[key + "WINDOW_VERIFIED"] === "true" &&
-    (reportedTotals || env[key + "COVERAGE_VERIFIED"] === "true");
+    (reportedTotals || fullCoverage);
 }
 
 export function completedVolumeWindow(now = new Date(), exchange?: Exchange): {

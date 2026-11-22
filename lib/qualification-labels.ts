@@ -17,6 +17,7 @@ const LABELS: Record<string, string> = {
   operation_budget_exceeded: "查詢逾時",
   incomplete_volume_window: "交易量統計期間資料不完整",
   invalid_window: "交易量統計期間不正確",
+  invalid_volume_amount: "交易所未回傳有效的成交額",
   volume_total_mismatch: "交易量合計與明細不一致",
 };
 

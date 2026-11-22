@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { createHmac } from "node:crypto";
-import { ExchangeClient } from "@/lib/exchanges";
-import { completedVolumeWindow } from "@/lib/membership-v2";
+import { ExchangeClient, totalVolume } from "@/lib/exchanges";
+import { amountAtLeast, completedVolumeWindow, VOLUME_THRESHOLD_USDT } from "@/lib/membership-v2";
 const now = new Date("2026-10-28T01:00:00Z");
 const env = {
   BITGET_API_KEY: "unit",
@@ -148,36 +148,101 @@ describe("exchange-qualified evidence", () => {
   });
 });
 
-it("never queries MEXC commission-eligible volume even when every operator gate is enabled", async () => {
-  const fetcher = vi.fn(async (input: RequestInfo | URL) => {
-    const url = new URL(String(input));
-    return Response.json({
-      code: "0",
-      data: {
-        totalCount: 1,
-        totalTradeUsdtAmount: "100000",
-        resultList: [
-          { uid: "123", sourceType: "1", type: url.searchParams.get("type") },
-        ],
-      },
-    });
-  });
-  const enabled = {
-    MEXC_API_KEY: "synthetic",
-    MEXC_API_SECRET_KEY: "synthetic",
-    MEXC_VOLUME_ENABLED: "true",
-    MEXC_VOLUME_UNIT_VERIFIED: "true",
-    MEXC_VOLUME_COVERAGE_VERIFIED: "true",
-    MEXC_VOLUME_WINDOW_VERIFIED: "true",
-  };
+const mexcEnv = {
+  MEXC_API_ACCESS_KEY: "synthetic",
+  MEXC_API_SECRET_KEY: "synthetic",
+  MEXC_ADMISSION_ENABLED: "true",
+  MEXC_VOLUME_ENABLED: "true",
+  MEXC_VOLUME_UNIT_VERIFIED: "true",
+  MEXC_VOLUME_WINDOW_VERIFIED: "true",
+  MEXC_VOLUME_USE_REPORTED_TOTALS: "true",
+};
+const mexcReferralResponse = (resultList: Record<string, unknown>[], totalCount = resultList.length) =>
+  Response.json({ success: true, code: 0, data: { totalCount, currentPage: 1, totalPage: 1, resultList } });
+
+it("requires the explicit MEXC reported-total opt-in, even with the old coverage flag", async () => {
+  const fetcher = vi.fn();
+  const enabled = { ...mexcEnv, MEXC_VOLUME_USE_REPORTED_TOTALS: "false", MEXC_VOLUME_COVERAGE_VERIFIED: "true" };
   await expect(
     new ExchangeClient(enabled, fetcher, now).volume(
       "mexc",
       "123",
       completedVolumeWindow(now),
     ),
-  ).rejects.toThrow("full_turnover_unavailable");
+  ).rejects.toThrow("volume_not_verified");
   expect(fetcher).not.toHaveBeenCalled();
+});
+
+it.each([["200000", true], ["199999.99", false], ["0", false]])(
+  "uses the MEXC affiliate's UID-scoped 30-day total %s with the correct threshold",
+  async (tradingAmount, qualified) => {
+    const window = completedVolumeWindow(now, "mexc");
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      expect(url.origin + url.pathname).toBe("https://api.mexc.com/api/v3/rebate/affiliate/referral");
+      expect(url.searchParams.get("uid")).toBe("123");
+      expect(url.searchParams.get("startTime")).toBe(String(Date.parse(window.start)));
+      expect(url.searchParams.get("endTime")).toBe(String(Date.parse(window.end) - 1));
+      expect(new Headers(init?.headers).get("X-MEXC-APIKEY")).toBe(mexcEnv.MEXC_API_ACCESS_KEY);
+      const signature = url.searchParams.get("signature");
+      url.searchParams.delete("signature");
+      expect(signature).toBe(createHmac("sha256", mexcEnv.MEXC_API_SECRET_KEY)
+        .update(url.searchParams.toString()).digest("hex"));
+      return mexcReferralResponse([{ uid: "123", tradingAmount, commission: "1", depositAmount: "2" }]);
+    });
+    const volume = await new ExchangeClient(mexcEnv, fetcher, now).volume("mexc", "123", window);
+    expect(volume).toEqual({ spot: null, futures: null, reportedTotal: tradingAmount });
+    expect(amountAtLeast(totalVolume(volume), VOLUME_THRESHOLD_USDT)).toBe(qualified);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  },
+);
+
+it.each([
+  [[], 0, "incomplete_volume_window"],
+  [[{ uid: "999", tradingAmount: "200000" }], 1, "unexpected_account"],
+  [[{ uid: "123", tradingAmount: "200000" }], 2, "pagination_incomplete"],
+  [[{ uid: "123", commission: "200000" }], 1, "invalid_volume_amount"],
+] as const)("rejects an unusable MEXC trade report (%#)", async (rows, count, error) => {
+  const fetcher = vi.fn(async () => mexcReferralResponse([...rows], count));
+  await expect(new ExchangeClient(mexcEnv, fetcher, now).volume("mexc", "123", completedVolumeWindow(now, "mexc")))
+    .rejects.toThrow(error);
+});
+
+it("rejects an OKX UTC day boundary for a MEXC report before fetching", async () => {
+  const fetcher = vi.fn();
+  await expect(new ExchangeClient(mexcEnv, fetcher, now).volume("mexc", "123", completedVolumeWindow(now, "okx")))
+    .rejects.toThrow("invalid_window");
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
+it("accepts MEXC deposits from nonoverlapping windows without deducting withdrawals", async () => {
+  const ranges: { start: number; end: number }[] = [];
+  const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+    const values = new URL(String(input)).searchParams;
+    expect(values.get("uid")).toBe("123");
+    const start = Number(values.get("startTime")), end = Number(values.get("endTime"));
+    expect(end - start).toBeLessThan(30 * 86400000);
+    ranges.push({ start, end });
+    return mexcReferralResponse([{
+      uid: "123",
+      registerTime: now.getTime() - 65 * 86400000,
+      depositAmount: ranges.length === 1 ? "40.01" : "59.99",
+      withdrawAmount: "1000",
+    }]);
+  });
+  await expect(new ExchangeClient(mexcEnv, fetcher, now).admission("mexc", "123"))
+    .resolves.toEqual({ referral: true, cumulative: "100", complete: false, events: [] });
+  expect(ranges).toHaveLength(2);
+  expect(ranges[0].end).toBe(now.getTime());
+  expect(ranges[1].end + 1).toBe(ranges[0].start);
+});
+
+it("preserves a MEXC deposit lower bound when an older window is inaccessible", async () => {
+  const fetcher = vi.fn()
+    .mockResolvedValueOnce(mexcReferralResponse([{ uid: "123", registerTime: now.getTime() - 90 * 86400000, depositAmount: "30" }]))
+    .mockResolvedValueOnce(new Response(null, { status: 403 }));
+  await expect(new ExchangeClient(mexcEnv, fetcher, now).admission("mexc", "123"))
+    .resolves.toEqual({ referral: true, cumulative: "30", complete: false, events: [] });
 });
 
 const okxEnv = {
