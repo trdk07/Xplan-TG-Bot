@@ -23,9 +23,6 @@ const LABELS: Record<string, string> = {
 
 export function qualificationCodeLabel(code: string | null | undefined) {
   if (!code) return "";
-  const okx = code.match(/^okx_invitee_unconfirmed_(.+)$/)?.[1];
-  if (okx)
-    return `OKX 無法確認這個 UID 是否在推薦名下（OKX 代碼 ${okx}），請到 OKX 推薦後台人工確認`;
   const http = code.match(/^upstream_http_(\d{3})$/)?.[1];
   if (http)
     return `交易所 API 回應錯誤（HTTP ${http}${

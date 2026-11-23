@@ -702,37 +702,18 @@ describe("Cloudflare Workers fetch compatibility", () => {
   });
 });
 
-describe("OKX UID missing from the invitee list", () => {
+describe("OKX UID outside our invitees", () => {
   const list = (body: unknown) => vi.fn(async () => Response.json({ code: "0", ...(body as object) }));
-  // The list call answers first; the detail call answers second.
-  const listThenDetail = (listBody: object, detail: object) => {
-    const fetcher = vi.fn(async (input: RequestInfo | URL) =>
-      Response.json(String(input).includes("/invitee/detail") ? detail : { code: "0", ...listBody }),
-    );
-    return fetcher;
-  };
   it.each([{ data: [], totalPage: "0" }, { data: [], totalPage: "1" }, { data: [] }])(
-    "admits a funded invitee the list omits by asking the detail endpoint: %j",
+    "treats an empty invitee list as not referred: %j",
     async (body) => {
-      const fetcher = listThenDetail(body, {
-        code: "0",
-        data: [{ inviteeLevel: "2", depAmt: "150.5" }],
-      });
+      const fetcher = list(body);
       expect(
         await new ExchangeClient(okxEnv, fetcher, now).admission("okx", "123"),
-      ).toEqual({ referral: true, cumulative: "150.5", complete: true, events: [] });
-      expect(fetcher).toHaveBeenCalledTimes(2);
+      ).toEqual({ referral: false, cumulative: "0", complete: true, events: [] });
+      expect(fetcher).toHaveBeenCalledTimes(1);
     },
   );
-  it("sends an unconfirmed UID to manual review with OKX's code, never a rejection", async () => {
-    const fetcher = listThenDetail(
-      { data: [], totalPage: "0" },
-      { code: "51621", msg: "not your invitee", data: [] },
-    );
-    await expect(
-      new ExchangeClient(okxEnv, fetcher, now).admission("okx", "123"),
-    ).rejects.toThrow("okx_invitee_unconfirmed_51621");
-  });
   it("still refuses a list that spans several pages", async () => {
     await expect(
       new ExchangeClient(okxEnv, list({ data: [], totalPage: "3" }), now).admission("okx", "123"),

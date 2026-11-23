@@ -30,10 +30,7 @@ export function totalVolume(volume: VolumeEvidence): string {
 }
 export type VolumeDay = { time: number; spot: string; futures: string; total: string };
 export type VolumeProbe = VolumeEvidence & { days: VolumeDay[] };
-export class ExchangeCheckError extends Error {
-  /** The exchange's own business error code, when it rejected the request. */
-  upstreamCode?: string;
-}
+export class ExchangeCheckError extends Error {}
 type Row = Record<string, any>;
 // OKX documents a server error for invitee-list limits of 99 or greater.
 const OKX_UID_PAGE_SIZE = "10";
@@ -189,11 +186,8 @@ export class ExchangeClient {
         !result ||
         result.success === false ||
         !["0", "00000", "200"].includes(String(result.code ?? "0"))
-      ) {
-        const rejected = new ExchangeCheckError("upstream_rejected");
-        if (result?.code !== undefined) rejected.upstreamCode = String(result.code);
-        throw rejected;
-      }
+      )
+        throw new ExchangeCheckError("upstream_rejected");
       return result;
     }
     throw new ExchangeCheckError("upstream_unavailable");
@@ -304,36 +298,20 @@ export class ExchangeClient {
       );
       const matches = this.scoped(listed.data, uid),
         pages = Number(listed.totalPage ?? 1);
-      // An empty list does not prove the UID is outside our invitees: the
-      // list can omit invitees (it missed real, funded ones in production).
-      // Ask the detail endpoint, which answers only for our own invitees, and
-      // never turn a missing answer into a rejection.
-      const unlisted = matches.length === 0 && (pages === 0 || pages === 1);
-      if (!unlisted) {
-        if (!Number.isInteger(pages) || pages < 1 || pages > 1)
-          throw new ExchangeCheckError("pagination_incomplete");
-        if (matches.length !== 1)
-          throw new ExchangeCheckError("ambiguous_account");
-      }
-      let data: Row;
-      try {
-        data = await this.request(
-          exchange,
-          "/api/v5/affiliate/invitee/detail",
-          { uid },
-          deadline,
-        );
-      } catch (error) {
-        if (
-          unlisted &&
-          error instanceof ExchangeCheckError &&
-          error.message === "upstream_rejected"
-        )
-          throw new ExchangeCheckError(
-            `okx_invitee_unconfirmed_${error.upstreamCode || "unknown"}`,
-          );
-        throw error;
-      }
+      // OKX answers a UID outside our invitees with an empty list and zero
+      // pages. That is a definite "not referred", not an incomplete read.
+      if (matches.length === 0 && (pages === 0 || pages === 1))
+        return { referral: false, cumulative: "0", complete: true, events: [] };
+      if (!Number.isInteger(pages) || pages < 1 || pages > 1)
+        throw new ExchangeCheckError("pagination_incomplete");
+      if (matches.length !== 1)
+        throw new ExchangeCheckError("ambiguous_account");
+      const data = await this.request(
+        exchange,
+        "/api/v5/affiliate/invitee/detail",
+        { uid },
+        deadline,
+      );
       if (!Array.isArray(data.data) || data.data.length !== 1 || !data.data[0])
         throw new ExchangeCheckError("ambiguous_account");
       const row = data.data[0];

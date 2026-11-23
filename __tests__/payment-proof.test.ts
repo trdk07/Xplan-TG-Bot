@@ -14,7 +14,6 @@ it("explains qualification codes in plain language and keeps unknown text", () =
   expect(qualificationCodeLabel("admission_disabled")).toBe("此交易所的入群自動查核尚未開啟");
   expect(qualificationCodeLabel("缺少交易所或 UID")).toBe("缺少交易所或 UID");
   expect(qualificationCodeLabel(null)).toBe("");
-  expect(qualificationCodeLabel("okx_invitee_unconfirmed_51621")).toContain("OKX 代碼 51621");
 });
 
 it("tells an approved member what happened to their Discord role", () => {
