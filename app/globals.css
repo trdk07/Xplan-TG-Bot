@@ -1228,3 +1228,13 @@ button.proof-link {
   margin-bottom: 0;
   overflow-wrap: anywhere;
 }
+
+.probe-details {
+  margin-top: 8px;
+}
+
+.probe-details summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}

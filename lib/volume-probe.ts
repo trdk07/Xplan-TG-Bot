@@ -10,6 +10,8 @@ export type VolumeProbeState = {
   kind: "idle" | "success" | "error";
   message: string;
   lines: string[];
+  /** Long per-day breakdown, shown collapsed so the summary stays readable. */
+  details?: { summary: string; lines: string[] };
 };
 
 const money = (value: string) =>
@@ -45,15 +47,20 @@ export function describeVolumeProbe(
         : [`現貨：${money(probe.spot)}`, `合約：${money(probe.futures)}`]),
       ...(other !== "0" ? [`其他（鏈上／CFD／美股等）：${money(other)}`] : []),
       ...(probe.days.length
-        ? [
-            `有成交的天數：${active.length} / ${probe.days.length}`,
-            ...active.map(
-              (row) =>
-                `${day(row.time, timeZone)}　現貨 ${money(row.spot)}　合約 ${money(row.futures)}　當日合計 ${money(row.total)}`,
-            ),
-          ]
+        ? [`有成交的天數：${active.length} / ${probe.days.length}`]
         : []),
       "這是試查結果，不會寫入 Notion，也不會改變會員資格。成交額以交易所回報為準。",
     ],
+    ...(active.length
+      ? {
+          details: {
+            summary: `每日明細（${active.length} 天有成交）`,
+            lines: active.map(
+              (row) =>
+                `${day(row.time, timeZone)}　合計 ${money(row.total)}（現貨 ${money(row.spot)}／合約 ${money(row.futures)}）`,
+            ),
+          },
+        }
+      : {}),
   };
 }

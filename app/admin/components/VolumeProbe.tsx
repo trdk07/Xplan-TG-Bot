@@ -40,6 +40,16 @@ export function VolumeProbe({ pageId }: { pageId: string }) {
               ))}
             </ul>
           ) : null}
+          {state.details ? (
+            <details className="probe-details">
+              <summary>{state.details.summary}</summary>
+              <ul className="probe-lines">
+                {state.details.lines.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
         </div>
       ) : null}
     </section>
