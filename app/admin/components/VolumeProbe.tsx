@@ -1,7 +1,10 @@
 "use client";
 import { useActionState } from "react";
 import { Search } from "lucide-react";
-import { probeVolumeAction } from "@/app/admin/actions";
+import {
+  diagnoseAdmissionAction,
+  probeVolumeAction,
+} from "@/app/admin/actions";
 import { ActionButton } from "@/app/components/ActionButton";
 import type { VolumeProbeState } from "@/lib/volume-probe";
 
@@ -34,6 +37,42 @@ export function VolumeProbe({ pageId }: { pageId: string }) {
             <ul className="probe-lines">
               {state.lines.map((line) => (
                 <li key={line}>{line}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+/** Read-only view of what the exchange answers for this member's admission check. */
+export function AdmissionDiagnosis({ pageId }: { pageId: string }) {
+  const [state, diagnose, pending] = useActionState(
+    diagnoseAdmissionAction.bind(null, pageId),
+    initial,
+  );
+  return (
+    <section className="stack" aria-label="入群查核診斷">
+      <form action={diagnose}>
+        <ActionButton icon={<Search />} secondary disabled={pending}>
+          入群查核診斷（看交易所原始回應）
+        </ActionButton>
+        <p className="field-hint">
+          直接向交易所查詢這個 UID 的推薦關係與入金，顯示交易所實際回傳的內容。
+          只顯示結果，不寫入 Notion、不改變資格。
+        </p>
+      </form>
+      {state.message ? (
+        <div
+          className={`notice ${state.kind === "error" ? "warning" : ""}`}
+          role={state.kind === "error" ? "alert" : "status"}
+        >
+          <strong>{state.message}</strong>
+          {state.lines.length ? (
+            <ul className="probe-lines">
+              {state.lines.map((line, index) => (
+                <li key={`${index}-${line}`}>{line}</li>
               ))}
             </ul>
           ) : null}

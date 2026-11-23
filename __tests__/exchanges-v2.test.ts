@@ -723,3 +723,45 @@ describe("OKX UID outside our invitees", () => {
     ).rejects.toThrow("pagination_incomplete");
   });
 });
+
+describe("OKX admission diagnostic", () => {
+  it("shows the raw list and detail answers, including a business rejection, without throwing", async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL) =>
+      Response.json(
+        String(input).includes("/invitee/detail")
+          ? { code: "51621", msg: "The user isn't your invitee", data: [] }
+          : { code: "0", msg: "", data: [], totalPage: "0" },
+      ),
+    );
+    // Works with the admission gate off: it is a diagnostic, not a decision.
+    const lines = await new ExchangeClient(
+      { ...okxEnv, OKX_ADMISSION_ENABLED: "false" },
+      fetcher,
+      now,
+    ).diagnoseAdmission("okx", "123");
+    const text = lines.join("\n");
+    expect(text).toContain('totalPage="0"');
+    expect(text).toContain("名單中有這個 UID：沒有");
+    expect(text).toContain('code="51621"');
+    expect(text).toContain("The user isn't your invitee");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+  it("shows the invitee's level and deposit when OKX returns a detail row", async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL) =>
+      Response.json(
+        String(input).includes("/invitee/detail")
+          ? { code: "0", data: [{ inviteeLevel: "2", depAmt: "120", joinTime: "1763700000000" }] }
+          : { code: "0", data: [], totalPage: "0" },
+      ),
+    );
+    const text = (await new ExchangeClient(okxEnv, fetcher, now).diagnoseAdmission("okx", "123")).join("\n");
+    expect(text).toContain('inviteeLevel="2"');
+    expect(text).toContain('depAmt="120"');
+  });
+  it("leaves the real admission check strict about business rejections", async () => {
+    const fetcher = vi.fn(async () => Response.json({ code: "51621", msg: "x", data: [] }));
+    await expect(
+      new ExchangeClient(okxEnv, fetcher, now).admission("okx", "123"),
+    ).rejects.toThrow("upstream_rejected");
+  });
+});
