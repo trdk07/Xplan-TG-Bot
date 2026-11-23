@@ -40,6 +40,16 @@ export function VolumeProbe({ pageId }: { pageId: string }) {
               ))}
             </ul>
           ) : null}
+          {state.details ? (
+            <details className="probe-details">
+              <summary>{state.details.summary}</summary>
+              <ul className="probe-lines">
+                {state.details.lines.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
         </div>
       ) : null}
     </section>
@@ -56,7 +66,7 @@ export function AdmissionDiagnosis({ pageId }: { pageId: string }) {
     <section className="stack" aria-label="入群查核診斷">
       <form action={diagnose}>
         <ActionButton icon={<Search />} secondary disabled={pending}>
-          入群查核診斷（看交易所原始回應）
+          入群查核診斷
         </ActionButton>
         <p className="field-hint">
           直接向交易所查詢這個 UID 的推薦關係與入金，顯示交易所實際回傳的內容。

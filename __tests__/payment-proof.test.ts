@@ -51,6 +51,11 @@ it("summarises a probe for the assistant without persisting anything", () => {
   expect(state.message).toContain("近 30 天合計 210,000，已達 200,000 門檻");
   expect(state.lines).toContain("其他（鏈上／CFD／美股等）：20,000");
   expect(state.lines).toContain("有成交的天數：1 / 2");
+  // Daily rows are collapsed so thirty of them do not bury the summary.
+  expect(state.details?.summary).toBe("每日明細（1 天有成交）");
+  expect(state.details?.lines).toHaveLength(1);
+  expect(state.details?.lines[0]).toContain("合計 210,000（現貨 50,000／合約 140,000）");
+  expect(state.lines.join("\n")).not.toContain("當日合計");
   expect(state.lines.at(-1)).toContain("不會寫入 Notion");
 });
 it("shows the MEXC reported total without implying zero spot or futures trades", () => {

@@ -1202,3 +1202,39 @@ button.proof-link {
   gap: 4px 14px;
   overflow-wrap: anywhere;
 }
+
+/* Action columns: a long button label or result must wrap inside the column
+   instead of widening it past the panel edge. */
+.stack {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.stack > *,
+.stack form {
+  min-width: 0;
+}
+
+.stack .stack {
+  padding: 0;
+}
+
+.stack .button {
+  max-width: 100%;
+  text-align: left;
+  white-space: normal;
+}
+
+.stack .notice {
+  margin-bottom: 0;
+  overflow-wrap: anywhere;
+}
+
+.probe-details {
+  margin-top: 8px;
+}
+
+.probe-details summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
