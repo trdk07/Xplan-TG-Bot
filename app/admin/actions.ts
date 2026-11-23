@@ -881,3 +881,42 @@ export async function probeVolumeAction(
     }
   });
 }
+
+/**
+ * Read-only: show what the exchange answers for this member's UID (for OKX,
+ * the raw invitee list and detail responses). Writes nothing, grants nothing.
+ */
+export async function diagnoseAdmissionAction(
+  pageId: string,
+  _previous: VolumeProbeState,
+  _formData: FormData,
+): Promise<VolumeProbeState> {
+  return withAdminAction(pageId, async () => {
+    const fail = (message: string): VolumeProbeState => ({
+      kind: "error",
+      message,
+      lines: [],
+    });
+    const member = await getMemberByPageId(pageId);
+    if (!member) return fail("找不到會員。");
+    const exchange = normalizeExchange(member.exchangeName);
+    const uid = member.exchangeUid.trim();
+    if (!exchange || !uid)
+      return fail("這位會員綁定的不是 MEXC／Bitget／OKX，或缺少 UID，無法查詢。");
+    try {
+      const lines = await new ExchangeClient(
+        process.env,
+        fetch,
+        new Date(),
+      ).diagnoseAdmission(exchange, uid);
+      return {
+        kind: "success",
+        message: `${exchangeLabel(exchange)} UID ${uid} 的入群查核原始結果`,
+        lines: [...lines, "這是診斷結果，不會寫入 Notion，也不會改變會員資格。"],
+      };
+    } catch (error) {
+      const code = qualificationError(error);
+      return fail(`查詢失敗：${qualificationCodeLabel(code)}（${code}）`);
+    }
+  });
+}

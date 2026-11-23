@@ -100,6 +100,9 @@ export class ExchangeClient {
     path: string,
     values: Record<string, string>,
     deadline: number,
+    // Diagnostics only: return the exchange's answer even when it carries a
+    // business error code, so the operator can see what it actually said.
+    tolerateRejection = false,
   ): Promise<Row> {
     const prefix = exchange.toUpperCase();
     const key =
@@ -182,6 +185,7 @@ export class ExchangeClient {
       }
       if (!response.ok)
         throw new ExchangeCheckError(`upstream_http_${response.status}`);
+      if (tolerateRejection && result) return result;
       if (
         !result ||
         result.success === false ||
@@ -282,6 +286,55 @@ export class ExchangeClient {
     }
     // The affiliate API reports gross deposits per window without guaranteeing lifetime coverage.
     return { referral: true, cumulative, complete: false, events: [] };
+  }
+  /**
+   * Read-only operator diagnostic: what the exchange actually answers for
+   * this UID, ignoring the capability gates. Decides nothing and stores nothing.
+   */
+  async diagnoseAdmission(exchange: Exchange, uid: string): Promise<string[]> {
+    if (!/^\d{1,32}$/.test(uid)) throw new ExchangeCheckError("invalid_uid");
+    if (exchange !== "okx") {
+      const evidence = await this.admission(exchange, uid);
+      return [
+        `推薦關係：${evidence.referral === null ? "無法判定" : evidence.referral ? "是" : "否"}`,
+        `累積入金：${evidence.cumulative} USDT`,
+        `入金資料完整：${evidence.complete ? "是" : "否"}`,
+      ];
+    }
+    const deadline = Date.now() + 120000;
+    const show = (value: unknown) =>
+      value === undefined ? "（沒有這個欄位）" : JSON.stringify(value);
+    const lines: string[] = [];
+    const listed = await this.request(
+      exchange,
+      "/api/v5/affiliate/invitee/list",
+      { uid, page: "1", limit: OKX_UID_PAGE_SIZE },
+      deadline,
+      true,
+    );
+    const listRows = Array.isArray(listed.data) ? listed.data : [];
+    lines.push(
+      "① 被邀請人名單（invitee/list）",
+      `code=${show(listed.code)}　msg=${show(listed.msg)}　totalPage=${show(listed.totalPage)}　筆數=${listRows.length}`,
+      `名單中有這個 UID：${listRows.some((row: Row) => String(row?.uid) === uid) ? "有" : "沒有"}`,
+    );
+    const detail = await this.request(
+      exchange,
+      "/api/v5/affiliate/invitee/detail",
+      { uid },
+      deadline,
+      true,
+    );
+    const detailRows = Array.isArray(detail.data) ? detail.data : [];
+    lines.push(
+      "② 單一被邀請人明細（invitee/detail）",
+      `code=${show(detail.code)}　msg=${show(detail.msg)}　筆數=${detailRows.length}`,
+    );
+    for (const row of detailRows.slice(0, 2) as Row[])
+      lines.push(
+        `inviteeLevel=${show(row?.inviteeLevel)}　depAmt=${show(row?.depAmt)}　joinTime=${show(row?.joinTime)}　firstTradeTime=${show(row?.firstTradeTime)}　kycTime=${show(row?.kycTime)}　回傳的 uid=${show(row?.uid)}`,
+      );
+    return lines;
   }
   async admission(exchange: Exchange, uid: string): Promise<AdmissionEvidence> {
     const deadline = Date.now() + 120000;
