@@ -34,6 +34,11 @@ function detailCode(detail: string) {
 /** Plain-language reason and next step for a daily-job failure detail. */
 export function describeDailyIssue(detail = "", exchange = ""): Issue {
   const code = detailCode(detail);
+  if (code === "mexc_referral_not_found")
+    return {
+      title: "MEXC 推薦資料待核對",
+      fix: "請核對綁定的 UID 是否在 Xplan 的 MEXC 推薦名單。會員可在 TG Bot 換綁，已確認的入群資格及最近一次成功的交易量結果會保留。",
+    };
   if (API_FAILURE.test(code))
     return {
       systemic: true,

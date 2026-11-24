@@ -7,6 +7,7 @@ const LABELS: Record<string, string> = {
   credentials_missing: "交易所 API 金鑰未設定",
   upstream_unavailable: "交易所 API 暫時無法連線",
   upstream_rejected: "交易所 API 拒絕請求（金鑰無效或權限不足）",
+  mexc_referral_not_found: "MEXC 查無該 UID 的推薦資料（1035）",
   deposit_history_incomplete: "歷史入金資料不完整，需人工確認",
   deposit_schema: "交易所回傳的入金資料格式異常",
   invalid_uid: "UID 格式不正確",

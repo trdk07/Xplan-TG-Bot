@@ -77,3 +77,17 @@ it("keeps volume API failures separate per exchange", () => {
   expect(issue.systemic).toBe(true);
   expect(issue.title).toContain("Bitget API 查詢失敗");
 });
+it("reports a missing MEXC referral separately from a credential failure", () => {
+  const text = formatDailyReport([
+    { pageId: "a", label: "@referral", exchange: "MEXC", action: "error",
+      detail: "Admission verification requires operator review: mexc_referral_not_found" },
+    { pageId: "b", label: "@volume", exchange: "MEXC", action: "error",
+      detail: "Volume verification: mexc_referral_not_found; retained last successful evidence" },
+    { pageId: "c", label: "@api", exchange: "MEXC", action: "error",
+      detail: "Admission verification requires operator review: upstream_rejected" },
+  ], now)!;
+  expect(text).toContain("需要你處理 2 人；另有 1 人受交易所 API 問題影響");
+  expect(text).toContain("【MEXC 推薦資料待核對】2 人\n@referral、@volume");
+  expect(text).toContain("核對綁定的 UID");
+  expect(text).toMatch(/🔧【MEXC API 查詢失敗：[^\n]+】1 人\n@api/);
+});

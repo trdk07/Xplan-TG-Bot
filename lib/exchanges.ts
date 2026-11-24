@@ -34,6 +34,7 @@ export class ExchangeCheckError extends Error {}
 type Row = Record<string, any>;
 // OKX documents a server error for invitee-list limits of 99 or greater.
 const OKX_UID_PAGE_SIZE = "10";
+const MEXC_REFERRAL_PATH = "/api/v3/rebate/affiliate/referral";
 const MEXC_DEPOSIT_WINDOW_LIMIT = 12;
 const DAY = 86400000;
 // Only deposit history may retain already-scoped pages after a later read fails.
@@ -186,6 +187,15 @@ export class ExchangeClient {
       if (!response.ok)
         throw new ExchangeCheckError(`upstream_http_${response.status}`);
       if (tolerateRejection && result) return result;
+      // MEXC returns this business code for a UID missing from the affiliate
+      // roster, even when the same credentials can read other referrals.
+      if (
+        exchange === "mexc" &&
+        path === MEXC_REFERRAL_PATH &&
+        values.uid &&
+        String(result?.code) === "1035"
+      )
+        throw new ExchangeCheckError("mexc_referral_not_found");
       if (
         !result ||
         result.success === false ||
@@ -243,7 +253,7 @@ export class ExchangeClient {
   ): Promise<Row | undefined> {
     const result = await this.request(
       "mexc",
-      "/api/v3/rebate/affiliate/referral",
+      MEXC_REFERRAL_PATH,
       { uid, page: "1", pageSize: "10", startTime: String(start), endTime: String(end - 1) },
       deadline,
     );
