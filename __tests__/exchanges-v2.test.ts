@@ -160,6 +160,18 @@ const mexcEnv = {
 const mexcReferralResponse = (resultList: Record<string, unknown>[], totalCount = resultList.length) =>
   Response.json({ success: true, code: 0, data: { totalCount, currentPage: 1, totalPage: 1, resultList } });
 
+it.each([
+  [1035, "mexc_referral_not_found"],
+  [10072, "upstream_rejected"],
+] as const)("distinguishes MEXC UID lookups from credential errors (%s)", async (code, expected) => {
+  const fetcher = vi.fn(async () =>
+    Response.json({ success: false, code, message: null, data: null }),
+  );
+  const client = new ExchangeClient(mexcEnv, fetcher, now);
+  await expect(client.admission("mexc", "123")).rejects.toThrow(expected);
+  await expect(client.volume("mexc", "123", completedVolumeWindow(now, "mexc"))).rejects.toThrow(expected);
+});
+
 it("requires the explicit MEXC reported-total opt-in, even with the old coverage flag", async () => {
   const fetcher = vi.fn();
   const enabled = { ...mexcEnv, MEXC_VOLUME_USE_REPORTED_TOTALS: "false", MEXC_VOLUME_COVERAGE_VERIFIED: "true" };
