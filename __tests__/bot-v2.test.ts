@@ -207,6 +207,32 @@ it("points members who failed admission to the registration guide", async () => 
   expect(keyboard[3][0].text).toBe("聯絡小夏");
 });
 
+it("treats a mistyped command as a command, not a UID attempt", async () => {
+  await handleV2Uid({ ...member, admissionVerifiedAt: null }, { chat: { id: 123 }, text: "/star" } as any, now);
+  expect(mocks.recheck).not.toHaveBeenCalled();
+  const [, text, keyboard] = mocks.send.mock.calls.at(-1)!;
+  expect(text).toContain("/start");
+  expect(text).not.toContain("UID 必須");
+  expect(keyboard[0][0].callback_data).toBe("payment:upgrade");
+});
+
+it("offers the paid subscription when the UID does not match", async () => {
+  await handleV2Uid({ ...member, admissionVerifiedAt: null }, { chat: { id: 123 }, text: "999999" } as any, now);
+  const [, text, keyboard] = mocks.send.mock.calls.at(-1)!;
+  expect(text).toContain("UID 必須");
+  expect(keyboard[0][0].callback_data).toBe("rebind:start");
+  expect(keyboard[1][0].callback_data).toBe("payment:upgrade");
+});
+
+it("offers the paid subscription while admission waits for assistant review", async () => {
+  mocks.recheck.mockResolvedValue({ ...member, admissionVerifiedAt: null, onboardingStep: "needs_review" });
+  await handleV2Uid({ ...member, admissionVerifiedAt: null }, { chat: { id: 123 }, text: "001234" } as any, now);
+  const [, text, keyboard] = mocks.send.mock.calls.at(-1)!;
+  expect(text).toContain("已列入助理覆核");
+  expect(keyboard[0][0].callback_data).toBe("payment:upgrade");
+  expect(keyboard.at(-1)[0].text).toBe("聯絡小夏");
+});
+
 const bybit = {
   ...member,
   exchangeName: "Bybit",
