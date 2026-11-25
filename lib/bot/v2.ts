@@ -31,6 +31,7 @@ import {
   EXCHANGE_SELECTION_MESSAGE,
   JOIN_APPROVED_INTRO,
   UID_MISMATCH_MESSAGE,
+  UNKNOWN_COMMAND_MESSAGE,
   V2_WELCOME_RULES,
   admissionPassedMessage,
   UNSUPPORTED_EXCHANGE_MESSAGE,
@@ -234,8 +235,16 @@ export async function handleV2Uid(
     return;
   }
   const uid = (message.text || "").trim();
+  // A mistyped command (e.g. "/star") is not a UID attempt.
+  if (uid.startsWith("/")) {
+    await refuse(message.chat.id, UNKNOWN_COMMAND_MESSAGE, [directPayButton()]);
+    return;
+  }
   if (!/^\d{1,32}$/.test(uid) || uid !== member.exchangeUid) {
-    await refuse(message.chat.id, UID_MISMATCH_MESSAGE, [rebindButton()]);
+    await refuse(message.chat.id, UID_MISMATCH_MESSAGE, [
+      rebindButton(),
+      directPayButton(),
+    ]);
     return;
   }
   const updated = await recheckQualifications(member.pageId, now);
@@ -249,7 +258,7 @@ export async function handleV2Uid(
       ? ADMISSION_NEEDS_REVIEW_MESSAGE
       : ADMISSION_NOT_MET_MESSAGE,
     updated.onboardingStep === "needs_review"
-      ? undefined
+      ? [directPayButton()]
       : [directPayButton(), referralLinksButton(), rebindButton()],
   );
 }

@@ -150,12 +150,18 @@ export function uidRequestMessage(exchangeName: string) {
   ].join("\n");
 }
 
+export const UNKNOWN_COMMAND_MESSAGE = [
+  "看起來是指令打錯了，請輸入 /start 重新開始。",
+  "",
+  "如果交易所驗證一直無法通過，也可以點下方「不註冊，直接付費加入」改用訂閱制。",
+].join("\n");
+
 export const UID_MISMATCH_MESSAGE = [
   "UID 必須與報名時綁定的交易所帳號一致，請核對後再回覆一次（只填數字）。",
   "",
   UID_LOCATION_HINT,
   "",
-  "若想改用其他交易所的帳號，請點下方「更換綁定交易所」；報名資料填錯也可以聯絡小夏協助更正。",
+  "若想改用其他交易所的帳號，請點下方「更換綁定交易所」；交易所驗證有問題也可以改點「不註冊，直接付費加入」用訂閱制入群；報名資料填錯可以聯絡小夏協助更正。",
 ].join("\n");
 
 export function admissionPassedMessage(inviteLink: string) {
@@ -172,7 +178,7 @@ export function admissionPassedMessage(inviteLink: string) {
 export const ADMISSION_NEEDS_REVIEW_MESSAGE = [
   "⏳ <b>已列入助理覆核</b>",
   "目前查詢資料不足，或交易所暫時無法查詢。這不是不合格判定，助理確認後會再通知你。",
-  "急著處理可以點下方聯絡小夏。",
+  "急著處理可以點下方聯絡小夏；不想等也可以改點「不註冊，直接付費加入」用訂閱制入群。",
 ].join("\n");
 
 export const ADMISSION_NOT_MET_MESSAGE = [
